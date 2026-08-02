@@ -1,8 +1,11 @@
 import { db } from '@/core/db';
+import { IHymnTheme, SOURCE_THEME_ID } from '@/core/types/hymn';
 import { PresentationSliceCreator, PresentationState } from '../types';
-import { ISlide, ICanvasSlide, IPresentationFile, ICanvasItem } from '@/core/types';
+import type { ISlide, ICanvasSlide, IPresentationFile, ICanvasItem, IHymnSlide } from '@/core/types';
 import { toast } from '@/core/utils/toast';
 import i18n from '@/core/i18n';
+import { resolveEffectiveThemeId } from '@/features/hymns/services/hymnThemeResolver';
+import { resolveHymnAudioScopes } from '@/features/presenter/services/hymnAudioResolver';
 
 export const createSlideOperationsSlice: PresentationSliceCreator = (set, get) => ({
     updatePresentationSlides: async (presentationId, slides) => {
@@ -356,5 +359,136 @@ export const createSlideOperationsSlice: PresentationSliceCreator = (set, get) =
         }
 
         toast.success(i18n.t('slides_pasted', 'Slides pasted'));
+    },
+
+    addHymnToActivePresentation: async (hymnPresentationId, themeId) => {
+        const { activePresentationId, activePresentation, activeBlockId } = get();
+        if (!activePresentationId || !activePresentation) {
+            toast.error(i18n.t('no_active_presentation', 'Please select or create a presentation first'));
+            return;
+        }
+
+        // Take snapshot for Undo (Ctrl+Z) support
+        await get().takeSnapshot(activePresentationId);
+
+        // Build pure reference slides for all verses
+        const { hymnLibraryService } = await import('@/features/hymns/services/hymnLibraryService');
+        const builtSlides = await hymnLibraryService.buildHymnSlides(hymnPresentationId, themeId);
+        if (builtSlides.length === 0) return;
+
+        const currentSlides = activePresentation.slides || [];
+        const maxOrder = currentSlides.reduce((max, s) => Math.max(max, s.order ?? 0), -1);
+        const blockId = activeBlockId || 'default';
+
+        const orderedNewSlides: ISlide[] = builtSlides.map((slide, index) => ({
+            ...slide,
+            order: maxOrder + index + 1,
+            blockId
+        }));
+
+        const finalSlides = [...currentSlides, ...orderedNewSlides];
+        await get().updatePresentationSlides(activePresentationId, finalSlides);
+        toast.success(i18n.t('hymn_added_to_presentation', 'Hymn added to presentation'));
+    },
+
+    detachHymnSlide: async (presentationId, slideId, skipAudioConfirmation = false) => {
+        const pres = await db.presentationFiles.get(presentationId);
+        if (!pres) return { requiresAudioConfirmation: false };
+
+        const slides = pres.slides || [];
+        const slideIndex = slides.findIndex(s => s.id === slideId);
+        if (slideIndex === -1) return { requiresAudioConfirmation: false };
+
+        const hymnSlide = slides[slideIndex] as IHymnSlide;
+        if (hymnSlide.type !== 'hymn') return { requiresAudioConfirmation: false };
+
+        const sourceHymnPres = await db.presentationFiles.get(hymnSlide.hymnPresentationId);
+        if (!sourceHymnPres) return { requiresAudioConfirmation: false };
+
+        const sourceSlide = sourceHymnPres.slides.find(s => s.id === hymnSlide.sourceSlideId) as ICanvasSlide;
+        if (!sourceSlide) return { requiresAudioConfirmation: false };
+
+        // Audio scope check for multi-slide / isGlobal audio tracks
+        const resolvedAudio = await resolveHymnAudioScopes(hymnSlide);
+        const hasMultiSlideOrGlobalAudio = resolvedAudio && resolvedAudio.scopes.some(scope => 
+            scope.isGlobal || scope.startSlideId !== scope.endSlideId
+        );
+
+        if (hasMultiSlideOrGlobalAudio && !skipAudioConfirmation) {
+            return { requiresAudioConfirmation: true };
+        }
+
+        // Take snapshot for Undo (Ctrl+Z)
+        await get().takeSnapshot(presentationId);
+
+        // Resolve theme
+        const hymnal = sourceHymnPres.serviceId ? await db.hymnals.get(sourceHymnPres.serviceId) : undefined;
+        const effectiveThemeId = await resolveEffectiveThemeId(hymnal, hymnSlide.themeId);
+        
+        let theme = effectiveThemeId !== SOURCE_THEME_ID ? await db.hymnThemes.get(effectiveThemeId) : undefined;
+        if (!theme && effectiveThemeId !== SOURCE_THEME_ID) {
+            theme = await db.hymnThemes.filter(t => !!t.isDefault).first();
+        }
+        
+        // Pull theme data and materialize
+        const { hymnLibraryService } = await import('@/features/hymns/services/hymnLibraryService');
+        const materialized = hymnLibraryService.materializeTheme(sourceSlide, (theme || { id: SOURCE_THEME_ID, background: [], textStyle: {} }) as any);
+
+        const detachedSlide: ICanvasSlide = {
+            id: hymnSlide.id,
+            type: 'normal',
+            order: hymnSlide.order,
+            blockId: hymnSlide.blockId,
+            name: sourceSlide.name || 'Detached Hymn Slide',
+            backgroundOverride: materialized.background,
+            content: {
+                canvasItems: materialized.canvasItems,
+                variables: {}
+            }
+        };
+
+        // Handle single-slide non-global audio scope transfer
+        if (resolvedAudio && resolvedAudio.scopes.length > 0) {
+            const singleSlideScope = resolvedAudio.scopes.find(s => !s.isGlobal && s.startSlideId === s.endSlideId);
+            if (singleSlideScope) {
+                await db.audioScopes.put({
+                    ...singleSlideScope,
+                    id: crypto.randomUUID(),
+                    presentationId,
+                    startSlideId: hymnSlide.id,
+                    endSlideId: hymnSlide.id
+                });
+            }
+        }
+
+        const updatedSlides = [...slides];
+        updatedSlides[slideIndex] = detachedSlide;
+
+        await get().updatePresentationSlides(presentationId, updatedSlides);
+        toast.success(i18n.t('hymn_slide_detached', 'Hymn slide detached'));
+
+        return { requiresAudioConfirmation: false };
+    },
+
+    updateHymnSlideTheme: async (presentationId, slideId, newThemeId) => {
+        const pres = await db.presentationFiles.get(presentationId);
+        if (!pres) return;
+
+        const slides = pres.slides || [];
+        const slideIndex = slides.findIndex(s => s.id === slideId);
+        if (slideIndex === -1) return;
+
+        const slide = slides[slideIndex];
+        if (slide.type !== 'hymn') return;
+
+        await get().takeSnapshot(presentationId);
+
+        const updatedSlides = [...slides];
+        updatedSlides[slideIndex] = {
+            ...slide,
+            themeId: newThemeId
+        };
+
+        await get().updatePresentationSlides(presentationId, updatedSlides);
     },
 });

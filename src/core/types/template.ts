@@ -1,6 +1,6 @@
 import { ICanvasItem } from './canvas';
 import { IStyleLayer } from './style';
-import { SlideType } from './presentation';
+import type { SlideType } from './presentation';
 
 export interface IAsset {
   id: string;

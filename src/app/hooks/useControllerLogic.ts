@@ -18,8 +18,9 @@ import {
   OverrideType 
 } from '@/core/store/uiAtoms';
 import { useBibleStore } from '@/features/bible-browser/store/bibleStore';
-import { usePresenterStore } from '@/features/presenter/store/presenterStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
+// eslint-disable-next-line no-restricted-imports
+import { usePresenterStore } from '@/features/presenter/store/presenterStore';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { PRELOADED_LOGOS } from '@/core/data/logoData';
 import { useLogoUrl } from '@/core/hooks/useLogoUrl';
@@ -79,7 +80,7 @@ export function useControllerLogic() {
   const presentationStack = usePresentationStore(s => s.presentationStack);
   const selectedPresentation = usePresentationStore(s => s.selectedPresentation);
 
-  const settings = usePresenterStore(s => s.settings);
+  const presenterSettings = usePresenterStore(state => state.settings);
   const activeLogoUrl = useLogoUrl(activeLogo);
 
   // --- Global Initialization & Sync Hooks ---
@@ -127,7 +128,7 @@ export function useControllerLogic() {
     setActiveOverride((prev: OverrideType | null) => {
         const next = prev === type ? null : type;
         if (next) {
-            LiveSyncService.syncSettings(usePresenterStore.getState().settings);
+            LiveSyncService.syncSettings(usePresentationStore.getState().settings);
         }
         return next;
     });
@@ -212,9 +213,9 @@ export function useControllerLogic() {
   useEffect(() => {
     if (!IpcService.isElectron()) return;
     const unsub = IpcService.on('projector-ready', (p?: { ratio: number }) => {
-      if (p?.ratio) usePresenterStore.getState().updateDisplay({ aspectRatio: p.ratio });
+      if (p?.ratio) usePresentationStore.getState().updateDisplay({ aspectRatio: p.ratio });
       IpcService.send('projector-command', 'update-theme', themeAccent);
-      LiveSyncService.syncSettings(usePresenterStore.getState().settings);
+      LiveSyncService.syncSettings(usePresentationStore.getState().settings);
       
       setTimeout(() => {
         LiveSyncService.setOverride(activeOverride as OverrideType | null, activeOverride === 'logo' ? activeLogo : null);

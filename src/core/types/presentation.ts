@@ -19,7 +19,7 @@ export interface ISlideContent {
   canvasItems?: ICanvasItem[];
 }
 
-export type SlideType = 'normal' | 'nested' | 'timer' | 'verse' | 'group' | 'video';
+export type SlideType = 'normal' | 'nested' | 'timer' | 'verse' | 'group' | 'video' | 'hymn';
 
 export interface IBaseSlide {
   id: string;
@@ -82,7 +82,16 @@ export interface IVideoSlide extends IBaseSlide {
   backgroundOverride?: IStyleLayer[];
 }
 
-export type ISlide = ICanvasSlide | IVerseSlide | ITimerSlide | INestedSlide | IGroupSlide | IVideoSlide;
+export interface IHymnSlide extends IBaseSlide {
+  type: 'hymn';
+  hymnPresentationId: string;
+  sourceSlideId: string;
+  themeId: string;
+  duration?: number;
+  transition?: ISlideTransition;
+}
+
+export type ISlide = ICanvasSlide | IVerseSlide | ITimerSlide | INestedSlide | IGroupSlide | IVideoSlide | IHymnSlide;
 
 export interface IBlock {
   id: string;
@@ -151,6 +160,7 @@ export interface IPresentationFile {
   name: string;
   workflowId?: string;
   serviceId?: string; // Links to IServiceFile if nested
+  hymnalId?: string; // Links to IHymnal for hymn presentations
   binId?: string; // Reference to IPresentationBin (null = root)
   isMaster?: boolean; // True if it's the master presentation in a service
   version?: string; // Schema version
@@ -175,6 +185,12 @@ export interface IPresentationFile {
     church?: string;
     date?: Date;
     speaker?: string;
+    // Hymn library extensions
+    isHymnLibraryItem?: boolean;
+    hymnTitle?: string;
+    hymnAuthor?: string;
+    hymnYear?: number;
+    hymnOrder?: number;
   };
 }
 
@@ -195,11 +211,12 @@ export interface IPresentationSummary {
 export interface SlideDisplayProps {
   isProjector?: boolean;
   isPreloading?: boolean;
+  isPreview?: boolean;
   activeVerse?: Verse | null;
   selectedSlide?: ISlide | null;
   parallelVerse?: Verse | null;
   multiVerses?: Verse[] | null;
   isMultiVerseMode?: boolean;
-  appMode?: 'scripture' | 'presentation';
+  appMode?: 'scripture' | 'presentation' | 'hymns';
   settings?: PresenterSettings;
 }

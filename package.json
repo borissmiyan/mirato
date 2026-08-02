@@ -1,7 +1,7 @@
 {
   "name": "ekklesienter",
   "private": true,
-  "version": "2.2.3",
+  "version": "2.2.5",
   "description": "Premium Bible presentation and worship software",
   "author": "Boris Smiyan",
   "main": "dist-electron/main.js",
@@ -19,7 +19,8 @@
     "build:all": "tsc && vite build && electron-builder -mw",
     "preview": "vite preview",
     "test": "vitest",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "lint": "eslint src --ext .ts,.tsx"
   },
   "build": {
     "appId": "com.ekklesienter.app",
@@ -55,6 +56,13 @@
         "to": "bundled-templates/",
         "filter": [
           "**/*.ektmp"
+        ]
+      },
+      {
+        "from": "bundled-hymnals/",
+        "to": "bundled-hymnals/",
+        "filter": [
+          "**/*.ektp"
         ]
       }
     ],
@@ -126,6 +134,7 @@
     "lucide-react": "^0.563.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
+    "react-colorful": "^5.7.0",
     "react-dom": "^19.2.4",
     "react-hook-form": "^7.71.1",
     "react-i18next": "^16.5.4",
@@ -133,6 +142,7 @@
     "react-resizable-panels": "^4.5.6",
     "react-router-dom": "^7.13.0",
     "react-scan": "^0.5.3",
+    "react-world-flags": "^1.6.0",
     "sonner": "^2.0.7",
     "sql.js": "^1.13.0",
     "tailwind-merge": "^3.4.1",
@@ -150,11 +160,15 @@
     "@types/jszip": "^3.4.0",
     "@types/node": "^22.14.0",
     "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
     "@vitejs/plugin-react": "^5.0.0",
     "@vitest/coverage-v8": "^4.0.18",
     "@vitest/ui": "^4.0.18",
     "electron": "^40.1.0",
     "electron-builder": "^26.7.0",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^28.1.0",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.8.2",

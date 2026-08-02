@@ -1,5 +1,6 @@
 import Dexie, { type EntityTable } from 'dexie';
 import { Verse, Book, Translation, IBlock, IPresentationFile, IServiceFile, ITemplate, ILogoEntry, IBackgroundEntry, IMediaItem, IMediaBin, IPresentationBin, IAudioScope } from '../types';
+import { IHymnTheme, IHymnal, IHymnStableIdMap } from '../types/hymn';
 import { IErrorLog } from '../types/error';
 import { INITIAL_DATA } from '../data/bibleData';
 import { extractWords } from '@/features/search/utils/bibleSearchUtils';
@@ -34,6 +35,11 @@ export class ScriptureDatabase extends Dexie {
     audioScopes!: EntityTable<IAudioScope, 'id'>;
     error_logs!: EntityTable<IErrorLog, 'id'>;
 
+    // Hymn tables
+    hymnThemes!: EntityTable<IHymnTheme, 'id'>;
+    hymnals!: EntityTable<IHymnal, 'id'>;
+    hymnStableIdMap!: EntityTable<IHymnStableIdMap, 'stableId'>;
+
     // Loading status trackers
     private _isInitializing = false;
     private _initPromise: Promise<void> | null = null;
@@ -44,13 +50,13 @@ export class ScriptureDatabase extends Dexie {
 
         // Single consolidated schema — all tables defined upfront.
         // Previous migrations (v1–v16) have been collapsed since there are no existing users.
-        this.version(4).stores({
+        this.version(5).stores({
             verses: '++id, [translationId+bookId+chapter], translationId',
             books: '++id, [translationId+bookId], translationId',
             translations: 'id',
             settings: 'key',
             blocks: 'id',
-            presentationFiles: 'id, updatedAt, workflowId, lastOpened, serviceId, binId, ektpHash',
+            presentationFiles: 'id, updatedAt, workflowId, lastOpened, serviceId, hymnalId, binId, ektpHash',
             templates: 'id, category',
             logos: 'id',
             backgrounds: 'id',
@@ -71,6 +77,12 @@ export class ScriptureDatabase extends Dexie {
             error_logs: 'id, timestamp, severity',
         });
 
+        // v7: Added Hymns module tables
+        this.version(7).stores({
+            hymnThemes: 'id',
+            hymnals: 'id',
+            hymnStableIdMap: 'stableId, hymnalId, presentationId',
+        });
 
         // Seed initial data if needed
         this.on('populate', () => this.seed());

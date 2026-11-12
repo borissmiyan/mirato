@@ -10,8 +10,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "build": "tsc && vite build && electron-builder --publish never",
     "build:renderer": "tsc && vite build",
+    "test:pre-push": "npm run check",
     "build:mac": "tsc && vite build && electron-builder --mac",
     "build:mac-modern": "node scripts/build-mac.js modern",
     "build:mac-legacy": "node scripts/build-mac.js legacy",

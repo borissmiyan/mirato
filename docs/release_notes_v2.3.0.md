@@ -67,4 +67,4 @@
 
 * **Репозиторий:** [github.com/borissmiyan/mirato](https://github.com/borissmiyan/mirato)
 * **Сайт проекта:** [mirato.pages.dev](https://mirato.pages.dev)
-* **Лицензия:** MIT
+* **Лицензия:** GNU GPL v3 (Dual-Licensing)

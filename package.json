@@ -4,6 +4,7 @@
   "version": "2.3.0",
   "description": "Mirato — Premium Bible presentation and worship software",
   "author": "Boris Smiyan <borissmiyan@gmail.com>",
+  "license": "GPL-3.0-or-later",
   "main": "dist-electron/main.js",
   "homepage": "./",
   "type": "module",

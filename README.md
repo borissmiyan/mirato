@@ -21,7 +21,7 @@
   <a href="#"><img src="https://img.shields.io/badge/Platform-macOS%20|%20Windows%20|%20Linux-blue.svg?style=flat-square" alt="Platforms" /></a>
   <a href="#"><img src="https://img.shields.io/badge/Architecture-Apple%20Silicon%20|%20Intel%20|%20x64-stone.svg?style=flat-square" alt="Arch" /></a>
   <a href="#"><img src="https://img.shields.io/badge/React-19-61dafb.svg?style=flat-square" alt="React 19" /></a>
-  <a href="#"><img src="https://img.shields.io/badge/License-MIT-emerald.svg?style=flat-square" alt="License" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-emerald.svg?style=flat-square" alt="License: GPL-3.0" /></a>
   <a href="https://discord.gg/mirato"><img src="https://img.shields.io/badge/Discord-Community-5865F2.svg?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
 </p>
 
@@ -85,7 +85,7 @@ It combines the capabilities of expensive proprietary broadcast software (such a
 | **Stage Display (StageView)** | Built-in stage monitor (clock, countdown timer, mini slides) | None | Requires separate screen configuration module |
 | **Church Hymnals & Songbooks** | Built-in hymnal library with instant lookup by number | None (each song requires manual slides) | Basic text import / CCLI SongSelect subscription |
 | **Broadcast Overrides (Blackout/Logo)** | Direct hotkeys (`B`, `W`, `L`) | Key `B` only (black screen) | Configurable |
-| **License & Pricing** | **100% Free & Open Source (MIT)** | Microsoft 365 Subscription | From \$399 + annual upgrade maintenance |
+| **License & Pricing** | **Free for Churches (GPL-3.0 / Dual-License)** | Microsoft 365 Subscription | From \$399 + annual upgrade maintenance |
 
 ---
 
@@ -239,6 +239,14 @@ npm run build:linux        # Linux AppImage
 
 ---
 
+## 📄 Licensing & Dual-License Model
+
+Mirato is distributed under a **Dual-Licensing model**:
+- **Churches & Community:** 100% free and open-source under the **GNU General Public License v3.0 (GPL-3.0)**. Copyleft ensures no commercial entity can steal or close this codebase.
+- **Commercial Dual-Licensing:** If you wish to extract, embed, or reuse components of Mirato (such as the Presentation Canvas Engine) into proprietary commercial software without GPL copyleft obligations, commercial licenses are available directly from the copyright holder: **Boris Smiyan** ([borissmiyan@gmail.com](mailto:borissmiyan@gmail.com)).
+
+---
+
 ## 🤝 Community & Support
 
 - 💬 **Discord Community:** [discord.gg/mirato](https://discord.gg/mirato)
@@ -249,5 +257,5 @@ npm run build:linux        # Linux AppImage
 
 <p align="center">
   Crafted with care and prayer for churches around the globe. 🤍<br>
-  <strong>Mirato © 2026. Released under the MIT License.</strong>
+  <strong>Mirato © 2026 Boris Smiyan. Licensed under GNU GPL v3 / Dual-License.</strong>
 </p>

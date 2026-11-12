@@ -21,7 +21,7 @@
   <a href="#"><img src="https://img.shields.io/badge/Платформы-macOS%20|%20Windows%20|%20Linux-blue.svg?style=flat-square" alt="Platforms" /></a>
   <a href="#"><img src="https://img.shields.io/badge/Архитектура-Apple%20Silicon%20|%20Intel%20|%20x64-stone.svg?style=flat-square" alt="Arch" /></a>
   <a href="#"><img src="https://img.shields.io/badge/React-19-61dafb.svg?style=flat-square" alt="React 19" /></a>
-  <a href="#"><img src="https://img.shields.io/badge/Лицензия-MIT-emerald.svg?style=flat-square" alt="License" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/Лицензия-GPL--3.0-emerald.svg?style=flat-square" alt="Лицензия: GPL-3.0" /></a>
   <a href="https://discord.gg/mirato"><img src="https://img.shields.io/badge/Discord-Сообщество-5865F2.svg?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
 </p>
 
@@ -85,7 +85,7 @@
 | **Экран сцены (Stage Display)** | Встроенный сценический монитор (часы, таймер, слайды) | Отсутствует | Требует отдельный модуль настройки экранов |
 | **Церковные песенники** | Встроенная база сборников с быстрым поиском по номеру | Отсутствуют (каждая песня верстается вручную) | Базовый текстовый импорт / платная подписка CCLI |
 | **Оверлеи эфира (Blackout/Logo)** | Хоткеи прямого действия (`B`, `W`, `L`) | Только клавиша `B` (черный экран) | Настраиваемые |
-| **Стоимость лицензии** | **100% Бесплатно и Open Source (MIT)** | Подписка Microsoft 365 | От \$399 + ежегодные платные обновления |
+| **Стоимость лицензии** | **Бесплатно для церквей (GPL-3.0 / Dual-License)** | Подписка Microsoft 365 | От \$399 + ежегодные платные обновления |
 
 ---
 
@@ -239,6 +239,14 @@ npm run build:linux        # Linux AppImage
 
 ---
 
+## 📄 Лицензирование и модель Dual-License
+
+Mirato распространяется по модели **двойного лицензирования (Dual-Licensing)**:
+- **Для церквей и сообщества:** Программа на 100% бесплатна и открыта под свободной лицензией **GNU General Public License v3.0 (GPL-3.0)**. Запрещено создание закрытых коммерческих форков сторонними разработчиками.
+- **Коммерческая лицензия:** Если вы заинтересованы во встраивании или использовании компонентов Mirato (например, векторного презентационного движка) в закрытом коммерческом ПО без ограничений copyleft, коммерческая лицензия приобретается напрямую у автора: **Борис Смиян** ([borissmiyan@gmail.com](mailto:borissmiyan@gmail.com)).
+
+---
+
 ## 🤝 Сообщество и Поддержка
 
 - 💬 **Discord-сообщество:** [discord.gg/mirato](https://discord.gg/mirato)
@@ -249,5 +257,5 @@ npm run build:linux        # Linux AppImage
 
 <p align="center">
   Сделано с любовью и молитвой для церквей по всему миру. 🤍<br>
-  <strong>Mirato © 2026. Распространяется под лицензией MIT.</strong>
+  <strong>Mirato © 2026 Борис Смиян. Лицензия GNU GPL v3 / Dual-License.</strong>
 </p>

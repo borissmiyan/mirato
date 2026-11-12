@@ -21,7 +21,7 @@
   <a href="#"><img src="https://img.shields.io/badge/Plattformen-macOS%20|%20Windows%20|%20Linux-blue.svg?style=flat-square" alt="Plattformen" /></a>
   <a href="#"><img src="https://img.shields.io/badge/Architektur-Apple%20Silicon%20|%20Intel%20|%20x64-stone.svg?style=flat-square" alt="Architektur" /></a>
   <a href="#"><img src="https://img.shields.io/badge/React-19-61dafb.svg?style=flat-square" alt="React 19" /></a>
-  <a href="#"><img src="https://img.shields.io/badge/Lizenz-MIT-emerald.svg?style=flat-square" alt="Lizenz" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/Lizenz-GPL--3.0-emerald.svg?style=flat-square" alt="Lizenz: GPL-3.0" /></a>
   <a href="https://discord.gg/mirato"><img src="https://img.shields.io/badge/Discord-Community-5865F2.svg?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
 </p>
 
@@ -85,7 +85,7 @@ Die Software vereint professionelle Leistungsmerkmale teurer Broadcast-Systeme (
 | **Bühnenanzeige (StageView)** | Integrierter Bühnen-Monitor (Uhrzeit, Countdown-Timer, Folien) | Nicht vorhanden | Erfordert separates Multi-Screen-Konfigurationsmodul |
 | **Gemeindeliederbücher** | Integrierte Liedersammlungen mit Suche nach Liednummer | Nicht vorhanden (jedes Lied muss einzeln formatiert werden) | Nur einfacher Textimport / CCLI SongSelect-Abonnement |
 | **Live-Overlays (Blackout/Logo)** | Direkte Tastaturbefehle (`B`, `W`, `L`) | Nur Taste `B` (schwarzer Bildschirm) | Konfigurierbar |
-| **Lizenz & Kosten** | **100% Kostenlos & Open Source (MIT)** | Microsoft 365 Abonnement | Ab \$399 + jährliche Update-Gebühren |
+| **Lizenz & Kosten** | **Kostenlos für Gemeinden (GPL-3.0 / Dual-License)** | Microsoft 365 Abonnement | Ab \$399 + jährliche Update-Gebühren |
 
 ---
 
@@ -239,6 +239,14 @@ npm run build:linux        # Linux AppImage
 
 ---
 
+## 📄 Lizenzierung & Dual-License-Modell
+
+Mirato wird unter einem **Dual-Licensing-Modell** bereitgestellt:
+- **Für Gemeinden & Community:** Die Software ist unter der **GNU General Public License v3.0 (GPL-3.0)** dauerhaft kostenlos und quelloffen. Geschlossene kommerzielle Forks durch Dritte sind gesetzlich untersagt.
+- **Kommerzielle Einbettung:** Wenn Sie Kernmodule (wie die Vektor-Präsentations-Engine) ohne Copyleft-Verpflichtungen der GPL in proprietäre kommerzielle Software einbinden möchten, sind kommerzielle Lizenzen direkt über den Urheber erhältlich: **Boris Smiyan** ([borissmiyan@gmail.com](mailto:borissmiyan@gmail.com)).
+
+---
+
 ## 🤝 Community & Mitwirken
 
 - 💬 **Discord-Community:** [discord.gg/mirato](https://discord.gg/mirato)
@@ -249,5 +257,5 @@ npm run build:linux        # Linux AppImage
 
 <p align="center">
   Entwickelt mit Hingabe und Gebet für Gemeinden weltweit. 🤍<br>
-  <strong>Mirato © 2026. Veröffentlicht unter der MIT-Lizenz.</strong>
+  <strong>Mirato © 2026 Boris Smiyan. Lizenziert unter GNU GPL v3 / Dual-License.</strong>
 </p>

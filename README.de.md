@@ -5,7 +5,7 @@
 <h1 align="center">Mirato</h1>
 
 <p align="center">
-  <strong>Präsentationsstudio der nächsten Generation: Bibelstellen-Projektion, Liederbücher und kabelloser Bühnen-Prompter für Gemeinden und Medienteams.</strong><br>
+  <strong>Präsentationsstudio der nächsten Generation: Bibelstellen-Projektion, Gemeindeliederbücher, Vektor-Canvas-Editor und kabelloser Bühnen-Prompter für Gemeinden und Medienteams.</strong><br>
   <em>(Zuvor bekannt als Ekklesienter)</em>
 </p>
 
@@ -48,7 +48,7 @@ Die Software vereint professionelle Leistungsmerkmale teurer Broadcast-Systeme (
 ### 📱 Mobiler Web-Remote Controller
 - **Keine App-Installation nötig:** Scannen Sie einfach einen QR-Code auf jedem Smartphone oder Tablet im lokalen WLAN.
 - **Foliensteuerung und Bibel-Suche mobil:** Moderatoren oder Techniker können Folien wechseln, eine Live-Vorschau sehen und Bibelstellen direkt vom Smartphone aus auf die Leinwand projizieren.
-- **Notfall-Buttons:** Sofortiges Abdunkeln (**Blackout** `F1`) oder Ausblenden von Text (**Clear** `F2`) mit nur einem Fingertipp.
+- **Direkte Live-Overlays:** Sofortiges Abdunkeln (**Blackout** `B`), Weißblende (**Whiteout** `W`) oder Gemeindelogo (**Logo** `L`) mit nur einem Fingertipp.
 - **PIN-Schutz:** Einstellbare PIN-Authentifizierung schützt die Steuerung vor unbefugtem Zugriff.
 
 ### 🎵 Gemeindeliederbücher & Gesangsbücher
@@ -56,8 +56,8 @@ Die Software vereint professionelle Leistungsmerkmale teurer Broadcast-Systeme (
 - **Strukturierte Strophen:** Automatische Einteilung in Strophen, Refrains und Bridges mit direkter Folienanwahl per Klick.
 - **Gemeindegerechte Themen:** Vorlagen und Folienstile, die speziell für Lobpreislieder entworfen wurden.
 
-### 📐 Vektor-Canvas & Foliendesign auf Figma-Niveau
-- **Präzise Vektor-Engine:** Freies Platzieren von Textblöcken, Formen, Konturen, Bildern und Video-Hintergründen.
+### 📐 Vektor-Canvas & Foliendesign
+- **Präzise Canvas-Engine:** Freies Platzieren von Textblöcken, Formen (Rechtecke, Kreise, Linien), Bildern, Videos und Vektorkonturen mit der Zeichenfeder.
 - **Smart Guides & Magnetisches Einrasten:** Intelligente Hilfslinien zur Ausrichtung an der Folienmitte und an benachbarten Elementen.
 - **Seitenverhältnis-Portal:** Umschalten des Folienformats (16:9, 16:10, 4:3, 9:16) über ein schwebendes Overlay über allen Bedienfeldern.
 
@@ -65,11 +65,12 @@ Die Software vereint professionelle Leistungsmerkmale teurer Broadcast-Systeme (
 - **Separater Projektor-Prozess:** Das Ausgabefenster für den Beamer läuft unabhängig – der Mauszeiger wird niemals gefangen, sodass während der Präsentation weitergearbeitet werden kann.
 - **Live-Bearbeitung im laufenden Betrieb:** Tippfehler korrigieren oder neue Folien erstellen, während der Beamer ohne Unterbrechung weiterläuft.
 
-### 🚨 Schnelle Notfall-Tasten (Panic Keys)
-- Kein langes Suchen mit der Maus bei ungeplanten Pausen auf der Bühne:
-  - `F1` — **Blackout** (sanftes Abdunkeln der Beamer-Ausgabe zu Schwarz).
-  - `F2` — **Clear Text** (blendet Text aus, während Hintergrundvideo/Grafik weiterläuft).
-  - `Esc` — Overlays zurücksetzen / zum Normalbetrieb zurückkehren.
+### 🚨 Direkte Tastaturbefehle für den Livestream (Live Overrides)
+- Sofortige Bildschirmschaltung ohne langes Suchen mit der Maus:
+  - `B` — **Blackout** (sanftes Abdunkeln der Beamer-Ausgabe zu Schwarz).
+  - `W` — **Whiteout** (weißes Vollbild auf dem Beamer).
+  - `L` — **Logo** (Einblenden des offiziellen Gemeindelogos).
+  - `Esc` — Projektorfenster schließen oder Bearbeitung beenden.
 
 ---
 
@@ -80,11 +81,85 @@ Die Software vereint professionelle Leistungsmerkmale teurer Broadcast-Systeme (
 | **Multi-Display & Mausfreiheit** | Vollständige Mausfreiheit; Arbeiten während der Präsentation möglich | Blockiert den Mausfokus; Klick außerhalb beendet oft die Schau | Komplexes Multi-Fenster-UI, hohe GPU-Last |
 | **Live-Bearbeitung im Gottesdienst** | Nahtlos in Echtzeit ohne Beenden der Projektion | Ohne Unterbrechung der Präsentation unmöglich | Möglich, erfordert jedoch das Öffnen schwerfälliger Editoren |
 | **Schnelle Bibelstellensuche** | Unter 5 ms (`Joh 3:16`), parallele Übersetzungen, Auto-Fit | Keine (nur manuelles Kopieren & Einfügen) | Vorhanden, moderne Übersetzungen erfordern jedoch Zusatzmodule |
-| **Web Remote Steuerung** | Integriert via QR-Code & WLAN (ohne App, inkl. Bibelsuche) | Nur einfache Hardware-Presenter oder PowerPoint-App mit Office-Abo | Erfordert eigene ProRemote-App mit manueller Port-Konfiguration |
-| **Bühnen-Prompter (AirDeck)** | Integrierter kabelloser Prompter für Sänger & Sprecher | Nicht vorhanden | Erfordert separate kostenpflichtige iOS-App |
+| **Web Remote Steuerung** | Integriert via QR-Code & WLAN (ohne App, inkl. Bibelsuche & Overlays) | Nur einfache Hardware-Presenter oder PowerPoint-App mit Office-Abo | Erfordert eigene ProRemote-App mit manueller Port-Konfiguration |
+| **Bühnenanzeige (StageView)** | Integrierter Bühnen-Monitor (Uhrzeit, Countdown-Timer, Folien) | Nicht vorhanden | Erfordert separates Multi-Screen-Konfigurationsmodul |
 | **Gemeindeliederbücher** | Integrierte Liedersammlungen mit Suche nach Liednummer | Nicht vorhanden (jedes Lied muss einzeln formatiert werden) | Nur einfacher Textimport / CCLI SongSelect-Abonnement |
-| **Notfall-Tasten (F1 / F2)** | Dedizierte Tasten für Blackout und Clear Text | Nur Taste `B` (schwarzer Bildschirm) | Konfigurierbar |
+| **Live-Overlays (Blackout/Logo)** | Direkte Tastaturbefehle (`B`, `W`, `L`) | Nur Taste `B` (schwarzer Bildschirm) | Konfigurierbar |
 | **Lizenz & Kosten** | **100% Kostenlos & Open Source (MIT)** | Microsoft 365 Abonnement | Ab \$399 + jährliche Update-Gebühren |
+
+---
+
+## ⌨️ Vollständige Tastatur-Kurzbefehle (In-App Cheatsheet)
+
+Hier ist die exakte und vollständige Liste aller in Mirato programmierten Tastenkombinationen (identisch mit dem Einstellungsmenü der App):
+
+### 🎬 Navigation & Wiedergabe (Navigation & Playback)
+
+| Tastenkombination | Aktion | Beschreibung |
+| :--- | :--- | :--- |
+| `→` / `↓` / `Leertaste` | **Nächste Folie** | Zur nächsten Folie wechseln |
+| `←` / `↑` | **Vorherige Folie** | Zur vorherigen Folie zurückkehren |
+| `Enter` | **Live schalten (Go Live)** | Ausgewählte Folie auf den Beamer übertragen |
+| `Leertaste` | **Medien Pause / Play** | Live-Hintergrundvideo abspielen / pausieren (außerhalb des Canvas) |
+| `Esc` | **Projektor schließen** | Beamerfenster schließen oder Bearbeitungsmodus beenden |
+| `H` | **Mit Live synchronisieren** | Vorschau an die aktuelle Live-Folie anpassen |
+| `⌘F` (Mac) / `Ctrl+F` (Win) | **Suche** | Globales Suchfenster öffnen |
+| `⌘H` (Mac) / `Ctrl+H` (Win) | **Verlauf** | Verlauf der letzten Präsentationen öffnen |
+
+### 🚨 Live-Overlays (Live Overrides)
+
+| Tastenkombination | Aktion | Beschreibung |
+| :--- | :--- | :--- |
+| `B` | **Blackout** | Beamer sanft zu Schwarz abdunkeln |
+| `W` | **Whiteout** | Beamer vollflächig weiß schalten |
+| `L` | **Logo** | Gemeindelogo auf dem Beamer einblenden |
+
+### 📂 Folien- & Projektverwaltung (Slide Management)
+
+| Tastenkombination | Aktion | Beschreibung |
+| :--- | :--- | :--- |
+| `⌘S` (Mac) / `Ctrl+S` (Win) | **Speichern** | Aktuellen Ablaufplan oder Präsentation speichern |
+| `⌘Z` (Mac) / `Ctrl+Z` (Win) | **Rückgängig (Undo)** | Letzte Aktion zurücknehmen |
+| `⌘Shift+Z` / `Ctrl+Y` | **Wiederholen (Redo)** | Zurückgenommene Aktion wiederholen |
+| `⌘D` (Mac) / `Ctrl+D` (Win) | **Duplizieren** | Ausgewählte Folie oder Canvas-Element duplizieren |
+| `Entf` / `Backspace` | **Löschen** | Ausgewählte Folie oder Element löschen |
+| `⌘[` / `⌘]` | **Folien-Reihenfolge** | Folie nach vorne / nach hinten verschieben |
+
+### 🎨 Vektor-Canvas-Editor (Canvas Editor)
+
+| Tastenkombination | Aktion | Beschreibung |
+| :--- | :--- | :--- |
+| `V` | **Auswahlwerkzeug** | Objekte auswählen und verschieben |
+| `H` | **Hand-Werkzeug** | Arbeitsfläche verschieben (Pan) |
+| `P` | **Vektor-Zeichenfeder** | Eigene Vektorpfade und Formen zeichnen |
+| `T` | **Text einfügen** | Neues Textfeld auf der Folie erstellen |
+| `R` | **Rechteck** | Rechteck-Form zeichnen |
+| `O` | **Kreis** | Kreis / Ellipse zeichnen |
+| `L` | **Linie** | Gerade Linie zeichnen |
+| `I` | **Pipette (EyeDropper)** | Farbe direkt von Bildschirmelementen aufnehmen |
+| `Leertaste + Drag` | **Canvas verschieben** | Schnelles Verschieben der Arbeitsfläche mit der Maus |
+| `↑` `↓` `←` `→` (Pfeiltasten) | **Präzises Verschieben** | Element um 1% verschieben |
+| `Shift + Pfeiltasten` | **Schnelles Verschieben** | Element um 5% verschieben |
+| `⌘+` / `⌘-` | **Zoom** | Vergrößern / Verkleinern |
+| `⌘0` / `Shift+1` | **Zoom zurücksetzen** | Folie optimal in das Fenster einpassen |
+| `Shift+2` | **Zoom auf Auswahl** | Auf das ausgewählte Element zoomen |
+| `⌘1` | **Zoom 100%** | Tatsächliche Pixelgröße 1:1 anzeigen |
+| `⌘C` / `⌘V` | **Kopieren / Einfügen** | Elemente kopieren und einfügen |
+| `⌘Alt+C` / `⌘Alt+V` | **Stil übertragen** | Schrift- und Farb-Stile kopieren und einfügen |
+| `⌘G` / `⌘Shift+G` | **Gruppieren** | Elemente gruppieren / Gruppierung aufheben |
+| `⌘Shift+L` | **Sperren** | Element sperren / entsperren |
+| `⌘Shift+H` | **Sichtbarkeit** | Element ausblenden / einblenden |
+| `⌘]` / `⌘[` | **Ebenen (Z-Index)** | Ganz nach vorne / ganz nach hinten bringen |
+| `Shift+H` / `Shift+V` | **Spiegeln** | Horizontal / vertikal spiegeln |
+| `Shift+R` | **Lineale** | Lineale ein- oder ausblenden |
+| `Alt / ⌥ (gedrückt halten)` | **Abstände messen** | Pixelabstände zu benachbarten Elementen anzeigen |
+| `⌘/` oder `⌘K` | **Befehls-Palette** | Schnellbefehls-Menü des Canvas aufrufen |
+
+### 📖 Bibel-Modus (Scripture Mode)
+
+| Tastenkombination | Aktion | Beschreibung |
+| :--- | :--- | :--- |
+| `⌘Shift+C` (Mac) / `Ctrl+Shift+C` (Win) | **Vers kopieren** | Aktuellen Bibelvers samt Stellenangabe und Übersetzung kopieren |
 
 ---
 
@@ -94,11 +169,11 @@ Fertige Installationspakete für alle gängigen Betriebssysteme stehen im [v2.3.
 
 | Plattform | Architektur | Paket | Download-Link |
 | :--- | :--- | :--- | :--- |
-| **macOS** | **Apple Silicon (M1 / M2 / M3 / M4)** | `.dmg` (207 MB) | [Herunterladen](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-macOS12+-arm64.dmg) — Für moderne Apple Silicon Macs |
-| **macOS** | **Intel (x86_64)** | `.dmg` (213 MB) | [Herunterladen](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-macOS12+-x64.dmg) — Für Intel-basierte Macs (ab macOS 12 Monterey) |
-| **Windows** | **64-Bit (x64)** | `.exe` (175 MB) | [Herunterladen](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-Setup-2.3.0.exe) — Installer für Windows 10 & 11 |
-| **Linux** | **64-Bit (x86_64)** | `.AppImage` (211 MB) | [Herunterladen](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-x86_64.AppImage) — Portables AppImage für Ubuntu, Debian, Fedora |
-| **Linux** | **ARM64 (aarch64)** | `.AppImage` (212 MB) | [Herunterladen](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-arm64.AppImage) — Für ARM-basierte Linux-Systeme |
+| **macOS** | **Apple Silicon (M1 / M2 / M3 / M4)** | `.dmg` (207 MB) | [Download für Mac (Apple Silicon)](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-macOS12+-arm64.dmg) |
+| **macOS** | **Intel (x86_64)** | `.dmg` (213 MB) | [Download für Mac (Intel)](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-macOS12+-x64.dmg) |
+| **Windows** | **64-Bit (x64)** | `.exe` (175 MB) | [Download für Windows 10/11](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-Setup-2.3.0.exe) |
+| **Linux** | **64-Bit (x86_64)** | `.AppImage` (211 MB) | [Download AppImage (x86_64)](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-x86_64.AppImage) |
+| **Linux** | **ARM64 (aarch64)** | `.AppImage` (212 MB) | [Download AppImage (arm64)](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-arm64.AppImage) |
 
 ---
 
@@ -123,26 +198,6 @@ xattr -cr /Applications/Mirato.app
 
 > [!NOTE]
 > Eine Textdatei mit genau diesem Befehl liegt auch direkt im gemounteten DMG-Image bei (`Команда_для_Терминала.txt`).
-
----
-
-## ⌨️ Tastatur-Kurzbefehle (Cheatsheet)
-
-| Tastenkombination | Aktion |
-| :--- | :--- |
-| `Leertaste` / `→` / `↓` | Nächste Folie / Medien abspielen/pausieren |
-| `←` / `↑` | Vorherige Folie |
-| `F1` | **Blackout** — Beamer sofort sanft abdunkeln |
-| `F2` | **Clear Text** — Text ausblenden, Hintergrund weiterspielen |
-| `Esc` | Overlays zurücksetzen / Auswahl aufheben |
-| `⌘K` (Mac) / `Ctrl+K` (Win) | Schnellbefehls-Palette |
-| `⌘D` (Mac) / `Ctrl+D` (Win) | Folie oder Canvas-Element duplizieren |
-| `⌘+` / `⌘-` / `⌘0` | Zoom: Vergrößern / Verkleinern / 100% |
-| `V` | Auswahlwerkzeug (Select) |
-| `H` | Hand-Werkzeug (Canvas verschieben) |
-| `P` | Vektor-Zeichenfeder (Pen Tool) |
-| `T` / `R` / `O` / `L` | Text / Rechteck / Kreis / Linie einfügen |
-| `I` | Farbpipette (EyeDropper) |
 
 ---
 

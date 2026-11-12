@@ -29,7 +29,7 @@ export const MultiVerseDisplay: React.FC<MultiVerseDisplayProps> = ({
     settings: propsSettings,
     isProjector = false,
 }) => {
-    const { settings: storeSettings } = usePresenterStore();
+    const storeSettings = usePresenterStore(state => state.settings);
     const settings = propsSettings || storeSettings;
 
     const containerRef = useRef<HTMLDivElement>(null);

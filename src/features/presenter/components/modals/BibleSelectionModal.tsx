@@ -1,16 +1,17 @@
 import React, { useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
-import { useModalStore, ModalType } from '@/core/store/modalStore';
+import { useModalStore, ModalType, ModalState } from '@/core/store/modalStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { usePresenterStore } from '@/features/presenter/store/presenterStore';
 import { getBookName } from '@/core/data/bookData';
 import { Verse, ISlide, ICanvasSlide } from '@/core/types';
 import { Layers } from 'lucide-react';
-import { cn } from '@/core/utils/cn';
 import { formatMultiVerseReference, formatVerseRange } from '@/features/bible-browser/utils/bibleUtils';
+import { SegmentedControl, Button } from '@/shared/ui';
 
 // Hooks
 import { useBibleSelection } from '../../hooks/useBibleSelection';
@@ -26,24 +27,37 @@ import { BibleSelectionPreview } from './BibleSelectionPreview';
  * Bible selection modal for presentation mode.
  * Features: live slide preview, multi-verse, multi-translation, carousel preview.
  */
-const BibleSelectionModal: React.FC = () => {
+interface BibleSelectionModalContentProps {
+    modalData: ModalState;
+}
+
+const BibleSelectionModalContent: React.FC<BibleSelectionModalContentProps> = ({ modalData }) => {
     const { t, i18n } = useTranslation();
     const lang = i18n.language?.substring(0, 2) || 'en';
-    const { closeModal, stack } = useModalStore();
+    const closeModal = useModalStore(s => s.closeModal);
 
-    const modalData = [...stack].reverse().find(m => m.id === ModalType.BIBLE_SELECTION);
-    const isOpen = !!modalData;
     const slideId = modalData?.props?.slideId as string | undefined;
     const modalPresentationId = modalData?.props?.presentationId as string | undefined;
 
     // ─── Store ───
-    const activePresentationId = usePresentationStore(s => s.activePresentationId);
-    const selectedPresentationId = usePresentationStore(s => s.selectedPresentationId);
-    const activePresentation = usePresentationStore(s => s.activePresentation);
-    const selectedPresentation = usePresentationStore(s => s.selectedPresentation);
-    const updatePresentationSlides = usePresentationStore(s => s.updatePresentationSlides);
-    const previewSlideId = usePresentationStore(s => s.previewSlideId);
-    const { settings } = usePresenterStore();
+    const {
+        activePresentationId,
+        selectedPresentationId,
+        activePresentation,
+        selectedPresentation,
+        updatePresentationSlides,
+        previewSlideId
+    } = usePresentationStore(
+        useShallow(s => ({
+            activePresentationId: s.activePresentationId,
+            selectedPresentationId: s.selectedPresentationId,
+            activePresentation: s.activePresentation,
+            selectedPresentation: s.selectedPresentation,
+            updatePresentationSlides: s.updatePresentationSlides,
+            previewSlideId: s.previewSlideId
+        }))
+    );
+    const settings = usePresenterStore(s => s.settings);
 
     const targetPresentationId = modalPresentationId || selectedPresentationId || activePresentationId;
 
@@ -66,41 +80,56 @@ const BibleSelectionModal: React.FC = () => {
     const bible = useBibleSelection(presentation, slideId);
 
     // ─── Verse click handler ───
+    const {
+        lastClickedVerseNumber,
+        setSelectedVerseNumbers,
+        setLastClickedVerseNumber,
+        selectedVerses,
+        selectedVerseNumbers,
+        selectedBookId,
+        selectedChapter,
+        selectedTranslationId,
+        secondTranslationId,
+        secondTranslationVerse,
+        secondTranslationVerses,
+        insertMode,
+    } = bible;
+
     const handleVerseClick = useCallback((v: Verse, e: React.MouseEvent) => {
         const isShift = e.shiftKey;
         const isCmdCtrl = e.metaKey || e.ctrlKey;
 
-        if (isShift && bible.lastClickedVerseNumber !== null) {
-            const start = Math.min(bible.lastClickedVerseNumber, v.verseNumber);
-            const end = Math.max(bible.lastClickedVerseNumber, v.verseNumber);
+        if (isShift && lastClickedVerseNumber !== null) {
+            const start = Math.min(lastClickedVerseNumber, v.verseNumber);
+            const end = Math.max(lastClickedVerseNumber, v.verseNumber);
             const range: number[] = [];
             for (let i = start; i <= end; i++) range.push(i);
-            bible.setSelectedVerseNumbers(prev => {
+            setSelectedVerseNumbers(prev => {
                 const others = prev.filter(n => n < start || n > end);
                 return [...new Set([...others, ...range])];
             });
         } else if (isCmdCtrl) {
-            bible.setSelectedVerseNumbers(prev =>
+            setSelectedVerseNumbers(prev =>
                 prev.includes(v.verseNumber)
                     ? prev.filter(n => n !== v.verseNumber)
                     : [...prev, v.verseNumber]
             );
         } else {
-            bible.setSelectedVerseNumbers([v.verseNumber]);
+            setSelectedVerseNumbers([v.verseNumber]);
         }
-        bible.setLastClickedVerseNumber(v.verseNumber);
-    }, [bible.lastClickedVerseNumber]);
+        setLastClickedVerseNumber(v.verseNumber);
+    }, [lastClickedVerseNumber, setSelectedVerseNumbers, setLastClickedVerseNumber]);
 
     // ─── Apply handler ───
     const handleApply = useCallback(async () => {
         if (!targetPresentationId || !presentation) return;
-        if (bible.selectedVerses.length === 0) return;
+        if (selectedVerses.length === 0) return;
 
-        const sortedSelected = [...bible.selectedVerseNumbers].sort((a, b) => a - b);
+        const sortedSelected = [...selectedVerseNumbers].sort((a, b) => a - b);
 
         const getReference = (verses: Verse[]) => {
             if (verses.length === 0) return '';
-            const bookName = getBookName(bible.selectedBookId, lang);
+            const bookName = getBookName(selectedBookId, lang);
             return formatMultiVerseReference(verses, bookName, lang);
         };
 
@@ -115,16 +144,16 @@ const BibleSelectionModal: React.FC = () => {
                 content: verseText,
                 text: verseText,
                 reference: reference,
-                translationId: bible.selectedTranslationId,
-                bookId: bible.selectedBookId,
-                chapter: bible.selectedChapter,
+                translationId: selectedTranslationId,
+                bookId: selectedBookId,
+                chapter: selectedChapter,
                 verses: JSON.stringify(verseNums),
                 verseStart: verseNums[0],
                 verseEnd: verseNums[verseNums.length - 1],
             };
 
-            if (bible.secondTranslationId && secondVerse) {
-                base.secondTranslationId = bible.secondTranslationId;
+            if (secondTranslationId && secondVerse) {
+                base.secondTranslationId = secondTranslationId;
                 base.secondVerseText = secondVerse.text;
             }
 
@@ -132,7 +161,7 @@ const BibleSelectionModal: React.FC = () => {
         };
 
         if (slideId) {
-            const variables = buildVariables(bible.selectedVerses, sortedSelected, bible.secondTranslationVerse);
+            const variables = buildVariables(selectedVerses, sortedSelected, secondTranslationVerse);
             newSlides = newSlides.map(s => {
                 if (s.id === slideId && s.type === 'normal') {
                     const canvasSlide = s as ICanvasSlide;
@@ -154,18 +183,18 @@ const BibleSelectionModal: React.FC = () => {
 
             const slidesToInsert: ISlide[] = [];
 
-            if (bible.insertMode === 'single') {
+            if (insertMode === 'single') {
                 slidesToInsert.push({
                     id: crypto.randomUUID(),
                     type: 'normal',
                     order: 0,
                     blockId: 'bible',
                     templateId: 'bible-default',
-                    content: { variables: buildVariables(bible.selectedVerses, sortedSelected, bible.secondTranslationVerse) }
+                    content: { variables: buildVariables(selectedVerses, sortedSelected, secondTranslationVerse) }
                 } as ICanvasSlide);
             } else {
-                bible.selectedVerses.forEach((verse) => {
-                    const matchingSecondVerse = bible.secondTranslationVerses.find(
+                selectedVerses.forEach((verse) => {
+                    const matchingSecondVerse = secondTranslationVerses.find(
                         sv => sv.verseNumber === verse.verseNumber
                     );
                     slidesToInsert.push({
@@ -191,10 +220,11 @@ const BibleSelectionModal: React.FC = () => {
         await updatePresentationSlides(targetPresentationId, newSlides);
         closeModal(ModalType.BIBLE_SELECTION);
     }, [
-        presentation, targetPresentationId, bible.selectedVerses,
-        bible.selectedVerseNumbers, bible.selectedBookId, bible.selectedChapter,
-        bible.selectedTranslationId, bible.secondTranslationId, bible.secondTranslationVerse,
-        bible.secondTranslationVerses, slideId, bible.insertMode, lang,
+        presentation, targetPresentationId, selectedVerses,
+        selectedVerseNumbers, selectedBookId, selectedChapter,
+        selectedTranslationId, secondTranslationId, secondTranslationVerse,
+        secondTranslationVerses, slideId, insertMode, lang,
+        previewSlideId, modalData?.props?.insertBefore,
         updatePresentationSlides, closeModal
     ]);
 
@@ -205,11 +235,9 @@ const BibleSelectionModal: React.FC = () => {
         return formatMultiVerseReference(bible.selectedVerses, bookName, lang);
     }, [bible.selectedVerses, bible.selectedBookId, lang]);
 
-    if (!isOpen) return null;
-
     return createPortal(
-        <div className="fixed inset-0 z-10001 flex items-center justify-center bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-            <div className="bg-stone-900 border border-white/10 rounded-[32px] w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500">
+        <div className="fixed inset-0 z-10001 flex items-center justify-center apple-backdrop bg-stone-950/75 backdrop-blur-xl p-6">
+            <div className="bg-stone-900 border border-white/10 ring-1 ring-white/5 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl apple-modal">
 
                 <BibleSelectionHeader
                     slideId={slideId}
@@ -280,67 +308,53 @@ const BibleSelectionModal: React.FC = () => {
                     </div>
 
                     {!slideId && (
-                        <div className="hidden sm:flex bg-stone-900 border border-white/10 rounded-xl p-1 shrink-0 mx-4">
-                            <button
-                                type="button"
-                                onClick={() => bible.setInsertMode('single')}
-                                className={cn(
-                                    "px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest font-bold transition-all cursor-pointer",
-                                    bible.insertMode === 'single' ? "bg-white/10 text-white" : "text-stone-500 hover:text-stone-300"
-                                )}
-                            >
-                                <div className="flex items-center gap-1.5">
-                                    <Layers className="w-3 h-3" />
-                                    {t('single_slide', 'Single Slide')}
-                                </div>
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => bible.setInsertMode('multiple')}
-                                className={cn(
-                                    "px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest font-bold transition-all cursor-pointer",
-                                    bible.insertMode === 'multiple' ? "bg-white/10 text-white" : "text-stone-500 hover:text-stone-300"
-                                )}
-                            >
-                                <div className="flex items-center gap-1.5">
-                                    <Layers className="w-3 h-3" />
-                                    {t('multiple_slides', 'Multiple Slides')}
-                                </div>
-                            </button>
+                        <div className="hidden sm:flex shrink-0 mx-4">
+                            <SegmentedControl<'single' | 'multiple'>
+                                value={bible.insertMode}
+                                onChange={(val) => bible.setInsertMode(val)}
+                                options={[
+                                    { value: 'single', label: t('single_slide', 'Single Slide'), icon: <Layers className="w-3.5 h-3.5" /> },
+                                    { value: 'multiple', label: t('multiple_slides', 'Multiple Slides'), icon: <Layers className="w-3.5 h-3.5" /> },
+                                ]}
+                                size="xs"
+                            />
                         </div>
                     )}
 
-                    <div className="flex gap-2 shrink-0">
-                        <button
-                            type="button"
+                    <div className="flex gap-2.5 shrink-0">
+                        <Button
+                            variant="secondary"
+                            size="xs"
                             onClick={() => closeModal(ModalType.BIBLE_SELECTION)}
-                            className="px-6 py-2.5 bg-white/5 hover:bg-white/10 text-stone-400 font-bold rounded-2xl transition-all border border-white/5 active:scale-95 text-[10px] uppercase tracking-widest cursor-pointer"
                         >
                             {t('cancel', 'Cancel')}
-                        </button>
-                        <button
-                            type="button"
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="xs"
                             onClick={handleApply}
                             disabled={bible.selectedVerses.length === 0}
-                            className={cn(
-                                "px-8 py-2.5 font-black rounded-2xl transition-all border shadow-lg text-[10px] uppercase tracking-widest cursor-pointer",
-                                bible.selectedVerses.length > 0
-                                    ? "bg-amber-500 text-black border-amber-600 shadow-amber-500/20 hover:scale-[1.02] active:scale-[0.98]"
-                                    : "bg-stone-800 text-stone-500 border-stone-700 shadow-none cursor-not-allowed"
-                            )}
                         >
                             {slideId ? t('update_slide', 'Update Slide') : (
                                 bible.insertMode === 'multiple' && bible.selectedVerses.length > 1
                                     ? t('insert_slides_count', 'Insert {{count}} Slides', { count: bible.selectedVerses.length })
                                     : t('insert_slide', 'Insert Slide')
                             )}
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>
         </div>,
         document.body
     );
+};
+
+const BibleSelectionModal: React.FC = () => {
+    const modalData = useModalStore(
+        useShallow(s => [...s.stack].reverse().find(m => m.id === ModalType.BIBLE_SELECTION))
+    );
+    if (!modalData) return null;
+    return <BibleSelectionModalContent modalData={modalData} />;
 };
 
 export default BibleSelectionModal;

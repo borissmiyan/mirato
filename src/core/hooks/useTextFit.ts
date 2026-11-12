@@ -72,11 +72,11 @@ export function useTextFit({
 
         setFontSize(lo);
         setIsReady(true);
-    }, [text, containerRef, minFontSize, maxFontSize, precision, safetyMargin]);
+    }, [containerRef, minFontSize, maxFontSize, precision, safetyMargin]);
 
     useLayoutEffect(() => {
         calculateFit();
-    }, [calculateFit]);
+    }, [calculateFit, text]);
 
     // Реактивный расчет: следит за физическим размером контейнера
     useEffect(() => {

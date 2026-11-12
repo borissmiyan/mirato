@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Pipette } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { FloatingPopover } from './FloatingPopover';
+import { useEyeDropper } from '@/shared/hooks/useEyeDropper';
 
 interface CompactColorPickerProps {
     color: string;
@@ -85,10 +87,11 @@ export const CompactColorPicker: React.FC<CompactColorPickerProps> = ({
             )}
 
             <button
+                type="button"
                 ref={triggerRef}
                 onClick={() => setIsOpen(!isOpen)}
                 className={cn(
-                    "w-6 h-6 rounded-full border-2 transition-all hover:scale-110 active:scale-95 shadow-sm relative group",
+                    "w-6 h-6 rounded-full border-2 transition-all hover:scale-110 active:scale-95 shadow-sm relative group apple-press cursor-pointer",
                     isOpen ? "border-accent ring-4 ring-accent/20" : "border-white/20 hover:border-white/40"
                 )}
                 style={{ backgroundColor: color }}
@@ -115,6 +118,8 @@ const ColorPickerPanel: React.FC<ColorPickerPanelProps> = ({
     color,
     onChange
 }) => {
+    const { t } = useTranslation();
+    const { isSupported, openEyeDropper } = useEyeDropper();
     const [hsv, setHsv] = useState(hexToHsv(color || '#FFFFFF'));
     const [isDraggingWheel, setIsDraggingWheel] = useState(false);
     const [isDraggingValue, setIsDraggingValue] = useState(false);
@@ -124,9 +129,12 @@ const ColorPickerPanel: React.FC<ColorPickerPanelProps> = ({
 
     useEffect(() => {
         const newHsv = hexToHsv(color || '#FFFFFF');
-        if (hsvToHex(hsv.h, hsv.s, hsv.v) !== color.toUpperCase()) {
-            setHsv(newHsv);
-        }
+        setHsv(prev => {
+            if (hsvToHex(prev.h, prev.s, prev.v) !== color.toUpperCase()) {
+                return newHsv;
+            }
+            return prev;
+        });
     }, [color]);
 
     const handleWheelMove = useCallback((e: PointerEvent | React.PointerEvent) => {
@@ -235,6 +243,20 @@ const ColorPickerPanel: React.FC<ColorPickerPanelProps> = ({
             </div>
 
             <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+                {isSupported && (
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            const picked = await openEyeDropper();
+                            if (picked) onChange(picked);
+                        }}
+                        className="p-1.5 rounded-xl border border-white/5 bg-white/5 hover:bg-white/10 hover:border-accent/40 text-stone-400 hover:text-accent transition-colors apple-press cursor-pointer shrink-0"
+                        title={t('eyedropper', 'Пипетка цвета')}
+                        aria-label={t('eyedropper', 'Пипетка цвета')}
+                    >
+                        <Pipette className="w-3.5 h-3.5" />
+                    </button>
+                )}
                 <input
                     type="text"
                     value={color.toUpperCase()}
@@ -242,19 +264,21 @@ const ColorPickerPanel: React.FC<ColorPickerPanelProps> = ({
                         const val = e.target.value;
                         if (/^#[0-9A-F]{0,6}$/i.test(val)) onChange(val);
                     }}
-                    className="flex-1 bg-black/40 border border-white/5 rounded-lg px-2 py-1.5 text-[10px] font-mono text-stone-300 focus:outline-none focus:border-accent/40 text-center"
+                    className="flex-1 bg-black/40 border border-white/5 rounded-xl px-2 py-1.5 text-[10px] font-mono text-stone-300 focus:outline-none focus:border-accent/40 text-center"
                     placeholder="#FFF"
                 />
-                <div className="w-8 h-8 rounded-lg border border-white/10 shadow-inner" style={{ backgroundColor: color }} />
+                <div className="w-8 h-8 rounded-xl border border-white/10 shadow-inner" style={{ backgroundColor: color }} />
             </div>
 
             <div className="flex flex-wrap gap-2 pt-1">
                 {PRESET_UI_COLORS.map(p => (
                     <button
                         key={p}
+                        type="button"
+                        aria-label={`Select color ${p}`}
                         onClick={() => onChange(p)}
                         className={cn(
-                            "w-5 h-5 rounded-full border border-white/10 transition-all hover:scale-125 hover:shadow-lg",
+                            "w-5 h-5 rounded-full border border-white/10 transition-all hover:scale-125 hover:shadow-lg apple-press cursor-pointer",
                             color.toUpperCase() === p && "ring-2 ring-accent ring-offset-2 ring-offset-stone-900"
                         )}
                         style={{ backgroundColor: p }}

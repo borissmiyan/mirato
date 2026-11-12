@@ -60,7 +60,7 @@ export const getUniqueSelectionStyles = (
     selectedItems.forEach(item => {
         // 1. Regular Fills
         item.fills?.forEach(fill => {
-            if (!fill.visible) return;
+            if (fill.visible === false) return;
             const hash = getStyleHash(fill);
             if (!uniqueStylesMap.has(hash)) {
                 uniqueStylesMap.set(hash, fill);
@@ -69,7 +69,7 @@ export const getUniqueSelectionStyles = (
 
         // 2. Strokes
         item.strokes?.forEach(stroke => {
-            if (!stroke.visible) return;
+            if (stroke.visible === false) return;
             const hash = getStyleHash(stroke);
             if (!uniqueStylesMap.has(hash)) {
                 uniqueStylesMap.set(hash, stroke);
@@ -79,7 +79,7 @@ export const getUniqueSelectionStyles = (
         // 3. Text Fills
         if (item.type === 'text' && item.text) {
             item.text.textFills?.forEach(fill => {
-                if (!fill.visible) return;
+                if (fill.visible === false) return;
                 const hash = getStyleHash(fill);
                 if (!uniqueStylesMap.has(hash)) {
                     uniqueStylesMap.set(hash, fill);

@@ -1,5 +1,5 @@
 {
-  "name": "Ekklesienter",
-  "description": "A high-performance, aesthetically pleasing Bible presentation tool featuring Markdown rendering, global state management, and a responsive 3-pane layout.",
+  "name": "Mirato",
+  "description": "Next-generation church presentation, scripture projection and wireless display platform.",
   "requestFramePermissions": []
 }

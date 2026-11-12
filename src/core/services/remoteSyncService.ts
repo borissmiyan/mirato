@@ -1,6 +1,27 @@
 import { db } from '@/core/db';
 import { ipcService } from '@/core/services/ipcService';
 import { getBookName } from '@/core/data/bookData';
+import type { ISlide, IPresentationFile } from '@/core/types/presentation';
+import type { IAudioScope } from '@/core/types/audio';
+// audit-ignore: remote sync service serializing presentation state
+import { usePresentationStore } from '@/features/presenter/store/presentationStore';
+
+type SlideLike = ISlide & {
+    id: string;
+    name?: string;
+    label?: string;
+    hymnPresentationId?: string;
+    audio?: unknown;
+    audioScopes?: IAudioScope[];
+    items?: Array<{ type: string; mediaId?: string; text?: string }>;
+    content?: {
+        canvasItems?: Array<{ type: string; mediaId?: string; text?: { content?: string } }>;
+        variables?: Record<string, string | number>;
+    };
+    canvasItems?: Array<{ type: string; mediaId?: string }>;
+    videoSettings?: { mediaId?: string };
+    blocks?: Array<{ text?: string }>;
+};
 
 let lastUpdateId = 0;
 
@@ -14,10 +35,10 @@ export const remoteSyncService = {
    */
   async updateRemoteState(params: {
     appMode: string;
-    activeVerse: any;
-    activePresentation: any;
-    selectedPresentation: any;
-    presentationStack: any[];
+    activeVerse: { bookId: number; chapter: number; verseNumber: number; text: string } | null | unknown;
+    activePresentation: IPresentationFile | null | unknown;
+    selectedPresentation: IPresentationFile | null | unknown;
+    presentationStack: Array<{ presentationId: string; parentNestedSlideId: string }>;
     projectorIsLive: boolean;
     liveSlideId: string | null;
     previewSlideId: string | null;
@@ -25,9 +46,10 @@ export const remoteSyncService = {
     themeAccent: string;
     isPlaying: boolean;
     activeOverride: string | null;
-    activeLogo: any;
+    activeLogo: unknown;
     activeLogoUrl: string | null;
-    settings: any;
+    settings: unknown;
+    bibleState?: unknown;
   }) {
     if (!ipcService.isElectron()) return;
     
@@ -35,42 +57,47 @@ export const remoteSyncService = {
     const { 
       appMode, activeVerse, activePresentation, selectedPresentation, 
       presentationStack, projectorIsLive, liveSlideId, previewSlideId, 
-      lang, themeAccent, isPlaying, activeOverride, activeLogo, activeLogoUrl, settings 
+      lang, themeAccent, isPlaying, activeOverride, activeLogo, activeLogoUrl, settings,
+      bibleState 
     } = params;
+
+    const typedActivePresentation = activePresentation as IPresentationFile | null;
+    const typedSelectedPresentation = selectedPresentation as IPresentationFile | null;
+    const typedActiveVerse = activeVerse as { bookId: number; chapter: number; verseNumber: number; text: string } | null;
 
     let isLive = projectorIsLive || !!liveSlideId;
     let slideTitle = 'Ready';
     let slidePreviewText = '';
-    let slideData: any = null;
-    let slideTemplate: any = null;
-    let slideBlock: any = null;
-    let prevSlideData: any = null;
-    let nextSlideData: any = null;
-    let timelineSlides: any[] = [];
+    let slideData: SlideLike | null = null;
+    let slideTemplate: unknown = null;
+    let slideBlock: unknown = null;
+    let prevSlideData: unknown = null;
+    let nextSlideData: unknown = null;
+    let timelineSlides: unknown[] = [];
 
     // 1. Resolve Audio Scopes for the current presentation context
-    let timelineScopes: any[] = [];
+    let timelineScopes: IAudioScope[] = [];
     let timelineAudioPresId: string | null = null;
     try {
-        const targetPres = selectedPresentation || activePresentation;
+        const targetPres = typedSelectedPresentation || typedActivePresentation;
         if (targetPres?.id) {
             timelineAudioPresId = targetPres.id;
             timelineScopes = await db.audioScopes.where('presentationId').equals(targetPres.id).toArray();
             if (currentUpdateId !== lastUpdateId) return;
         }
-    } catch (err) { }
+    } catch { }
 
-    const checkHasAudio = (id: string, presContext: any) => {
-        if (!presContext) return false;
-        const slide = presContext.slides.find((s: any) => s.id === id);
+    const checkHasAudio = (id: string, presContext: IPresentationFile | null | undefined) => {
+        if (!presContext?.slides) return false;
+        const slide = presContext.slides.find((s) => s.id === id) as SlideLike | undefined;
         if (!slide) return false;
-        if (slide.audio || (slide.audioScopes && slide.audioScopes.length > 0)) return true;
+        if ((slide as { audio?: unknown }).audio || (slide.audioScopes && slide.audioScopes.length > 0)) return true;
         
         if (timelineScopes.length > 0 && timelineAudioPresId === presContext.id) {
-            const slideIndex = presContext.slides.findIndex((s: any) => s.id === id);
-            return timelineScopes.some((scope: any) => {
-                const startIndex = presContext.slides.findIndex((s: any) => s.id === scope.startSlideId);
-                const endIndex = presContext.slides.findIndex((s: any) => s.id === scope.endSlideId);
+            const slideIndex = presContext.slides.findIndex((s) => s.id === id);
+            return timelineScopes.some((scope: IAudioScope) => {
+                const startIndex = presContext.slides.findIndex((s) => s.id === scope.startSlideId);
+                const endIndex = presContext.slides.findIndex((s) => s.id === scope.endSlideId);
                 return slideIndex >= startIndex && slideIndex <= endIndex && startIndex !== -1 && endIndex !== -1;
             });
         }
@@ -78,33 +105,64 @@ export const remoteSyncService = {
     };
 
     // 2. Resolve Main Slide Content
-    if (appMode === 'scripture' && activeVerse) {
-        slideTitle = `${getBookName(activeVerse.bookId, lang)} ${activeVerse.chapter}:${activeVerse.verseNumber}`;
-        slidePreviewText = activeVerse.text;
+    if (appMode === 'scripture' && typedActiveVerse) {
+        slideTitle = `${getBookName(String(typedActiveVerse.bookId), lang)} ${typedActiveVerse.chapter}:${typedActiveVerse.verseNumber}`;
+        slidePreviewText = typedActiveVerse.text;
         isLive = projectorIsLive;
-    } else if (appMode === 'presentation' && activePresentation) {
+    } else if (appMode === 'hymns') {
+        const targetId = liveSlideId || previewSlideId;
+        let currentPres = typedActivePresentation || typedSelectedPresentation;
+        let slide = targetId ? currentPres?.slides?.find((s) => s.id === targetId) as SlideLike | null : null;
+
+        if (!slide && targetId) {
+            const storeState = usePresentationStore.getState();
+            const rootId = liveSlideId ? storeState.liveRootPresentationId : storeState.rootPresentationId;
+            if (rootId) {
+                const pres = await db.presentationFiles.get(rootId);
+                if (pres) {
+                    currentPres = pres;
+                    slide = (pres.slides?.find((s) => s.id === targetId) as SlideLike) ?? null;
+                }
+            }
+        }
+        
+        if (slide) {
+            slideData = slide;
+            if (slide.type === 'hymn' && slide.hymnPresentationId) {
+                const hymnPres = await db.presentationFiles.get(slide.hymnPresentationId);
+                slideTitle = hymnPres?.name || 'Hymn';
+            } else if (currentPres?.metadata?.isHymnLibraryItem) {
+                slideTitle = currentPres.name;
+            } else {
+                slideTitle = slide.name || slide.label || 'Hymn Slide';
+            }
+        } else {
+            slideTitle = 'Ready';
+        }
+        isLive = projectorIsLive;
+    } else if (appMode === 'presentation' && typedActivePresentation) {
         let targetId = liveSlideId || previewSlideId;
-        let currentPres = activePresentation;
-        if (selectedPresentation) {
-            if (!targetId || !activePresentation || selectedPresentation.slides.some((s: any) => s.id === targetId)) {
-                currentPres = selectedPresentation;
+        let currentPres = typedActivePresentation;
+        if (typedSelectedPresentation) {
+            if (!targetId || !typedActivePresentation || typedSelectedPresentation.slides.some((s) => s.id === targetId)) {
+                currentPres = typedSelectedPresentation;
             }
         }
 
-        let slide = null;
-        if (currentPres?.slides?.length > 0) {
+        let slide: SlideLike | null = null;
+        if (currentPres?.slides && currentPres.slides.length > 0) {
             if (targetId) {
-                slide = currentPres.slides.find((s: any) => s.id === targetId);
+                slide = (currentPres.slides.find((s) => s.id === targetId) as SlideLike) ?? null;
             }
             if (!slide) {
-                slide = currentPres.slides[0];
+                slide = currentPres.slides[0] as SlideLike;
                 targetId = slide.id;
             }
         }
         
         if (slide) {
             slideData = slide;
-            slideTitle = (slide as any).name || (slide as any).label || 'Presentation Slide';
+            slideTitle = slide.name || slide.label || 'Presentation Slide';
             
             try {
                 if (slide.templateId) slideTemplate = await db.templates.get(slide.templateId);
@@ -113,12 +171,12 @@ export const remoteSyncService = {
 
                 // Attempt to resolve more specific name for video/media slides
                 if (slideTitle === 'Presentation Slide') {
-                    const canvasItems = (slide as any).content?.canvasItems || (slide as any).canvasItems;
-                    const items = (slide as any).items;
-                    const isVideo = (slide as any).type === 'video' || items?.some((i: any) => i.type === 'video') || canvasItems?.some((i: any) => i.type === 'video');
+                    const canvasItems = slide.content?.canvasItems || slide.canvasItems;
+                    const items = slide.items;
+                    const isVideo = slide.type === 'video' || items?.some((i) => i.type === 'video') || canvasItems?.some((i) => i.type === 'video');
                     
                     if (isVideo) {
-                        const mediaId = (slide as any).videoSettings?.mediaId || items?.find((i: any) => i.type === 'video')?.mediaId || canvasItems?.find((i: any) => i.type === 'video')?.mediaId;
+                        const mediaId = slide.videoSettings?.mediaId || items?.find((i) => i.type === 'video')?.mediaId || canvasItems?.find((i) => i.type === 'video')?.mediaId;
                         if (mediaId) {
                             const mediaDoc = await db.mediaPool.get(mediaId);
                             if (currentUpdateId !== lastUpdateId) return;
@@ -126,17 +184,17 @@ export const remoteSyncService = {
                         }
                     }
                 }
-            } catch (e) { }
+            } catch { }
             
-            const s = slide as any;
-            let extractedText = (s.blocks?.[0]?.text as string) || (s.items?.[0]?.text as string);
+            const s = slide;
+            let extractedText = (s.blocks?.[0]?.text) || (s.items?.[0]?.text);
             if (!extractedText && s.content?.canvasItems) {
-                const firstTextItem = s.content.canvasItems.find((i: any) => i.type === 'text');
+                const firstTextItem = s.content.canvasItems.find((i) => i.type === 'text');
                 if (firstTextItem?.text) extractedText = firstTextItem.text.content;
             }
             slidePreviewText = extractedText || '';
             if (!slidePreviewText) {
-                const hasVideo = s.items?.some((i: any) => i.type === 'video') || s.content?.canvasItems?.some((i: any) => i.type === 'video') || s.type === 'video';
+                const hasVideo = s.items?.some((i) => i.type === 'video') || s.content?.canvasItems?.some((i) => i.type === 'video') || s.type === 'video';
                 if (hasVideo) slidePreviewText = '[ Video Slide ]';
                 else slidePreviewText = '[ Slide Content ]';
             }
@@ -144,9 +202,9 @@ export const remoteSyncService = {
             if (liveSlideId && targetId === liveSlideId) isLive = true;
 
             // Internal helper for resolving nested/master slide references recursively
-            const resolveNeighbor = async (sRef: any, dir: 'first' | 'last'): Promise<any> => {
+            const resolveNeighbor = async (sRef: ISlide, dir: 'first' | 'last'): Promise<ISlide> => {
                 if (sRef.blockId !== 'master-presentation') return sRef;
-                const mId = sRef.type === 'normal' ? sRef.masterPresentationId : (sRef.type === 'nested' ? sRef.presentationId : undefined);
+                const mId = sRef.type === 'normal' ? (sRef as { masterPresentationId?: string }).masterPresentationId : (sRef.type === 'nested' ? (sRef as { presentationId?: string }).presentationId : undefined);
                 if (!mId) return sRef;
                 const p = await db.presentationFiles.get(mId);
                 if (currentUpdateId !== lastUpdateId) throw new Error('stale');
@@ -155,7 +213,7 @@ export const remoteSyncService = {
             };
 
             try {
-                const idx = currentPres.slides.findIndex((s: any) => s.id === targetId);
+                const idx = currentPres.slides.findIndex((s) => s.id === targetId);
                 
                 // Resolve Previous Slide
                 if (idx > 0) {
@@ -164,7 +222,7 @@ export const remoteSyncService = {
                     const last = presentationStack[presentationStack.length - 1];
                     const pPres = await db.presentationFiles.get(last.presentationId);
                     if (currentUpdateId === lastUpdateId && pPres) {
-                        const pIdx = pPres.slides.findIndex((s: any) => s.id === last.parentNestedSlideId);
+                        const pIdx = pPres.slides.findIndex((s) => s.id === last.parentNestedSlideId);
                         if (pIdx > 0) prevSlideData = await resolveNeighbor(pPres.slides[pIdx - 1], 'last');
                     }
                 }
@@ -176,12 +234,12 @@ export const remoteSyncService = {
                     const last = presentationStack[presentationStack.length - 1];
                     const pPres = await db.presentationFiles.get(last.presentationId);
                     if (currentUpdateId === lastUpdateId && pPres) {
-                        const pIdx = pPres.slides.findIndex((s: any) => s.id === last.parentNestedSlideId);
+                        const pIdx = pPres.slides.findIndex((s) => s.id === last.parentNestedSlideId);
                         if (pIdx !== -1 && pIdx < pPres.slides.length - 1) nextSlideData = await resolveNeighbor(pPres.slides[pIdx + 1], 'first');
                     }
                 }
-            } catch (err: any) {
-                if (err.message === 'stale') return;
+            } catch (err: unknown) {
+                if (err instanceof Error && err.message === 'stale') return;
                 console.error('[RemoteSync] Slide resolution error:', err);
             }
             
@@ -207,7 +265,7 @@ export const remoteSyncService = {
             }
         }
         const protocol = window.location.protocol === 'file:' ? 'http:' : window.location.protocol;
-        remoteLogoUrl = `${protocol}//${host}:${port}/media/${activeLogo.id}`;
+        remoteLogoUrl = `${protocol}//${host}:${port}/media/${(activeLogo as { id?: string })?.id || ''}`;
     }
 
     // 4. Dispatch construction to IPC
@@ -224,13 +282,11 @@ export const remoteSyncService = {
         playing: isPlaying,
         activeOverride,
         activeLogoUrl: remoteLogoUrl,
-        themeAccent, 
+        themeAccent,
         lang,
-        hasAudio: slideData ? checkHasAudio(slideData.id, selectedPresentation || activePresentation) : false,
-        settings
+        hasAudio: slideData ? checkHasAudio(slideData.id, typedSelectedPresentation || typedActivePresentation) : false,
+        settings,
+        bibleState
     });
   }
 };
-
-/** @deprecated Use remoteSyncService instead. */
-export const RemoteSyncService = remoteSyncService;

@@ -13,7 +13,7 @@ interface SlideThumbnailProps {
     settings?: PresenterSettings | null | undefined;
 }
 
-export const SlideThumbnail = ({ slide, label, hasAudio, settings }: SlideThumbnailProps) => {
+export const SlideThumbnail = React.memo(({ slide, label, hasAudio, settings }: SlideThumbnailProps) => {
     const { t } = useTranslation();
     const showAudio = hasAudio || (slide?.type === 'normal' && (slide.audio || (slide.audioScopes && slide.audioScopes.length > 0)));
 
@@ -46,4 +46,6 @@ export const SlideThumbnail = ({ slide, label, hasAudio, settings }: SlideThumbn
             </div>
         </div>
     );
-};
+});
+
+SlideThumbnail.displayName = 'SlideThumbnail';

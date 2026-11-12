@@ -121,6 +121,26 @@ describe('usePresentationStore', () => {
     expect(usePresentationStore.getState().selectedSlideIds).toEqual(['s2']);
   });
 
+  it('toggleSlideSelection should handle multi-selection and range-selection even when activePresentation is null', () => {
+    usePresentationStore.setState({
+      activePresentation: null,
+      selectedPresentation: null,
+      selectedSlideIds: ['s1'],
+      previewSlideId: 's1',
+    });
+
+    // Multi-selection (Ctrl/Cmd + click) with activePresentation null: preview moves to newly selected slide (s2)
+    usePresentationStore.getState().toggleSlideSelection('s2', true);
+    expect(usePresentationStore.getState().selectedSlideIds).toEqual(['s1', 's2']);
+    expect(usePresentationStore.getState().previewSlideId).toBe('s2');
+
+    // Range-selection (Shift + click) passing slidesList: preview moves to newly selected range endpoint (s4)
+    const mockSlides = [{ id: 's1' }, { id: 's2' }, { id: 's3' }, { id: 's4' }] as any[];
+    usePresentationStore.getState().toggleSlideSelection('s4', false, true, false, mockSlides);
+    expect(usePresentationStore.getState().selectedSlideIds).toEqual(['s1', 's2', 's3', 's4']);
+    expect(usePresentationStore.getState().previewSlideId).toBe('s4');
+  });
+
   it('navigateNext with preferLiveAnchor should advance live slide independently', async () => {
     const slides = [{ id: 's1' }, { id: 's2' }, { id: 's3' }];
     const presentation = { id: 'p1', slides };
@@ -159,9 +179,67 @@ describe('usePresentationStore', () => {
     expect(state.previewSlideId).toBe('s2'); // Should follow to s2
   });
 
-  it('clearSelection should clear selectedSlideIds', () => {
-    usePresentationStore.setState({ selectedSlideIds: ['s1', 's2'] });
+  it('clearSelection should clear selectedSlideIds and previewSlideId', () => {
+    usePresentationStore.setState({ selectedSlideIds: ['s1', 's2'], previewSlideId: 's1' });
     usePresentationStore.getState().clearSelection();
     expect(usePresentationStore.getState().selectedSlideIds).toEqual([]);
+    expect(usePresentationStore.getState().previewSlideId).toBeNull();
+  });
+
+  it('toggleSlideSelection with deselect should remove slide and update preview', () => {
+    usePresentationStore.setState({
+      activePresentation: { id: 'p1', slides: [{ id: 's1' }, { id: 's2' }, { id: 's3' }] } as any,
+      selectedSlideIds: ['s1', 's2', 's3'],
+      previewSlideId: 's2',
+    });
+
+    // Deselect s2 (the current preview slide): preview should move to remaining selected slide (s3)
+    usePresentationStore.getState().toggleSlideSelection('s2', false, false, true);
+    expect(usePresentationStore.getState().selectedSlideIds).toEqual(['s1', 's3']);
+    expect(usePresentationStore.getState().previewSlideId).toBe('s3');
+
+    // Deselect s3: preview should move to remaining s1
+    usePresentationStore.getState().toggleSlideSelection('s3', false, false, true);
+    expect(usePresentationStore.getState().selectedSlideIds).toEqual(['s1']);
+    expect(usePresentationStore.getState().previewSlideId).toBe('s1');
+
+    // Deselect last slide s1: clears all selection and preview becomes null
+    usePresentationStore.getState().toggleSlideSelection('s1', false, false, true);
+    expect(usePresentationStore.getState().selectedSlideIds).toEqual([]);
+    expect(usePresentationStore.getState().previewSlideId).toBeNull();
+  });
+
+  it('toggleSlideSelection with deselect on an already unselected slide does not clear remaining selected slides', () => {
+    usePresentationStore.setState({
+      activePresentation: { id: 'p1', slides: [{ id: 's1' }, { id: 's2' }, { id: 's3' }] } as any,
+      selectedSlideIds: ['s1', 's2'],
+      previewSlideId: 's1',
+    });
+
+    // s3 is not selected; deselecting an unselected slide does nothing to existing selection
+    usePresentationStore.getState().toggleSlideSelection('s3', false, false, true);
+    expect(usePresentationStore.getState().selectedSlideIds).toEqual(['s1', 's2']);
+    expect(usePresentationStore.getState().previewSlideId).toBe('s1');
+
+    // Deselect s2
+    usePresentationStore.getState().toggleSlideSelection('s2', false, false, true);
+    expect(usePresentationStore.getState().selectedSlideIds).toEqual(['s1']);
+
+    // Repeated deselect click on s2 must NOT deselect s1
+    usePresentationStore.getState().toggleSlideSelection('s2', false, false, true);
+    expect(usePresentationStore.getState().selectedSlideIds).toEqual(['s1']);
+    expect(usePresentationStore.getState().previewSlideId).toBe('s1');
+  });
+
+  it('toggleSlideSelection with empty id and deselect clears all selection', () => {
+    usePresentationStore.setState({
+      activePresentation: { id: 'p1', slides: [{ id: 's1' }, { id: 's2' }] } as any,
+      selectedSlideIds: ['s1', 's2'],
+      previewSlideId: 's1',
+    });
+
+    usePresentationStore.getState().toggleSlideSelection('', false, false, true);
+    expect(usePresentationStore.getState().selectedSlideIds).toEqual([]);
+    expect(usePresentationStore.getState().previewSlideId).toBeNull();
   });
 });

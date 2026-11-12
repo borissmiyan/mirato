@@ -33,7 +33,7 @@ interface AudioTrackProps {
 
 const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
     const { t } = useTranslation();
-    const { openModal } = useModalStore();
+    const openModal = useModalStore(s => s.openModal);
     const activePresentationId = usePresentationStore(s => s.activePresentationId);
     const selectedPresentationId = usePresentationStore(s => s.selectedPresentationId);
     const addAudioScope = usePresentationStore(s => s.addAudioScope);
@@ -62,12 +62,13 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
     }, [activePresentationId, selectedPresentationId, visualTimeline]);
 
     // Live query for all audio scopes in these presentations
-    const dbScopes = useLiveQuery(
+    const liveDbScopes = useLiveQuery(
         () => activePresentationIds.length > 0 
             ? db.audioScopes.where('presentationId').anyOf(activePresentationIds).toArray() 
             : [],
         [activePresentationIds]
-    ) || [];
+    );
+    const dbScopes = useMemo(() => liveDbScopes || [], [liveDbScopes]);
 
     // Resolve visual indices for each scope
     const allScopes = useMemo(() => {
@@ -191,7 +192,7 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
 
         // Process files (Electron provides .path on dropped File objects)
         for (const file of files) {
-            const path = (file as any).path || null;
+            const path = (file as File & { path?: string }).path || null;
             const stableId = await MediaPersistenceService.importMediaBlob(file, path, 'audio');
             if (stableId) {
                 await addAudioScope(targetSlideId, stableId, file.name);
@@ -256,7 +257,7 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
                 visualTimeline[hoveredSlotIdx]?.slide &&
                 !allScopes.some(s => s.startIdx <= (hoveredSlotIdx || -1) && s.endIdx >= (hoveredSlotIdx || -1)) &&
                 !((visualTimeline[hoveredSlotIdx]?.slide as ITimerSlide)?.playlist?.length) &&
-                !((visualTimeline[hoveredSlotIdx]?.slide as any)?.timerSettings?.playlist?.length) && (
+                !((visualTimeline[hoveredSlotIdx]?.slide as ICanvasSlide)?.timerSettings?.playlist?.length) && (
                     <div
                         className="absolute top-1 bottom-1 border-2 border-dashed border-purple-500/30 rounded-xl pointer-events-none z-10 flex items-center justify-center transition-all animate-in fade-in duration-200"
                         style={{
@@ -265,6 +266,7 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
                         }}
                     >
                         <button
+                            type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 const slideId = visualTimeline[hoveredSlotIdx].slide?.id;
@@ -272,8 +274,9 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
                                     openModal(ModalType.AUDIO_PICKER, { targetSlideId: slideId });
                                 }
                             }}
-                            className="pointer-events-auto h-8 w-8 rounded-full bg-purple-500/20 text-purple-500 border border-purple-500/30 hover:bg-purple-500 hover:text-white hover:scale-110 active:scale-95 transition-all flex items-center justify-center shadow-lg"
+                            className="pointer-events-auto h-8 w-8 rounded-full bg-purple-500/20 text-purple-500 border border-purple-500/30 hover:bg-purple-500 hover:text-white hover:scale-110 active:scale-95 transition-all flex items-center justify-center shadow-lg cursor-pointer apple-press"
                             title={t('add_audio', 'Add Audio')}
+                            aria-label={t('add_audio', 'Add Audio')}
                         >
                             <Plus className="w-4 h-4" />
                         </button>
@@ -281,7 +284,7 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
                 )}
 
             {visualTimeline.map((item) => {
-                const legacyPlaylist = item.type === 'slide' && item.slide?.type === 'normal' ? (item.slide as any).timerSettings?.playlist : undefined;
+                const legacyPlaylist = item.type === 'slide' && item.slide?.type === 'normal' ? (item.slide as ICanvasSlide).timerSettings?.playlist : undefined;
                 const newPlaylist = item.type === 'slide' && item.slide?.type === 'timer' ? (item.slide as ITimerSlide).playlist : undefined;
                 const playlistLength = legacyPlaylist?.length || newPlaylist?.length;
 

@@ -33,7 +33,7 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({
     settings: propsSettings,
     isProjector = false,
 }) => {
-    const { settings: storeSettings } = usePresenterStore();
+    const storeSettings = usePresenterStore(state => state.settings);
     const settings = propsSettings || storeSettings;
 
     const containerRef = useRef<HTMLDivElement>(null);
@@ -192,17 +192,17 @@ export const VerseDisplay: React.FC<VerseDisplayProps> = ({
                         <div className="leading-tight text-center wrap-break-word">
                             <ReactMarkdown
                                 components={{
-                                    strong: ({ node, children, ...props }: any) => (
+                                    strong: ({ node, children, ...props }: React.ComponentPropsWithoutRef<'strong'> & { node?: unknown }) => (
                                         <span className="text-accent/80 font-semibold" {...props}>
                                             {processChildren(children, settings.font.showSuperscript)}
                                         </span>
                                     ),
-                                    em: ({ node, children, ...props }: any) => (
+                                    em: ({ node, children, ...props }: React.ComponentPropsWithoutRef<'em'> & { node?: unknown }) => (
                                         <span className="opacity-80 italic" {...props}>
                                             {processChildren(children, settings.font.showSuperscript)}
                                         </span>
                                     ),
-                                    p: ({ node, children, ...props }: any) => (
+                                    p: ({ node, children, ...props }: React.ComponentPropsWithoutRef<'p'> & { node?: unknown }) => (
                                         <span {...props}>
                                             {processChildren(children, settings.font.showSuperscript)}
                                         </span>

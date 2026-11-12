@@ -9,3 +9,4 @@ export * from './types/style';
 export * from './types/template';
 export * from './types/timer';
 export * from './types/video';
+export * from './types/hymn';

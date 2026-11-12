@@ -65,7 +65,7 @@ export const useHistoryStore = create<HistoryState>()(
         (set, get) => ({
             past: [],
             future: [],
-            limit: 256,
+            limit: 64,
             history: [],
             recentBackgrounds: [],
 
@@ -166,13 +166,15 @@ export const useHistoryStore = create<HistoryState>()(
                 set({ recentBackgrounds: updatedList });
 
                 // Asynchronously generate video sequence if it's a new video
-                if (fullBg.type === 'video' && fullBg.video?.id && !fullBg.video?.thumbnailSequence) {
+                const videoObj = fullBg.video;
+                if (fullBg.type === 'video' && videoObj?.id && !videoObj.thumbnailSequence) {
+                    const videoId = videoObj.id;
                     import('@/features/presenter/services/ThumbnailService').then(({ ThumbnailService }) => {
-                        ThumbnailService.generateVideoSequence(fullBg.video!.id!).then(sequence => {
+                        ThumbnailService.generateVideoSequence(videoId).then(sequence => {
                             if (sequence && sequence.length > 0) {
                                 const finalRecent = get().recentBackgrounds.map(b => 
-                                    (getBackgroundIdentity(b) === newIdentity)
-                                        ? { ...b, video: { ...b.video!, thumbnailSequence: sequence } }
+                                    (getBackgroundIdentity(b) === newIdentity && b.video)
+                                        ? { ...b, video: { ...b.video, thumbnailSequence: sequence } }
                                         : b
                                 );
                                 set({ recentBackgrounds: finalRecent });

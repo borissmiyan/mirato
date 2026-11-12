@@ -5,12 +5,12 @@ import GeneralSettings from './GeneralSettings';
 import DataSettings from './DataSettings';
 import DisplaySettings from './DisplaySettings';
 import AboutSettings from './AboutSettings';
-import LogoSettings from './LogoSettings';
 import OverrideSettings from './OverrideSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import RemoteSettings from './RemoteSettings';
 import StageSettings from './StageSettings';
-import { X, Globe, Database, Monitor, Info, ImageIcon, Layers, Command, Smartphone, Airplay } from 'lucide-react';
+import { X, Globe, Database, Monitor, Info, Layers, Command, Smartphone } from 'lucide-react';
+import { IconButton } from '@/shared/ui';
 
 interface SettingsModalProps {
     isOpen: boolean;
@@ -22,7 +22,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     const [activeTab, setActiveTab] = useState('general');
 
     if (!isOpen) return null;
-
 
     const renderContent = () => {
         switch (activeTab) {
@@ -39,10 +38,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-100 flex items-center justify-center bg-stone-950/80 backdrop-blur-2xl animate-in fade-in duration-300 p-4 md:p-8">
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-stone-950/80 backdrop-blur-2xl apple-backdrop p-4 md:p-8">
 
             {/* Modal Container with Immersive Shell */}
-            <div className="w-full max-w-[1000px] h-full max-h-[750px] bg-stone-950/40 border border-white/10 rounded-[2.5rem] shadow-[0_0_100px_rgba(0,0,0,0.8)] flex overflow-hidden ring-1 ring-white/5 relative group/modal">
+            <div className="w-full max-w-[1000px] h-full max-h-[750px] bg-stone-950/90 border border-white/10 rounded-2xl shadow-[0_0_100px_rgba(0,0,0,0.8)] flex overflow-hidden ring-1 ring-white/5 relative group/modal apple-modal">
 
                 {/* Dynamic Content Blur background */}
                 <div className="absolute inset-0 bg-linear-to-b from-white/2 to-transparent pointer-events-none" />
@@ -57,22 +56,22 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                 <div className="flex-1 flex flex-col relative z-10 bg-black/20 overflow-hidden">
 
                     {/* Integrated Header */}
-                    <div className="h-28 px-10 flex items-center justify-between border-b border-white/5 bg-stone-950/20 backdrop-blur-md relative overflow-hidden group/header">
+                    <div className="h-24 px-8 flex items-center justify-between border-b border-white/5 bg-stone-950/20 backdrop-blur-md relative overflow-hidden group/header">
                         {/* Header Glow Accent */}
                         <div className="absolute -top-10 left-10 w-40 h-20 bg-accent/10 blur-[60px] rounded-full pointer-events-none" />
 
-                        <div className="relative z-10 flex items-center gap-6">
+                        <div className="relative z-10 flex items-center gap-4">
                             <div className="relative">
                                 <div className="absolute inset-0 bg-accent/20 blur-xl rounded-full" />
                                 <div className="relative w-12 h-12 rounded-2xl bg-stone-900 border border-white/10 flex items-center justify-center shadow-2xl">
-                                    {activeTab === 'general' && <Globe className="w-6 h-6 text-accent animate-in zoom-in duration-500" />}
-                                    {activeTab === 'displays' && <Monitor className="w-6 h-6 text-accent animate-in zoom-in duration-500" />}
-                                    {activeTab === 'data' && <Database className="w-6 h-6 text-accent animate-in zoom-in duration-500" />}
-                                    {activeTab === 'overrides' && <Layers className="w-6 h-6 text-accent animate-in zoom-in duration-500" />}
-                                    {activeTab === 'shortcuts' && <Command className="w-6 h-6 text-accent animate-in zoom-in duration-500" />}
-                                    {activeTab === 'remote' && <Smartphone className="w-6 h-6 text-accent animate-in zoom-in duration-500" />}
-                                    {activeTab === 'stage' && <Monitor className="w-6 h-6 text-accent animate-in zoom-in duration-500" />}
-                                    {activeTab === 'about' && <Info className="w-6 h-6 text-accent animate-in zoom-in duration-500" />}
+                                    {activeTab === 'general' && <Globe className="w-6 h-6 text-accent animate-in zoom-in duration-300" />}
+                                    {activeTab === 'displays' && <Monitor className="w-6 h-6 text-accent animate-in zoom-in duration-300" />}
+                                    {activeTab === 'data' && <Database className="w-6 h-6 text-accent animate-in zoom-in duration-300" />}
+                                    {activeTab === 'overrides' && <Layers className="w-6 h-6 text-accent animate-in zoom-in duration-300" />}
+                                    {activeTab === 'shortcuts' && <Command className="w-6 h-6 text-accent animate-in zoom-in duration-300" />}
+                                    {activeTab === 'remote' && <Smartphone className="w-6 h-6 text-accent animate-in zoom-in duration-300" />}
+                                    {activeTab === 'stage' && <Monitor className="w-6 h-6 text-accent animate-in zoom-in duration-300" />}
+                                    {activeTab === 'about' && <Info className="w-6 h-6 text-accent animate-in zoom-in duration-300" />}
                                 </div>
                             </div>
 
@@ -93,7 +92,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                                         {activeTab === 'about' && t('about')}
                                     </span>
                                 </div>
-                                <h2 className="text-2xl font-black text-white tracking-tight">
+                                <h2 className="text-xl font-black text-white tracking-tight">
                                     {activeTab === 'general' && t('appearance')}
                                     {activeTab === 'displays' && t('displays')}
                                     {activeTab === 'data' && t('bible_translations')}
@@ -106,24 +105,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
                             </div>
                         </div>
 
-                        <button
+                        <IconButton
+                            icon={<X className="w-5 h-5 text-stone-400" />}
+                            label={t('close', 'Close')}
+                            variant="surface"
+                            size="xs"
                             onClick={onClose}
-                            className="group/close relative p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/5 transition-all active:scale-95 shadow-lg"
-                        >
-                            <X className="w-5 h-5 text-stone-400 group-hover/close:text-white transition-all duration-300" />
-                        </button>
+                        />
                     </div>
 
                     {/* Content Scroll Area */}
-                    <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide p-10">
-                        {/* Tab Content Wrapper */}
+                    <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide p-8">
                         <div className="max-w-4xl mx-auto">
                             {renderContent()}
                         </div>
                     </div>
 
                     {/* Seamless Footer Glow */}
-                    <div className="h-8 bg-linear-to-t from-stone-950/40 to-transparent pointer-events-none" />
+                    <div className="h-6 bg-linear-to-t from-stone-950/40 to-transparent pointer-events-none" />
                 </div>
             </div>
 

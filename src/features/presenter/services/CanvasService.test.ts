@@ -98,4 +98,20 @@ describe('CanvasService', () => {
             expect(state).toBe(20);
         });
     });
+
+    describe('getAnchorPositionUpdates', () => {
+        it('should return percentage coordinates and matching pivots for all 9 text anchors', () => {
+            const dummyItem = { id: 'text-1', x: 0, y: 0, width: 80, height: 20 } as ICanvasItem;
+
+            expect(CanvasService.getAnchorPositionUpdates(dummyItem, 'top-left')).toEqual({ x: 0, y: 0, pivotX: 0, pivotY: 0 });
+            expect(CanvasService.getAnchorPositionUpdates(dummyItem, 'top-center')).toEqual({ x: 50, y: 0, pivotX: 0.5, pivotY: 0 });
+            expect(CanvasService.getAnchorPositionUpdates(dummyItem, 'top-right')).toEqual({ x: 100, y: 0, pivotX: 1, pivotY: 0 });
+            expect(CanvasService.getAnchorPositionUpdates(dummyItem, 'center-left')).toEqual({ x: 0, y: 50, pivotX: 0, pivotY: 0.5 });
+            expect(CanvasService.getAnchorPositionUpdates(dummyItem, 'center')).toEqual({ x: 50, y: 50, pivotX: 0.5, pivotY: 0.5 });
+            expect(CanvasService.getAnchorPositionUpdates(dummyItem, 'center-right')).toEqual({ x: 100, y: 50, pivotX: 1, pivotY: 0.5 });
+            expect(CanvasService.getAnchorPositionUpdates(dummyItem, 'bottom-left')).toEqual({ x: 0, y: 100, pivotX: 0, pivotY: 1 });
+            expect(CanvasService.getAnchorPositionUpdates(dummyItem, 'bottom-center')).toEqual({ x: 50, y: 100, pivotX: 0.5, pivotY: 1 });
+            expect(CanvasService.getAnchorPositionUpdates(dummyItem, 'bottom-right')).toEqual({ x: 100, y: 100, pivotX: 1, pivotY: 1 });
+        });
+    });
 });

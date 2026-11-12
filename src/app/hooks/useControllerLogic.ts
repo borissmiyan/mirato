@@ -1,9 +1,8 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
-import { getBookName } from '@/core/data/bookData';
 import { 
   sidebarOpenAtom, 
   themeAccentAtom, 
@@ -21,21 +20,22 @@ import { useBibleStore } from '@/features/bible-browser/store/bibleStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 // eslint-disable-next-line no-restricted-imports
 import { usePresenterStore } from '@/features/presenter/store/presenterStore';
-import { useModalStore, ModalType } from '@/core/store/modalStore';
+import { ModalType } from '@/core/store/modalStore';
 import { PRELOADED_LOGOS } from '@/core/data/logoData';
 import { useLogoUrl } from '@/core/hooks/useLogoUrl';
 import { LiveSyncService } from '@/core/services/liveSyncService';
-import { IpcService } from '@/core/services/ipcService';
 import { BibleNavigationService } from '@/features/bible-browser/services/BibleNavigationService';
-import { RemoteSyncService } from '@/core/services/remoteSyncService';
 import { PresentationService } from '@/core/services/presentationService';
 import { useAppInitialization } from './useAppInitialization';
 import { useAudioSync } from './useAudioSync';
 import { useGlobalShortcuts } from './useGlobalShortcuts';
+import { useControllerRemoteSync } from './useControllerRemoteSync';
+import { useProjectorLifecycleSync } from './useProjectorLifecycleSync';
+import { useProjectorToggle } from './useProjectorToggle';
 
 /**
  * Custom hook to encapsulate the main controller logic, state management, 
- * and orchestration that previously lived in App.tsx.
+ * and orchestration for the application.
  */
 export function useControllerLogic() {
   const { t, i18n } = useTranslation();
@@ -53,11 +53,10 @@ export function useControllerLogic() {
   const [activeOverride, setActiveOverride] = useAtom(activeOverrideAtom);
   const [activeLogo, setActiveLogo] = useAtom(liveLogoAtom);
 
-  // --- Component Local State ---
+  // --- Local State ---
   const [projectorOpen, setProjectorOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const lastRemoteUpdateId = useRef(0);
 
   // --- Store Selectors ---
   const activeVerse = useBibleStore(s => s.activeVerse);
@@ -70,15 +69,11 @@ export function useControllerLogic() {
   const projectorIsLive = useBibleStore(s => s.projectorIsLive);
 
   const liveSlideId = usePresentationStore(s => s.liveSlideId);
-  const activePresentationId = usePresentationStore(s => s.activePresentationId);
   const activePresentation = usePresentationStore(s => s.activePresentation);
   const previewSlideId = usePresentationStore(s => s.previewSlideId);
-  const setPreviewSlide = usePresentationStore(s => s.setPreviewSlide);
   const setLiveSlide = usePresentationStore(s => s.setLiveSlide);
   const undo = usePresentationStore(s => s.undo);
   const redo = usePresentationStore(s => s.redo);
-  const presentationStack = usePresentationStore(s => s.presentationStack);
-  const selectedPresentation = usePresentationStore(s => s.selectedPresentation);
 
   const presenterSettings = usePresenterStore(state => state.settings);
   const activeLogoUrl = useLogoUrl(activeLogo);
@@ -99,36 +94,31 @@ export function useControllerLogic() {
   );
 
   // --- Sync Effects ---
-
-  // 1. Logo Sync
   useEffect(() => {
     const allLogos = [
-      ...settings.logo.customLogos,
-      ...settings.logo.customGroups.flatMap(g => g.logos),
-      ...settings.logo.logoGroups.flatMap(g => g.logos),
+      ...presenterSettings.logo.customLogos,
+      ...presenterSettings.logo.customGroups.flatMap(g => g.logos),
+      ...presenterSettings.logo.logoGroups.flatMap(g => g.logos),
       ...PRELOADED_LOGOS.flatMap(g => g.logos)
     ];
-    const active = allLogos.find(l => l.id === settings.logo.activeLogoId);
+    const active = allLogos.find(l => l.id === presenterSettings.logo.activeLogoId);
     setActiveLogo(active || null);
-  }, [settings.logo.activeLogoId, settings.logo.customLogos, settings.logo.customGroups, settings.logo.logoGroups, setActiveLogo]);
+  }, [presenterSettings.logo.activeLogoId, presenterSettings.logo.customLogos, presenterSettings.logo.customGroups, presenterSettings.logo.logoGroups, setActiveLogo]);
 
-  // 2. Override Sync
   useEffect(() => {
     LiveSyncService.setOverride(activeOverride as OverrideType | null, activeOverride === 'logo' ? activeLogo : null);
   }, [activeOverride, activeLogo]);
 
-  // 3. Settings Sync
   useEffect(() => {
-    LiveSyncService.syncSettings(settings);
-  }, [settings]);
+    LiveSyncService.syncSettings(presenterSettings);
+  }, [presenterSettings]);
 
   // --- Actions ---
-
   const toggleOverride = useCallback((type: OverrideType) => {
     setActiveOverride((prev: OverrideType | null) => {
         const next = prev === type ? null : type;
         if (next) {
-            LiveSyncService.syncSettings(usePresentationStore.getState().settings);
+            LiveSyncService.syncSettings(usePresenterStore.getState().settings);
         }
         return next;
     });
@@ -138,15 +128,25 @@ export function useControllerLogic() {
     PresentationService.openGlobalModal(type);
   }, []);
 
-  const openProjector = async () => {
+  const openProjector = useCallback(async () => {
     const success = await PresentationService.openProjector();
     if (success) setProjectorOpen(true);
-  };
+  }, []);
 
   const closeProjector = useCallback(() => {
     PresentationService.closeProjector();
     setProjectorOpen(false);
   }, []);
+
+  const toggleProjector = useProjectorToggle({
+    appMode,
+    projectorOpen,
+    projectorIsLive,
+    liveSlideId,
+    previewSlideId,
+    closeProjector,
+    openProjector
+  });
 
   const handleNext = useCallback(async (detached?: boolean, preferLiveAnchor?: boolean) => {
     await PresentationService.navigateNext(appMode, detached, preferLiveAnchor);
@@ -156,45 +156,25 @@ export function useControllerLogic() {
     await PresentationService.navigatePrev(appMode, detached, preferLiveAnchor);
   }, [appMode]);
 
-  // --- Remote State Management ---
-
-  const updateRemoteState = useCallback(async () => {
-    const { 
-      activePresentation: aPres, 
-      selectedPresentation: sPres, 
-      presentationStack: pStack 
-    } = usePresentationStore.getState();
-
-    await RemoteSyncService.updateRemoteState({
-        appMode,
-        activeVerse,
-        activePresentation: aPres,
-        selectedPresentation: sPres,
-        presentationStack: pStack,
-        projectorIsLive,
-        liveSlideId,
-        previewSlideId,
-        lang,
-        themeAccent,
-        isPlaying,
-        activeOverride,
-        activeLogo,
-        activeLogoUrl,
-        settings
-    });
-  }, [appMode, activeVerse, activePresentation, projectorIsLive, liveSlideId, previewSlideId, lang, themeAccent, isPlaying, activeOverride, activeLogoUrl, activeLogo, settings, selectedPresentation]);
-
-  useEffect(() => { updateRemoteState(); }, [updateRemoteState]);
-
-  useEffect(() => {
-    if (!IpcService.isElectron()) return;
-    const unsub = IpcService.on('remote:request-state', () => updateRemoteState());
-    return () => unsub();
-  }, [updateRemoteState]);
+  // --- Remote Synchronization ---
+  const updateRemoteState = useControllerRemoteSync({
+    appMode,
+    activeVerse,
+    projectorIsLive,
+    liveSlideId,
+    previewSlideId,
+    lang,
+    themeAccent,
+    isPlaying,
+    activeOverride,
+    activeLogo,
+    activeLogoUrl,
+    presenterSettings
+  });
 
   // --- Shortcuts ---
   useGlobalShortcuts({
-    appMode,
+    appMode: appMode === 'hymns' ? 'presentation' : appMode,
     previewSlideId,
     activePresentation,
     activeVerse,
@@ -208,78 +188,24 @@ export function useControllerLogic() {
     onRequestRemoteUpdate: updateRemoteState
   });
 
-  // --- Handshakes & Status Listeners ---
-
-  useEffect(() => {
-    if (!IpcService.isElectron()) return;
-    const unsub = IpcService.on('projector-ready', (p?: { ratio: number }) => {
-      if (p?.ratio) usePresentationStore.getState().updateDisplay({ aspectRatio: p.ratio });
-      IpcService.send('projector-command', 'update-theme', themeAccent);
-      LiveSyncService.syncSettings(usePresentationStore.getState().settings);
-      
-      setTimeout(() => {
-        LiveSyncService.setOverride(activeOverride as OverrideType | null, activeOverride === 'logo' ? activeLogo : null);
-        if (appMode === 'scripture' && useBibleStore.getState().activeVerse) {
-          LiveSyncService.showVerse(useBibleStore.getState().activeVerse!, useBibleStore.getState().secondTranslationId);
-        }
-      }, 100);
-    });
-    return () => unsub();
-  }, [themeAccent, activeOverride, activeLogo, appMode]);
-
-  useEffect(() => {
-    if (!IpcService.isElectron()) return;
-    const unsub = LiveSyncService.onTimerAction(({ action, payload }) => {
-        if (action === 'next_slide') {
-            handleNext(false, true); // true = preferLiveAnchor
-        } else if (action === 'prev_slide') {
-            handlePrev(false, true);
-        } else if (action === 'navigate_to' && payload?.slideId) {
-            setLiveSlide(payload.slideId);
-        } else if (action === 'override') {
-            toggleOverride(payload);
-        }
-    });
-    return () => unsub();
-  }, [handleNext, handlePrev]);
-
-  useEffect(() => {
-    if (!IpcService.isElectron()) return;
-    const unsub = LiveSyncService.onVideoStatus(({ isPlaying: vPlaying }) => {
-      setIsPlaying(vPlaying);
-    });
-    return () => unsub();
-  }, []);
+  // --- Projector Handshake & Status Sync ---
+  useProjectorLifecycleSync({
+    themeAccent,
+    activeOverride,
+    activeLogo,
+    appMode,
+    setProjectorOpen,
+    handleNext,
+    handlePrev,
+    setLiveSlide,
+    toggleOverride,
+    setIsPlaying,
+    t
+  });
 
   useEffect(() => {
     setIsPlaying(false);
   }, [liveSlideId, appMode, activeVerse?.id]);
-
-  useEffect(() => {
-    if (!IpcService.isElectron()) return;
-    const unsub = IpcService.on('remote:request-media', async ({ id, requestId }) => {
-        try {
-            let entry: { data?: Blob; mimeType?: string } | undefined = await db.backgrounds.get(id);
-            if (!entry) entry = await db.mediaPool.get(id);
-
-            if (entry?.data) {
-                const buffer = await entry.data.arrayBuffer();
-                IpcService.send('remote:media-response', { 
-                    requestId, 
-                    data: buffer, 
-                    mimeType: entry.mimeType || 'image/jpeg' 
-                });
-            } else {
-                IpcService.send('remote:media-response', { requestId, error: 'Media not found' });
-            }
-        } catch (err) {
-            IpcService.send('remote:media-response', { requestId, error: 'Database access error' });
-        }
-    });
-    return () => unsub();
-  }, []);
-
-
 
   const isBibleSlide = useMemo(() => {
     if (!activePresentation || !previewSlideId) return false;
@@ -287,48 +213,22 @@ export function useControllerLogic() {
     return slide?.blockId === 'bible';
   }, [activePresentation, previewSlideId]);
 
+  const isProjectorLive = projectorOpen && (appMode === 'scripture' ? projectorIsLive : !!liveSlideId);
+
   return {
     state: {
-      sidebarOpen,
-      historyOpen,
-      searchOpen,
-      appMode,
-      themeAccent,
-      designPanelOpen,
-      isTimelineHovered,
-      selectedCanvasItemIds,
-      projectorOpen,
-      settingsOpen,
-      activeVerse,
-      activePresentation,
-      previewSlideId,
-      activeLogo,
-      activeLogoUrl,
-      activeOverride,
-      isMultiVerseMode,
-      selectedVerses,
-      lang,
-      prevVersePreview,
-      nextVersePreview,
-      isBibleSlide
+      sidebarOpen, historyOpen, searchOpen, appMode,
+      themeAccent, designPanelOpen, isTimelineHovered, selectedCanvasItemIds,
+      projectorOpen, isProjectorLive, settingsOpen, activeVerse,
+      activePresentation, previewSlideId, activeLogo, activeLogoUrl,
+      activeOverride, isMultiVerseMode, selectedVerses, lang,
+      prevVersePreview, nextVersePreview, isBibleSlide
     },
     actions: {
-      setSidebarOpen,
-      setHistoryOpen,
-      setSearchOpen,
-      setDesignPanelOpen,
-      setSettingsOpen,
-      setActiveVerse,
-      toggleOverride,
-      undo,
-      redo,
-      openProjector,
-      closeProjector,
-      handleNext,
-      handlePrev,
-      exitMultiVerseMode,
-      commitToProjector,
-      openGlobalModal
+      setSidebarOpen, setHistoryOpen, setSearchOpen, setDesignPanelOpen,
+      setSettingsOpen, setActiveVerse, toggleOverride, undo, redo,
+      openProjector, closeProjector, toggleProjector, handleNext, handlePrev,
+      exitMultiVerseMode, commitToProjector, openGlobalModal
     }
   };
 }

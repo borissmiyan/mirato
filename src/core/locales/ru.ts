@@ -6,6 +6,7 @@ import app from './ru/app';
 import presentation from './ru/presentation';
 import changelog from './ru/changelog';
 import remote from './ru/remote';
+import hymns from './ru/hymns';
 
 export default {
     ...common,
@@ -15,5 +16,6 @@ export default {
     ...app,
     ...presentation,
     ...changelog,
-    remote
+    remote,
+    hymns,
 };

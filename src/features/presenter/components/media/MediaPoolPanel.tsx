@@ -1,114 +1,195 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { db } from '@/core/db';
-import { IMediaItem, MediaType } from '@/core/types';
-import { cn } from '@/core/utils/cn';
+import { IMediaItem, IMediaBin, MediaType, MediaColorTag } from '@/core/types';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getLocalResourceUrl } from '@/core/hooks/useMediaUrl';
-import { toast } from '@/core/utils/toast';
-import { IpcService } from '@/core/services/ipcService';
 
 // Hooks
-import { useMediaPoolData } from '../../hooks/useMediaPoolData';
+import { useMediaPoolData, MediaSortOrder } from '../../hooks/useMediaPoolData';
 import { useMediaSelection } from '../../hooks/useMediaSelection';
+import { useMediaImport } from '../../hooks/useMediaImport';
 
 // Components
 import { MediaPoolToolbar } from './MediaPoolToolbar';
 import { MediaPoolBreadcrumb } from './MediaPoolBreadcrumb';
-import { MediaItemCard, CARD_BG, THUMB_BG } from './MediaItemCard';
 import { MediaPoolContextMenu, ContextMenuState } from './MediaPoolContextMenu';
+import { MediaQuickLookModal } from './MediaQuickLookModal';
+import { MediaPoolInfoModal } from './MediaPoolInfoModal';
+import { MediaPoolGridView, MediaPoolListView, MediaPoolTreeView, MediaViewMode } from './views';
 
 /**
  * Main Media Pool Panel component.
- * Orchestrates media browsing, importing, and organization.
+ * Orchestrates media browsing, importing, organization, and playback.
+ * Supports Grid, List, and Tree List view modes with Apple HIG design standards.
  */
 export const MediaPoolPanel: React.FC = () => {
     const { t } = useTranslation();
     const { openModal } = useModalStore(useShallow(s => ({ openModal: s.openModal })));
     
-    // State
+    // View mode with localStorage persistence
+    const [viewMode, setViewModeState] = useState<MediaViewMode>(() => {
+        try {
+            return (localStorage.getItem('ekk_media_view_mode') as MediaViewMode) || 'grid';
+        } catch {
+            return 'grid';
+        }
+    });
+
+    const handleSetViewMode = useCallback((mode: MediaViewMode) => {
+        setViewModeState(mode);
+        try {
+            localStorage.setItem('ekk_media_view_mode', mode);
+        } catch {
+            // ignore localStorage errors in sandboxed contexts
+        }
+    }, []);
+
+    // Filter and search state
     const [filter, setFilter] = useState<MediaType | 'all'>('all');
+    const [tagFilter, setTagFilter] = useState<MediaColorTag | 'all'>('all');
+    // audit-ignore: local modal state isolated to this component
+    const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
     const [activeBinId, setActiveBinId] = useState<string | null>(null);
     const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
     const [playingItemId, setPlayingItemId] = useState<string | null>(null);
     const [draggingOverId, setDraggingOverId] = useState<string | null>(null);
+    const [isMouseOverPool, setIsMouseOverPool] = useState(false);
+    const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+    const [quickLookItem, setQuickLookItem] = useState<IMediaItem | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<MediaSortOrder>('date-desc');
     
-    // Refs
+    // Audio scrubbing ref (video playback is strictly in Quick Look)
     const scrubAudioRef = useRef<HTMLAudioElement | null>(null);
-    const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
 
     // ─── Data & Selection Hooks ───
     const { 
         bins, 
+        allBins,
+        binPath,
         mediaItems, 
         visibleItems, 
         activeBin, 
         mediaTimes, 
         setMediaTimes 
-    } = useMediaPoolData(filter, activeBinId);
+    } = useMediaPoolData(filter, activeBinId, searchQuery, sortBy, tagFilter);
 
     const { 
         selectedIds, 
-        setSelectedIds, 
+        setSelectedIds,
         handleItemClick, 
         handleBulkDelete 
-    } = useMediaSelection(visibleItems);
+    } = useMediaSelection(visibleItems, isMouseOverPool);
 
-    // ─── Handlers ───
-    const handleImportMedia = async () => {
-        if (!IpcService.isElectron()) return;
-        try {
-            const files = await IpcService.selectFile({
-                properties: ['openFile', 'multiSelections'],
-                filters: [
-                    { name: 'Media Files', extensions: ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'] }
-                ]
-            });
+    const {
+        isOsDraggingOver,
+        setIsOsDraggingOver,
+        handleImportMedia,
+        importDroppedFiles,
+        handlePanelDragOver,
+        handlePanelDragLeave,
+        handlePanelDrop
+    } = useMediaImport(activeBinId);
 
-            if (!files) return;
-            const filePaths = Array.isArray(files) ? files : [files];
-            
-            const { MediaPersistenceService } = await import('../../services/MediaPersistenceService');
-            
-            let importedCount = 0;
-            let skippedCount = 0;
+    // Stop audio playback on bin change or unmount
+    useEffect(() => {
+        setPlayingItemId(null);
+        scrubAudioRef.current?.pause();
+    }, [activeBinId]);
 
-            for (const filePath of filePaths) {
-                const ext = filePath.split('.').pop()?.toLowerCase() || '';
-                let type: MediaType = 'image';
-                if (['mp4', 'webm', 'mov'].includes(ext)) type = 'video';
-                if (['mp3', 'wav', 'ogg', 'm4a', 'aac', 'flac'].includes(ext)) type = 'audio';
+    useEffect(() => {
+        const audioEl = scrubAudioRef.current;
+        return () => {
+            audioEl?.pause();
+        };
+    }, []);
 
-                // Check for existing binary data or path to avoid duplicate hashing if possible, 
-                // but importMediaFromPath is robust enough to handle it.
-                // For better UX with large lists, we could check paths first as a hint.
-                const newId = await MediaPersistenceService.importMediaFromPath(filePath, type, { 
-                    binId: activeBinId ?? undefined 
-                });
+    // Quick Look navigation between items in current folder
+    const handleQuickLookNavigate = useCallback((direction: 'prev' | 'next') => {
+        if (!quickLookItem || visibleItems.length === 0) return;
+        const currentIndex = visibleItems.findIndex(i => i.id === quickLookItem.id);
+        if (currentIndex === -1) return;
 
-                if (newId) {
-                    importedCount++;
-                } else {
-                    skippedCount++;
+        let nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+        if (nextIndex < 0) nextIndex = visibleItems.length - 1;
+        if (nextIndex >= visibleItems.length) nextIndex = 0;
+
+        setQuickLookItem(visibleItems[nextIndex]);
+    }, [quickLookItem, visibleItems]);
+
+    // Keyboard shortcuts: Cmd+A, Enter to Quick Look, Shift+Space for Quick Look toggle
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            // Shift + Space: Toggle or close Quick Look
+            if (quickLookItem && e.shiftKey && (e.key === ' ' || e.code === 'Space')) {
+                e.preventDefault();
+                e.stopPropagation();
+                setQuickLookItem(null);
+                return;
+            }
+
+            if (!isMouseOverPool) return;
+
+            // Cmd+A / Ctrl+A: Select all items
+            if ((e.metaKey || e.ctrlKey) && (e.key === 'a' || e.key === 'A')) {
+                const activeEl = document.activeElement;
+                if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                setSelectedIds(new Set(visibleItems.map(i => i.id)));
+                return;
+            }
+
+            // Enter key on selected item to open Quick Look
+            if (e.key === 'Enter') {
+                const activeEl = document.activeElement;
+                if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
+                    return;
+                }
+                if (selectedIds.size > 0 && !quickLookItem) {
+                    const firstSelectedId = Array.from(selectedIds)[0];
+                    const target = visibleItems.find(i => i.id === firstSelectedId);
+                    if (target) {
+                        e.preventDefault();
+                        setQuickLookItem(target);
+                    }
+                }
+                return;
+            }
+
+            // Shift + Space: Open Quick Look on focused/hovered/first item
+            if (e.shiftKey && (e.key === ' ' || e.code === 'Space')) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                let targetItem: IMediaItem | undefined;
+                if (hoveredItemId) {
+                    targetItem = visibleItems.find(i => i.id === hoveredItemId);
+                }
+                if (!targetItem && selectedIds.size > 0) {
+                    const firstSelectedId = Array.from(selectedIds)[0];
+                    targetItem = visibleItems.find(i => i.id === firstSelectedId);
+                }
+                if (!targetItem && visibleItems.length > 0) {
+                    targetItem = visibleItems[0];
+                }
+
+                if (targetItem) {
+                    setQuickLookItem(targetItem);
                 }
             }
+        };
 
-            if (importedCount > 0) {
-                const message = t('media_imported', 'Imported {{count}} files', { count: importedCount }) + 
-                    (skippedCount > 0 ? ` (${t('skipped_count', '{{count}} skipped', { count: skippedCount })})` : '');
-                toast.success(message);
-            } else if (skippedCount > 0) {
-                toast.info(t('media_skipped', 'Skipped {{count}} already imported files', { count: skippedCount }));
-            }
-        } catch (error) {
-            console.error('Failed to import media:', error);
-            toast.error(t('import_error', 'Failed to import media'));
-        }
-    };
+        window.addEventListener('keydown', handleKeyDown, true);
+        return () => window.removeEventListener('keydown', handleKeyDown, true);
+    }, [isMouseOverPool, quickLookItem, hoveredItemId, selectedIds, visibleItems, setSelectedIds]);
 
-    const handleCreateBin = () => {
+    const handleCreateBin = useCallback(() => {
         openModal(ModalType.PROMPT, {
             title: t('media_pool.new_bin', 'New Bin Name'),
             onSelection: async (name: string | null) => {
@@ -116,142 +197,226 @@ export const MediaPoolPanel: React.FC = () => {
                 await db.mediaBins.add({
                     id: crypto.randomUUID(),
                     name: name.trim(),
+                    parentId: activeBinId || undefined,
                     createdAt: Date.now()
                 });
             }
         });
-    };
+    }, [openModal, t, activeBinId]);
 
-    const handleDragStart = (e: React.DragEvent, item: IMediaItem) => {
+    const handleDragStart = useCallback((e: React.DragEvent, item: IMediaItem) => {
+        const isMulti = selectedIds.has(item.id) && selectedIds.size > 1;
+        const itemsToDrag = isMulti
+            ? visibleItems.filter(i => selectedIds.has(i.id))
+            : [item];
+
         e.dataTransfer.setData('application/json', JSON.stringify({
             source: 'media-pool',
-            media: item
+            media: item,
+            items: itemsToDrag
         }));
         e.dataTransfer.effectAllowed = 'copy';
-    };
+    }, [selectedIds, visibleItems]);
 
-    const togglePlayback = (e: React.MouseEvent, item: IMediaItem) => {
+    // Audio preview toggle (videos are strictly previewed in Quick Look)
+    const togglePlayback = useCallback((e: React.MouseEvent, item: IMediaItem) => {
         e.stopPropagation();
+        if (item.type !== 'audio') return;
+
         if (playingItemId === item.id) {
             setPlayingItemId(null);
-            if (item.type === 'audio' && scrubAudioRef.current) {
-                scrubAudioRef.current.pause();
-            } else if (item.type === 'video') {
-                videoRefs.current[item.id]?.pause();
-            }
+            scrubAudioRef.current?.pause();
         } else {
             if (playingItemId) {
-                const currentItem = mediaItems.find(i => i.id === playingItemId);
-                if (currentItem?.type === 'audio' && scrubAudioRef.current) {
-                    scrubAudioRef.current.pause();
-                } else if (currentItem?.type === 'video') {
-                    videoRefs.current[playingItemId]?.pause();
-                }
+                scrubAudioRef.current?.pause();
             }
 
             setPlayingItemId(item.id);
-            if (item.type === 'audio' && scrubAudioRef.current) {
-                const url = getLocalResourceUrl(item.path);
+            const url = getLocalResourceUrl(item.path);
+            if (url && scrubAudioRef.current) {
                 if (scrubAudioRef.current.src !== url) {
                     scrubAudioRef.current.src = url;
                     scrubAudioRef.current.load();
                 }
                 scrubAudioRef.current.play().catch(() => {});
-            } else if (item.type === 'video') {
-                videoRefs.current[item.id]?.play().catch(() => {});
             }
         }
-    };
+    }, [playingItemId]);
 
-    const handleTimeUpdate = (itemId: string, current: number, duration: number) => {
-        setMediaTimes(prev => ({
-            ...prev,
-            [itemId]: { current, duration }
-        }));
-    };
+    const handleTimeUpdate = useCallback((itemId: string, current: number, duration: number) => {
+        setMediaTimes(prev => {
+            const existing = prev[itemId];
+            if (existing && Math.floor(existing.current) === Math.floor(current) && existing.duration === duration) {
+                return prev;
+            }
+            return {
+                ...prev,
+                [itemId]: { current, duration }
+            };
+        });
+    }, [setMediaTimes]);
 
-    const handleBinDrop = async (e: React.DragEvent, binId: string | undefined) => {
+    const handlePlaybackEnded = useCallback((_itemId?: string) => {
+        setPlayingItemId(null);
+    }, []);
+
+    const handleContextMenu = useCallback((e: React.MouseEvent, item: IMediaItem) => {
+        setContextMenu({ x: e.clientX, y: e.clientY, kind: 'item', item });
+    }, []);
+
+    const handleBinContextMenu = useCallback((e: React.MouseEvent, bin: IMediaBin) => {
+        e.preventDefault();
+        setContextMenu({ x: e.clientX, y: e.clientY, kind: 'bin', bin });
+    }, []);
+
+    const handleClearSearch = useCallback(() => setSearchQuery(''), []);
+
+    const handleBinDrop = useCallback(async (e: React.DragEvent, binId: string | undefined) => {
         e.preventDefault();
         setDraggingOverId(null);
         try {
             const data = JSON.parse(e.dataTransfer.getData('application/json'));
-            if (data.source === 'media-pool' && data.media?.id) {
-                await db.mediaPool.update(data.media.id, { binId: binId });
+            if (data.source === 'media-pool') {
+                if (data.items && Array.isArray(data.items)) {
+                    await Promise.all(data.items.map((i: IMediaItem) => db.mediaPool.update(i.id, { binId })));
+                } else if (data.media?.id) {
+                    await db.mediaPool.update(data.media.id, { binId });
+                }
             }
         } catch (err) {
             console.warn('Drop failed:', err);
         }
-    };
+    }, []);
 
     return (
-        <div className="flex flex-col h-full overflow-hidden">
+        <div 
+            className="relative flex flex-col h-full overflow-hidden"
+            onMouseEnter={() => setIsMouseOverPool(true)}
+            onMouseLeave={() => {
+                setIsMouseOverPool(false);
+                setHoveredItemId(null);
+            }}
+            onDragOver={handlePanelDragOver}
+            onDragLeave={handlePanelDragLeave}
+            onDrop={handlePanelDrop}
+        >
             <MediaPoolToolbar
                 filter={filter}
                 setFilter={setFilter}
+                tagFilter={tagFilter}
+                setTagFilter={setTagFilter}
                 handleImportMedia={handleImportMedia}
                 handleCreateBin={handleCreateBin}
+                onOpenInfo={() => setIsInfoModalOpen(true)}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                sortBy={sortBy}
+                setSortBy={setSortBy}
+                viewMode={viewMode}
+                onSetViewMode={handleSetViewMode}
+                fileCount={mediaItems.length}
+                binCount={allBins.length}
             />
 
-            <MediaPoolBreadcrumb
-                activeBinId={activeBinId}
-                activeBin={activeBin}
-                draggingOverId={draggingOverId}
-                setActiveBinId={setActiveBinId}
-                setDraggingOverId={setDraggingOverId}
-                handleBinDrop={handleBinDrop}
-            />
+            {viewMode !== 'tree' && (
+                <MediaPoolBreadcrumb
+                    activeBinId={activeBinId}
+                    activeBin={activeBin}
+                    binPath={binPath}
+                    draggingOverId={draggingOverId}
+                    setActiveBinId={setActiveBinId}
+                    setDraggingOverId={setDraggingOverId}
+                    handleBinDrop={handleBinDrop}
+                />
+            )}
 
-            <div className="@container flex-1 overflow-y-auto no-scrollbar min-h-0 px-1 pt-1">
-                <div className="grid grid-cols-1 @[240px]:grid-cols-2 @[400px]:grid-cols-3 gap-1.5 pb-4">
-                    {!activeBinId && bins.map(bin => {
-                        const isDraggingOver = draggingOverId === bin.id;
-                        return (
-                            <div
-                                key={bin.id}
-                                onClick={() => setActiveBinId(bin.id)}
-                                onDragOver={(e) => { e.preventDefault(); setDraggingOverId(bin.id); }}
-                                onDragLeave={() => setDraggingOverId(null)}
-                                onDrop={(e) => handleBinDrop(e, bin.id)}
-                                onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    setContextMenu({ x: e.clientX, y: e.clientY, kind: 'bin', bin });
-                                }}
-                                className={cn(
-                                    "group flex flex-col rounded-md overflow-hidden transition-all cursor-pointer",
-                                    isDraggingOver ? "bg-accent/10 ring-1 ring-accent" : CARD_BG
-                                )}
-                            >
-                                <div className="flex items-center gap-1.5 px-1.5 py-1 min-w-0 border-b border-white/5">
-                                    <FolderOpen className="w-3 h-3 shrink-0 text-amber-500/60" />
-                                    <span className="text-[10px] text-stone-300 truncate min-w-0 flex-1 font-medium group-hover:text-white">
-                                        {bin.name}
-                                    </span>
-                                </div>
-                                <div className={cn("aspect-video flex flex-col items-center justify-center gap-1", THUMB_BG)}>
-                                    <FolderOpen className="w-6 h-6 text-amber-500/50" />
-                                </div>
-                            </div>
-                        );
-                    })}
-
-                    {visibleItems.map(item => (
-                        <MediaItemCard
-                            key={item.id}
-                            item={item}
-                            isSelected={selectedIds.has(item.id)}
-                            onClick={(e) => handleItemClick(item.id, e)}
-                            playingItemId={playingItemId}
-                            setPlayingItemId={setPlayingItemId}
-                            handleDragStart={handleDragStart}
-                            setContextMenu={(menu) => setContextMenu(menu as ContextMenuState)}
-                            togglePlayback={togglePlayback}
-                            videoRefs={videoRefs}
-                            handleTimeUpdate={handleTimeUpdate}
-                            mediaTimes={mediaTimes[item.id]}
-                        />
-                    ))}
+            {/* Drag & Drop Overlay from OS */}
+            {isOsDraggingOver && (
+                <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-stone-950/85 backdrop-blur-md border-2 border-dashed border-accent/60 rounded-xl m-1 pointer-events-none animate-in fade-in duration-150">
+                    <Upload className="w-10 h-10 text-accent animate-bounce mb-2" />
+                    <p className="text-xs font-bold text-white tracking-wide">
+                        {t('media_pool.drop_files', 'Drop files to import into media pool')}
+                    </p>
+                    <p className="text-[10px] text-stone-400 mt-1">
+                        {t('media_pool.supported_formats', 'Images, Videos, Audio')}
+                    </p>
                 </div>
-            </div>
+            )}
+
+            {/* View Modes */}
+            {viewMode === 'grid' && (
+                <MediaPoolGridView
+                    bins={bins}
+                    visibleItems={visibleItems}
+                    selectedIds={selectedIds}
+                    activeBinId={activeBinId}
+                    searchQuery={searchQuery}
+                    draggingOverId={draggingOverId}
+                    playingItemId={playingItemId}
+                    mediaTimes={mediaTimes}
+                    onSelectBin={setActiveBinId}
+                    onSetDraggingOverId={setDraggingOverId}
+                    onBinDrop={handleBinDrop}
+                    onBinContextMenu={handleBinContextMenu}
+                    onImportDroppedFiles={importDroppedFiles}
+                    onItemClick={handleItemClick}
+                    onDoubleClick={(item) => setQuickLookItem(item)}
+                    onHoverItem={setHoveredItemId}
+                    onDragStart={handleDragStart}
+                    onItemContextMenu={handleContextMenu}
+                    onTogglePlayback={togglePlayback}
+                    onPlaybackEnded={handlePlaybackEnded}
+                    onTimeUpdate={handleTimeUpdate}
+                    onClearSearch={handleClearSearch}
+                    onImportMedia={handleImportMedia}
+                />
+            )}
+
+            {viewMode === 'list' && (
+                <MediaPoolListView
+                    bins={bins}
+                    visibleItems={visibleItems}
+                    selectedIds={selectedIds}
+                    activeBinId={activeBinId}
+                    searchQuery={searchQuery}
+                    draggingOverId={draggingOverId}
+                    playingItemId={playingItemId}
+                    mediaTimes={mediaTimes}
+                    onSelectBin={setActiveBinId}
+                    onSetDraggingOverId={setDraggingOverId}
+                    onBinDrop={handleBinDrop}
+                    onBinContextMenu={handleBinContextMenu}
+                    onImportDroppedFiles={importDroppedFiles}
+                    onItemClick={handleItemClick}
+                    onDoubleClick={(item) => setQuickLookItem(item)}
+                    onHoverItem={setHoveredItemId}
+                    onDragStart={handleDragStart}
+                    onItemContextMenu={handleContextMenu}
+                    onTogglePlayback={togglePlayback}
+                    onClearSearch={handleClearSearch}
+                    onImportMedia={handleImportMedia}
+                />
+            )}
+
+            {viewMode === 'tree' && (
+                <MediaPoolTreeView
+                    allBins={allBins}
+                    mediaItems={mediaItems}
+                    selectedIds={selectedIds}
+                    playingItemId={playingItemId}
+                    draggingOverId={draggingOverId}
+                    mediaTimes={mediaTimes}
+                    onSetDraggingOverId={setDraggingOverId}
+                    onBinDrop={handleBinDrop}
+                    onBinContextMenu={handleBinContextMenu}
+                    onImportDroppedFiles={importDroppedFiles}
+                    onItemClick={handleItemClick}
+                    onDoubleClick={(item) => setQuickLookItem(item)}
+                    onDragStart={handleDragStart}
+                    onItemContextMenu={handleContextMenu}
+                    onTogglePlayback={togglePlayback}
+                />
+            )}
 
             <MediaPoolContextMenu
                 contextMenu={contextMenu}
@@ -260,6 +425,10 @@ export const MediaPoolPanel: React.FC = () => {
                 handleBulkDelete={handleBulkDelete}
                 activeBinId={activeBinId}
                 setActiveBinId={setActiveBinId}
+                bins={allBins}
+                mediaItems={mediaItems}
+                onClearSelection={() => setSelectedIds(new Set())}
+                onQuickLook={(item) => setQuickLookItem(item)}
             />
 
             <audio
@@ -270,6 +439,22 @@ export const MediaPoolPanel: React.FC = () => {
                     }
                 }}
                 onEnded={() => setPlayingItemId(null)}
+            />
+
+            <MediaQuickLookModal
+                item={quickLookItem}
+                isOpen={!!quickLookItem}
+                onClose={() => setQuickLookItem(null)}
+                onNavigate={handleQuickLookNavigate}
+                currentIndex={quickLookItem ? visibleItems.findIndex(i => i.id === quickLookItem.id) : undefined}
+                totalCount={visibleItems.length}
+            />
+
+            <MediaPoolInfoModal
+                isOpen={isInfoModalOpen}
+                onClose={() => setIsInfoModalOpen(false)}
+                mediaItems={mediaItems}
+                bins={allBins}
             />
         </div>
     );

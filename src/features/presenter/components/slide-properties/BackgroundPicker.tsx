@@ -15,7 +15,7 @@ import { useMediaUrl } from '@/core/hooks/useMediaUrl';
 // Sub-components
 import { LayerStack } from './BackgroundPicker/LayerStack';
 import { TypeSelector } from './BackgroundPicker/TypeSelector';
-import { MediaSourcePanel } from './BackgroundPicker/MediaSourcePanel';
+import { MediaSourcePanel, MediaSearchResult } from './BackgroundPicker/MediaSourcePanel';
 import { AdjustmentPanel } from './BackgroundPicker/AdjustmentPanel';
 
 const UNSPLASH_ACCESS_KEY = 'i-LgE2hgIfWqxDD17rja_1zoGRncuabMf6a4s0irhX0';
@@ -28,20 +28,20 @@ interface BackgroundPickerProps {
     defaultActiveLayerId?: string;
 }
 
-export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({ 
-    background, 
-    onChange, 
-    hideLayerStack = false, 
-    defaultActiveLayerId 
+export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
+    background,
+    onChange,
+    hideLayerStack = false,
+    defaultActiveLayerId
 }) => {
     const { t } = useTranslation();
     const layers = ensureLayers(background);
     const [activeLayerId, setActiveLayerId] = useState<string | null>(defaultActiveLayerId || (layers.length > 0 ? layers[0].id : null));
     const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searchResults, setSearchResults] = useState<MediaSearchResult[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [showAdvancedLayers, setShowAdvancedLayers] = useState(false);
-    const { openModal } = useModalStore();
+    const openModal = useModalStore(s => s.openModal);
     const { recentBackgrounds, addRecentBackground } = useHistoryStore(useShallow(s => ({
         recentBackgrounds: s.recentBackgrounds,
         addRecentBackground: s.addRecentBackground
@@ -66,7 +66,7 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
             : null
     );
 
-    const activeImageUrl = activeLayer?.type === 'image' 
+    const activeImageUrl = activeLayer?.type === 'image'
         ? (activeLayer.image?.isFromDb ? resolvedDbImage : activeLayer.image?.url)
         : undefined;
 
@@ -118,7 +118,8 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
             if (activeLayer.type === 'image') {
                 const resp = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&client_id=${UNSPLASH_ACCESS_KEY}&per_page=12`);
                 const data = await resp.json();
-                setSearchResults(data.results.map((r: any) => ({
+                interface UnsplashItem { id: string; urls: { regular: string; small: string }; user: { name: string } }
+                setSearchResults((data.results as UnsplashItem[]).map((r: UnsplashItem) => ({
                     id: r.id, url: r.urls.regular, thumb: r.urls.small, author: r.user.name, source: 'unsplash'
                 })));
             } else {
@@ -127,9 +128,10 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
                     headers: { Authorization: PEXELS_API_KEY }
                 });
                 const data = await resp.json();
-                setSearchResults(data.videos.map((v: any) => ({
+                interface PexelsVideoItem { id: number | string; image: string; video_files: Array<{ quality: string; link: string }> }
+                setSearchResults((data.videos as PexelsVideoItem[]).map((v: PexelsVideoItem) => ({
                     id: v.id.toString(),
-                    url: v.video_files.find((f: any) => f.quality === 'hd')?.link || v.video_files[0].link,
+                    url: v.video_files.find((f: { quality: string }) => f.quality === 'hd')?.link || v.video_files[0].link,
                     thumb: v.image,
                     source: 'pexels'
                 })));
@@ -149,13 +151,13 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
         try {
             const { MediaPersistenceService } = await import('@/features/presenter/services/MediaPersistenceService');
             const stableId = await MediaPersistenceService.importMediaBlob(file, file.name, type, { forceBackground: true });
-            
-            const updates: Partial<IStyleLayer> = type === 'image' 
+
+            const updates: Partial<IStyleLayer> = type === 'image'
                 ? { type: 'image', image: { url: null, source: 'local', id: stableId, isFromDb: true } }
                 : { type: 'video', video: { url: null, source: 'local', id: stableId, isMuted: true, isLooping: true, isFromDb: true } };
-            
+
             updateLayer(activeLayer.id, updates, true);
-            addRecentBackground(updates as any);
+            addRecentBackground(updates);
         } catch (error) {
             console.error('Failed to save background:', error);
         }
@@ -164,8 +166,8 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
     return (
         <div className={cn("flex flex-col h-full overflow-hidden", !hideLayerStack ? "bg-stone-900 rounded-3xl border border-white/5 shadow-2xl text-white" : "")}>
             {!hideLayerStack && showAdvancedLayers && (
-                <LayerStack 
-                    layers={layers} 
+                <LayerStack
+                    layers={layers}
                     activeLayerId={activeLayerId}
                     onSelectLayer={setActiveLayerId}
                     onAddLayer={addLayer}
@@ -177,17 +179,18 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
             <div className="px-4 py-3 bg-black/40 border-b border-white/5 space-y-3">
                 <div className="flex items-center justify-between">
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-accent">
-                        {activeLayer?.type === 'image' ? t('background_photo') 
-                         : activeLayer?.type === 'video' ? t('background_motion')
-                         : activeLayer?.type === 'gradient' ? t('background_gradient')
-                         : t('background_picker')}
+                        {activeLayer?.type === 'image' ? t('background_photo')
+                            : activeLayer?.type === 'video' ? t('background_motion')
+                                : activeLayer?.type === 'gradient' ? t('background_gradient')
+                                    : t('background_picker')}
                     </h3>
                     {!hideLayerStack && (
-                        <button 
+                        <button
+                            type="button"
                             onClick={() => setShowAdvancedLayers(!showAdvancedLayers)}
                             className={cn(
-                                "flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all active:scale-95",
-                                showAdvancedLayers ? "bg-accent/10 border-accent/30 text-accent" : "bg-white/5 border-white/10 text-stone-500 hover:text-stone-300"
+                                "flex items-center gap-1.5 px-2 py-1 rounded-xl border transition-all cursor-pointer apple-press",
+                                showAdvancedLayers ? "bg-accent/10 border-accent/30 text-accent font-bold" : "bg-white/5 border-white/10 text-stone-500 hover:text-stone-300"
                             )}
                         >
                             <Layers className="w-3 h-3" />
@@ -196,9 +199,9 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
                     )}
                 </div>
 
-                <TypeSelector 
-                    activeLayer={activeLayer} 
-                    onTypeChange={(type) => activeLayer && updateLayer(activeLayer.id, { type })} 
+                <TypeSelector
+                    activeLayer={activeLayer}
+                    onTypeChange={(type) => activeLayer && updateLayer(activeLayer.id, { type })}
                 />
             </div>
 
@@ -232,7 +235,7 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
                                 />
                             )}
                             {(activeLayer.type === 'image' || activeLayer.type === 'video') && (
-                                <MediaSourcePanel 
+                                <MediaSourcePanel
                                     activeLayer={activeLayer}
                                     recentBackgrounds={recentBackgrounds}
                                     searchQuery={searchQuery}
@@ -269,7 +272,7 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
                             )}
                         </div>
 
-                        <AdjustmentPanel 
+                        <AdjustmentPanel
                             activeLayer={activeLayer}
                             onUpdateLayer={(updates, immediate) => updateLayer(activeLayer.id, updates, immediate)}
                             onOpenCropModal={() => {
@@ -277,7 +280,10 @@ export const BackgroundPicker: React.FC<BackgroundPickerProps> = ({
                                     openModal(ModalType.IMAGE_CROP, {
                                         imageUrl: activeImageUrl,
                                         initialCrop: activeLayer.image?.crop,
-                                        onApply: (crop: any) => updateLayer(activeLayer.id, { image: { ...activeLayer.image!, crop } }, true)
+                                        onApply: (crop: { x: number; y: number; width: number; height: number }) => {
+                                            const baseImage = activeLayer.image || { url: '', source: 'local' as const };
+                                            updateLayer(activeLayer.id, { image: { ...baseImage, crop } }, true);
+                                        }
                                     });
                                 }
                             }}

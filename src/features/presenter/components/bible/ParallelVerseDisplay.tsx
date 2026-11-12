@@ -32,7 +32,7 @@ export const ParallelVerseDisplay: React.FC<ParallelVerseDisplayProps> = ({
     className,
     settings: propSettings,
 }) => {
-    const { settings: storeSettings } = usePresenterStore();
+    const storeSettings = usePresenterStore(state => state.settings);
     const settings = propSettings || storeSettings;
 
     const containerRef = useRef<HTMLDivElement>(null);

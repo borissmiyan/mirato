@@ -61,7 +61,8 @@ export const createCanvasItem = (type: CanvasItemType): ICanvasItem => {
         case 'stroke':
             return {
                 ...base, width: 30, height: 0.5,
-                stroke: { x2: 100, y2: 0, color: '#ffffff', width: 2 },
+                borderWidth: 1,
+                stroke: { x2: 100, y2: 0, color: '#ffffff', width: 1 },
                 strokes: [{ id: crypto.randomUUID(), type: 'color', visible: true, opacity: 1, blendMode: 'normal', color: '#ffffff' }],
             };
         case 'effect':

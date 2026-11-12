@@ -1,17 +1,18 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { PresentationDataService } from '@/features/presenter/services/PresentationDataService';
-import { useModalStore, ModalType } from '@/core/store/modalStore';
+import { useModalStore, ModalType, ModalState } from '@/core/store/modalStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
-import { ITemplate } from '@/core/types';
-import { X, LayoutTemplate, ChevronLeft, Search, Settings2, Upload, Plus } from 'lucide-react';
-import { cn } from '@/core/utils/cn';
+import { ITemplate, ITemplateSlide } from '@/core/types';
+import { X, LayoutTemplate, ChevronLeft, Settings2, Upload, Plus } from 'lucide-react';
 import { EktmpService } from '@/features/presenter/services/ektmpService';
 import ConfirmDialog from '@/shared/ui/ConfirmDialog';
 import DropdownSelector from '@/shared/ui/DropdownSelector';
 import { toast } from '@/core/utils/toast';
+import { Button, IconButton, SearchInput } from '@/shared/ui';
 
 // Hooks
 import { useTemplatePickerData } from '../../hooks/useTemplatePickerData';
@@ -25,19 +26,27 @@ import { TemplatePickerContextMenu } from './TemplatePickerContextMenu';
 /**
  * Template picker modal — browse, select, and manage slide templates.
  */
-const TemplatePickerModal: React.FC = () => {
+interface TemplatePickerModalContentProps {
+    modalData: ModalState;
+}
+
+const TemplatePickerModalContent: React.FC<TemplatePickerModalContentProps> = ({ modalData }) => {
     const { t, i18n } = useTranslation();
     const lang = i18n.language?.substring(0, 2) || 'en';
     const isRu = lang === 'ru';
     const isDev = import.meta.env.DEV;
 
-    const { closeModal, stack } = useModalStore();
-    const modalData = [...stack].reverse().find(m => m.id === ModalType.TEMPLATE_PICKER);
-    const isOpen = !!modalData;
+    const closeModal = useModalStore(s => s.closeModal);
     const slideId = modalData?.props?.slideId as string | undefined;
     const blockId = modalData?.props?.blockId as string | undefined;
 
-    const { activePresentationId, updatePresentationSlides, setPreviewSlide } = usePresentationStore();
+    const { activePresentationId, updatePresentationSlides, setPreviewSlide } = usePresentationStore(
+        useShallow(s => ({
+            activePresentationId: s.activePresentationId,
+            updatePresentationSlides: s.updatePresentationSlides,
+            setPreviewSlide: s.setPreviewSlide,
+        }))
+    );
 
     const presentation = useLiveQuery(
         () => activePresentationId ? PresentationDataService.getPresentation(activePresentationId) : undefined,
@@ -66,35 +75,37 @@ const TemplatePickerModal: React.FC = () => {
     });
 
     // ─── Wrapped handleSelectTemplate (binds presentation context) ───
-    const onSelectTemplate = (template: ITemplate, nestedSlide?: unknown) => {
+    const onSelectTemplate = (template: ITemplate, nestedSlide?: ITemplateSlide) => {
         if (!activePresentationId || !presentation || !slideId) return;
         actions.handleSelectTemplate(
-            template, nestedSlide as undefined,
+            template, nestedSlide,
             activePresentationId, presentation, slideId,
             updatePresentationSlides, setPreviewSlide,
             closeModal, ModalType.TEMPLATE_PICKER
         );
     };
 
-    if (!isOpen) return null;
-
     return createPortal(
-        <div className="fixed inset-0 z-10001 flex items-center justify-center bg-black/70 backdrop-blur-lg animate-in fade-in duration-300">
-            <div className="bg-stone-900 border border-white/10 rounded-[28px] w-full max-w-xl max-h-[70vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500">
+        <div className="fixed inset-0 z-10001 flex items-center justify-center bg-stone-950/75 backdrop-blur-xl apple-backdrop p-4 md:p-6">
+            <div className="bg-stone-900 border border-white/10 rounded-2xl w-full max-w-xl max-h-[75vh] flex flex-col overflow-hidden shadow-2xl ring-1 ring-white/5 apple-modal">
                 {/* ── Header ── */}
-                <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between shrink-0">
+                <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between shrink-0">
                     <div className="flex items-center gap-3">
                         {data.navStack.length > 1 ? (
-                            <button type="button" onClick={data.popNav} className="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center border border-white/10 transition-colors cursor-pointer">
-                                <ChevronLeft className="w-5 h-5 text-stone-300" />
-                            </button>
+                            <IconButton
+                                icon={<ChevronLeft className="w-5 h-5" />}
+                                label="Back"
+                                variant="surface"
+                                size="xs"
+                                onClick={data.popNav}
+                            />
                         ) : (
                             <div className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center border border-accent/20">
                                 <LayoutTemplate className="w-5 h-5 text-accent" />
                             </div>
                         )}
                         <div>
-                            <h2 className="text-lg font-black text-white tracking-tight uppercase">
+                            <h2 className="text-lg font-bold text-white tracking-tight uppercase">
                                 {currentView.type === 'template' ? (isRu ? currentView.template.nameRu : currentView.template.name) :
                                     currentView.type === 'block' ? (isRu ? blocksMap.get(currentView.blockId)?.nameRu || currentView.blockId : blocksMap.get(currentView.blockId)?.name || currentView.blockId) :
                                         t('all_templates')}
@@ -109,38 +120,65 @@ const TemplatePickerModal: React.FC = () => {
 
                     {currentView.type === 'all' && (
                         <div className="flex-1 max-w-xs mx-4">
-                            <div className="relative">
-                                <Search className="w-4 h-4 text-stone-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                                <input
-                                    type="text"
-                                    value={data.searchQuery}
-                                    onChange={(e) => data.setSearchQuery(e.target.value)}
-                                    placeholder={t('search_templates', 'Search templates...')}
-                                    className="w-full bg-black/40 border border-white/5 rounded-xl pl-9 pr-4 py-2 text-xs text-white placeholder-stone-600 focus:border-accent/40 focus:ring-1 focus:ring-accent/40 outline-hidden transition-all"
-                                />
-                            </div>
+                            <SearchInput
+                                value={data.searchQuery}
+                                onChange={(e) => data.setSearchQuery(e.target.value)}
+                                placeholder={t('search_templates', 'Search templates...')}
+                                size="sm"
+                            />
                         </div>
                     )}
 
                     <div className="flex items-center gap-2 ml-auto shrink-0">
-                        <button type="button" onClick={() => actions.setShowBlockManager(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold uppercase tracking-wider text-stone-300 transition-colors cursor-pointer" aria-label={t('manage_blocks')}>
-                            <Settings2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button type="button" onClick={() => {
-                            const input = document.createElement('input'); input.type = 'file'; input.accept = '.ektmp';
-                            input.onchange = async (e) => {
-                                const file = (e.target as HTMLInputElement).files?.[0]; if (!file) return;
-                                try { const imported = await EktmpService.unpack(file); await PresentationDataService.addTemplate(imported); toast.success(t('import')); } catch { toast.error('Failed to import.'); }
-                            }; input.click();
-                        }} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-[10px] font-bold uppercase tracking-wider text-stone-300 cursor-pointer">
-                            <Upload className="w-3.5 h-3.5" /> {t('import')}
-                        </button>
-                        <button type="button" onClick={actions.handleSaveAsTemplate} disabled={!currentSlide} className="flex items-center gap-1.5 px-3 py-1.5 bg-accent/20 text-accent hover:bg-accent/30 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors disabled:opacity-50 cursor-pointer">
-                            <Plus className="w-3.5 h-3.5" /> {isDev ? t('add_prebuilt') : t('save_as_template')}
-                        </button>
+                        <IconButton
+                            icon={<Settings2 className="w-4 h-4" />}
+                            label={t('manage_blocks', 'Manage Blocks')}
+                            variant="surface"
+                            size="xs"
+                            onClick={() => actions.setShowBlockManager(true)}
+                        />
+                        <Button
+                            size="xs"
+                            variant="secondary"
+                            onClick={() => {
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.accept = '.ektmp';
+                                input.onchange = async (e) => {
+                                    const file = (e.target as HTMLInputElement).files?.[0];
+                                    if (!file) return;
+                                    try {
+                                        const imported = await EktmpService.unpack(file);
+                                        await PresentationDataService.addTemplate(imported);
+                                        toast.success(t('import'));
+                                    } catch {
+                                        toast.error('Failed to import.');
+                                    }
+                                };
+                                input.click();
+                            }}
+                            leftIcon={<Upload className="w-3.5 h-3.5" />}
+                        >
+                            {t('import')}
+                        </Button>
+                        <Button
+                            size="xs"
+                            variant="primary"
+                            onClick={actions.handleSaveAsTemplate}
+                            disabled={!currentSlide}
+                            leftIcon={<Plus className="w-3.5 h-3.5" />}
+                        >
+                            {isDev ? t('add_prebuilt') : t('save_as_template')}
+                        </Button>
                     </div>
                     <div className="w-px h-8 bg-white/5 mx-2 shrink-0" />
-                    <button type="button" onClick={() => closeModal(ModalType.TEMPLATE_PICKER)} className="p-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-stone-400 hover:text-white border border-white/5 cursor-pointer shrink-0"><X className="w-5 h-5" /></button>
+                    <IconButton
+                        icon={<X className="w-5 h-5" />}
+                        label={t('close', 'Close')}
+                        variant="surface"
+                        size="xs"
+                        onClick={() => closeModal(ModalType.TEMPLATE_PICKER)}
+                    />
                 </div>
 
                 {/* ── Content Grid ── */}
@@ -272,6 +310,14 @@ const TemplatePickerModal: React.FC = () => {
         </div>,
         document.body
     );
+};
+
+const TemplatePickerModal: React.FC = () => {
+    const modalData = useModalStore(
+        useShallow(s => [...s.stack].reverse().find(m => m.id === ModalType.TEMPLATE_PICKER))
+    );
+    if (!modalData) return null;
+    return <TemplatePickerModalContent modalData={modalData} />;
 };
 
 export default TemplatePickerModal;

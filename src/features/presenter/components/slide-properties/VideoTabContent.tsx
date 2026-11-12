@@ -1,21 +1,21 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Film, Upload, FolderOpen, Scissors, Gauge,
+  Film, Upload, FolderOpen, Scissors,
   Volume2, VolumeX, Repeat, Maximize2, Minimize2,
   Clock, Play, Trash2
 } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
-import { CustomSlider } from '@/components/CustomSlider';
+import { Slider } from '@/shared/ui/Slider';
+import { Button } from '@/shared/ui/Button';
+import { Switch } from '@/shared/ui/Switch';
 import { ScrubbableInput } from './ScrubbableInput';
-import { IVideoSettings, VIDEO_MAX_FILE_SIZE } from '@/core/types';
-import { useModalStore, ModalType } from '@/core/store/modalStore';
-import { useShallow } from 'zustand/react/shallow';
+import { IVideoSettings } from '@/core/types';
 import { db } from '@/core/db';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { toast } from '@/core/utils/toast';
-import { IpcService } from '@/core/services/ipcService';
-import { ffmpegService } from '@/core/services/ffmpegService';
+import { extractPosterFrame } from '@/core/utils/videoUtils';
+import { mediaCache } from '@/core/utils/mediaCache';
+import { useVideoTabActions } from './useVideoTabActions';
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4];
 
@@ -30,54 +30,9 @@ interface IVideoTabContentProps {
   onUpdate: (updates: Partial<IVideoSettings>) => void;
 }
 
-/**
- * Extracts the first frame of a video file as a base64 data URL.
- */
-const extractPosterFrame = (videoUrl: string): Promise<string | undefined> => {
-  return new Promise((resolve) => {
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.muted = true;
-    video.preload = 'metadata';
-    video.src = videoUrl;
-
-    video.addEventListener('loadeddata', () => {
-      video.currentTime = 0.1; // Seek slightly past 0 for reliable frame capture
-    });
-
-    video.addEventListener('seeked', () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(video, 0, 0);
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-          resolve(dataUrl);
-        } else {
-          resolve(undefined);
-        }
-      } catch {
-        resolve(undefined);
-      } finally {
-        video.src = '';
-        video.load();
-      }
-    });
-
-    video.addEventListener('error', () => resolve(undefined));
-
-    // Timeout fallback
-    setTimeout(() => resolve(undefined), 5000);
-  });
-};
-
 export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onUpdate }) => {
   const { t } = useTranslation();
-  const { openModal } = useModalStore(useShallow(s => ({ openModal: s.openModal })));
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isTrimming, setIsTrimming] = useState(false);
+  const { handleImportFile, handleSelectFromPool, handleApplyTrim, isTrimming } = useVideoTabActions(settings, onUpdate);
 
   // Resolve media name from DB
   const mediaItem = useLiveQuery(
@@ -85,189 +40,63 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
     [settings.mediaId]
   );
 
-  // Generate preview URL
+  // Auto-extract poster frame if missing
   useEffect(() => {
-    if (!settings.mediaId) {
-      setPreviewUrl(null);
-      return;
-    }
+    if (!settings.mediaId || settings.posterFrame) return;
 
     let cancelled = false;
     (async () => {
-      const item = await db.mediaPool.get(settings.mediaId!);
-      if (cancelled || !item?.data) return;
-      const url = URL.createObjectURL(item.data);
-      setPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
+      try {
+        const url = await mediaCache.getBackgroundUrl(settings.mediaId);
+        if (cancelled || !url) return;
+        const frame = await extractPosterFrame(url);
+        if (!cancelled && frame) {
+          onUpdate({ posterFrame: frame });
+        }
+      } catch (err) {
+        console.warn('[VideoTabContent] Failed to auto-extract poster frame:', err);
+      }
     })();
 
     return () => { cancelled = true; };
-  }, [settings.mediaId]);
-
-  /**
-   * Import a video from the filesystem.
-   */
-  const handleImportFile = useCallback(async () => {
-    try {
-      const { MediaPersistenceService } = await import('../../services/MediaPersistenceService');
-      let mediaId: string | null = null;
-
-      if (IpcService.isElectron()) {
-        const files = await IpcService.selectFile({
-          filters: [{ name: 'Video', extensions: ['mp4', 'webm', 'mov', 'avi', 'mkv'] }]
-        });
-        if (!files || files.length === 0) return;
-        
-        mediaId = await MediaPersistenceService.importMediaFromPath(files[0], 'video');
-      } else {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'video/*';
-        const file = await new Promise<File | null>((resolve) => {
-          input.onchange = () => resolve(input.files?.[0] || null);
-          input.click();
-        });
-
-        if (!file) return;
-
-        // Size check (optional here as MediaPersistenceService doesn't enforce but we can)
-        if (file.size > VIDEO_MAX_FILE_SIZE) {
-          toast.error(t('video_too_large', 'Video file exceeds the 500 MB limit'));
-          return;
-        }
-
-        mediaId = await MediaPersistenceService.importMediaBlob(file, null, 'video');
-      }
-
-      if (!mediaId) return;
-
-      // Extract poster frame for the UI
-      const item = await db.mediaPool.get(mediaId);
-      if (item?.data) {
-        const tempUrl = URL.createObjectURL(item.data);
-        const posterFrame = await extractPosterFrame(tempUrl);
-        URL.revokeObjectURL(tempUrl);
-        onUpdate({ mediaId, posterFrame });
-      } else {
-        onUpdate({ mediaId });
-      }
-
-      toast.success(t('video_imported', 'Video imported successfully'));
-    } catch (error) {
-      console.error('[VideoTabContent] Import failed:', error);
-      toast.error(t('video_import_failed', 'Failed to import video'));
-    }
-  }, [onUpdate, t]);
-
-  /**
-   * Select a video from the media pool.
-   */
-  const handleSelectFromPool = useCallback(() => {
-    openModal(ModalType.AUDIO_PICKER, {
-      filterType: 'video',
-      onSelect: async (mediaId: string) => {
-        // Extract poster frame
-        const item = await db.mediaPool.get(mediaId);
-        let posterFrame: string | undefined;
-        if (item?.data) {
-          const tempUrl = URL.createObjectURL(item.data);
-          posterFrame = await extractPosterFrame(tempUrl);
-          URL.revokeObjectURL(tempUrl);
-        }
-        onUpdate({ mediaId, posterFrame });
-      },
-    });
-  }, [openModal, onUpdate]);
-
-  const handleApplyTrim = useCallback(async () => {
-    if (!settings.mediaId || !settings.trimStart || !settings.trimEnd) return;
-    
-    try {
-      setIsTrimming(true);
-      toast.info(t('trimming_video_start', 'Trimming video, please wait...'));
-
-      const trimmedBlob = await ffmpegService.trimMediaById(
-        settings.mediaId,
-        settings.trimStart,
-        settings.trimEnd
-      );
-
-      if (!trimmedBlob) {
-        throw new Error("Failed to trim media");
-      }
-
-      // Add as a new trimmed copy to the pool
-      const original = await db.mediaPool.get(settings.mediaId);
-      const newName = original ? `${original.name} (Trimmed)` : 'Trimmed Video';
-
-      const { MediaPersistenceService } = await import('../../services/MediaPersistenceService');
-      const newMediaId = await MediaPersistenceService.importMediaBlob(
-        trimmedBlob, 
-        newName, 
-        'video'
-      );
-
-      if (!newMediaId) {
-        throw new Error("Failed to persist trimmed video");
-      }
-
-      // Extract new poster frame
-      const tempUrl = URL.createObjectURL(trimmedBlob);
-      const posterFrame = await extractPosterFrame(tempUrl);
-      URL.revokeObjectURL(tempUrl);
-
-      // Update slide settings with the new media, resetting the conceptual trim boundaries
-      // since the file is physically trimmed now!
-      onUpdate({ 
-        mediaId: newMediaId, 
-        posterFrame,
-        trimStart: 0,
-        trimEnd: 0
-      });
-
-      toast.success(t('video_trimmed_success', 'Video physically trimmed successfully!'));
-    } catch (error: any) {
-      console.error('[VideoTabContent] Trim failed:', error);
-      toast.error(t('video_trim_failed', 'Failed to trim video. Check console.'));
-    } finally {
-      setIsTrimming(false);
-    }
-  }, [settings.mediaId, settings.trimStart, settings.trimEnd, onUpdate, t]);
+  }, [settings.mediaId, settings.posterFrame, onUpdate]);
 
   // ─── No video source yet ────────────────────────────────────────────
   if (!settings.mediaId) {
     return (
-      <div className="pb-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="pb-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
         <div className="flex flex-col items-center justify-center text-center gap-5 py-10">
-          <div className="w-20 h-20 rounded-full bg-white/2 flex items-center justify-center border border-white/5">
-            <Film className="w-8 h-8 text-stone-800" strokeWidth={1.5} />
+          <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center border border-white/10">
+            <Film className="w-8 h-8 text-stone-600" strokeWidth={1.5} />
           </div>
           <div className="space-y-1.5">
-            <p className="text-[11px] text-stone-500 font-black uppercase tracking-[0.2em]">
+            <p className="text-[11px] text-stone-400 font-black uppercase tracking-[0.2em]">
               {t('no_video_selected', 'No Video Selected')}
             </p>
-            <p className="text-[10px] text-stone-700 max-w-[180px] leading-relaxed">
+            <p className="text-[10px] text-stone-500 max-w-[200px] leading-relaxed">
               {t('video_source_hint', 'Import a video file or select one from the media pool')}
             </p>
           </div>
 
-          <div className="flex flex-col gap-2 w-full px-4">
-            <button
-              type="button"
+          <div className="flex flex-col gap-2.5 w-full px-4">
+            <Button
+              variant="primary"
+              size="md"
+              className="w-full justify-center gap-2"
               onClick={handleImportFile}
-              className="w-full flex items-center justify-center gap-2.5 p-4 rounded-2xl bg-accent/10 border border-accent/20 text-accent hover:bg-accent/15 transition-all font-bold text-[11px] uppercase tracking-wider cursor-pointer active:scale-[0.98]"
             >
               <Upload className="w-4 h-4" />
               {t('import_video', 'Import Video File')}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              className="w-full justify-center gap-2"
               onClick={handleSelectFromPool}
-              className="w-full flex items-center justify-center gap-2.5 p-4 rounded-2xl bg-white/3 border border-white/5 text-stone-400 hover:text-stone-200 hover:bg-white/5 transition-all font-bold text-[11px] uppercase tracking-wider cursor-pointer active:scale-[0.98]"
             >
               <FolderOpen className="w-4 h-4" />
               {t('select_from_pool', 'Select from Media Pool')}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -276,10 +105,10 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
 
   // ─── Video configured ───────────────────────────────────────────────
   return (
-    <div className="pb-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div className="pb-4 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
       {/* Identity */}
-      <div className="flex items-center gap-4 p-5 rounded-3xl bg-black/40 border border-white/5 shadow-inner">
-        <div className="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center border border-accent/20 shadow-lg shadow-accent/5 overflow-hidden shrink-0">
+      <div className="flex items-center gap-4 p-4 rounded-2xl bg-black/40 border border-white/5 shadow-inner">
+        <div className="w-12 h-12 rounded-xl bg-accent/10 flex items-center justify-center border border-accent/20 shadow-lg shadow-accent/5 overflow-hidden shrink-0">
           {settings.posterFrame ? (
             <img src={settings.posterFrame} className="w-full h-full object-cover" alt="" />
           ) : (
@@ -287,28 +116,30 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] text-stone-500 font-black uppercase tracking-[0.2em] leading-none mb-1.5 px-0.5">
+          <p className="text-[10px] text-stone-500 font-black uppercase tracking-[0.2em] leading-none mb-1 px-0.5">
             {t('video_clip', 'Video Clip')}
           </p>
           <h3 className="text-sm font-bold text-white truncate px-0.5">
             {mediaItem?.name || t('unknown_file', 'Unknown File')}
           </h3>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="xs"
+          square
           onClick={handleImportFile}
-          className="p-2 text-stone-600 hover:text-stone-300 rounded-xl hover:bg-white/5 transition-all cursor-pointer shrink-0"
           aria-label={t('change_video', 'Change Video')}
+          title={t('change_video', 'Change Video')}
         >
-          <Upload className="w-4 h-4" />
-        </button>
+          <Upload className="w-4 h-4 text-stone-400" />
+        </Button>
       </div>
 
       {/* Scaling */}
-      <div className="space-y-4 px-1">
+      <div className="space-y-3 px-1">
         <div className="flex items-center gap-2">
-          <div className="w-1 h-3 bg-accent/40 rounded-full" />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">
+          <div className="w-1 h-3 bg-accent/60 rounded-full" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">
             {t('video_scaling', 'Scaling')}
           </span>
         </div>
@@ -319,13 +150,13 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
               type="button"
               onClick={() => onUpdate({ scaling: mode })}
               className={cn(
-                "flex flex-col items-center gap-2 p-4 rounded-2xl border transition-all cursor-pointer active:scale-[0.97]",
+                "flex flex-col items-center gap-2 p-3.5 rounded-2xl border transition-all cursor-pointer apple-press",
                 settings.scaling === mode
-                  ? "bg-accent/10 border-accent/30 text-accent"
-                  : "bg-black/40 border-white/5 text-stone-500 hover:border-white/10 hover:text-stone-300"
+                  ? "bg-accent/15 border-accent/40 text-accent font-bold shadow-sm shadow-accent/10"
+                  : "bg-black/40 border-white/5 text-stone-400 hover:border-white/10 hover:text-stone-200"
               )}
             >
-              {mode === 'cover' ? <Maximize2 className="w-5 h-5" /> : <Minimize2 className="w-5 h-5" />}
+              {mode === 'cover' ? <Maximize2 className="w-4.5 h-4.5" /> : <Minimize2 className="w-4.5 h-4.5" />}
               <span className="text-[10px] font-bold uppercase tracking-wider">
                 {mode === 'cover' ? t('cover', 'Fill') : t('contain', 'Fit')}
               </span>
@@ -335,10 +166,10 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
       </div>
 
       {/* Playback Strategy */}
-      <div className="space-y-4 px-1">
+      <div className="space-y-3 px-1">
         <div className="flex items-center gap-2">
-          <div className="w-1 h-3 bg-accent/40 rounded-full" />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">
+          <div className="w-1 h-3 bg-accent/60 rounded-full" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">
             {t('playback_strategy', 'When Live')}
           </span>
         </div>
@@ -351,10 +182,10 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
                 type="button"
                 onClick={() => onUpdate({ strategy: opt.value })}
                 className={cn(
-                  "w-full flex items-center gap-3 p-4 rounded-2xl border transition-all cursor-pointer active:scale-[0.98]",
+                  "w-full flex items-center gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer apple-press",
                   settings.strategy === opt.value
-                    ? "bg-accent/10 border-accent/30 text-accent"
-                    : "bg-black/40 border-white/5 text-stone-500 hover:border-white/10 hover:text-stone-300"
+                    ? "bg-accent/15 border-accent/40 text-accent font-bold shadow-sm shadow-accent/10"
+                    : "bg-black/40 border-white/5 text-stone-400 hover:border-white/10 hover:text-stone-200"
                 )}
               >
                 <Icon className="w-4 h-4 shrink-0" />
@@ -367,7 +198,7 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
         {/* Delay input */}
         {settings.strategy === 'delay' && (
           <div className="bg-black/40 p-4 rounded-2xl border border-white/5 animate-in fade-in slide-in-from-top-2 duration-200">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-stone-600 block px-0.5 mb-2">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-stone-500 block px-0.5 mb-2">
               {t('delay_seconds', 'Delay (seconds)')}
             </span>
             <ScrubbableInput
@@ -384,62 +215,62 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
       </div>
 
       {/* Speed */}
-      <div className="space-y-4 px-1">
+      <div className="space-y-3 px-1">
         <div className="flex items-center gap-2">
-          <div className="w-1 h-3 bg-accent/40 rounded-full" />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">
+          <div className="w-1 h-3 bg-accent/60 rounded-full" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">
             {t('speed', 'Speed')}
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {SPEED_OPTIONS.map((s) => (
-            <button
+            <Button
               key={s}
-              type="button"
+              size="xs"
+              variant={settings.speed === s ? 'primary' : 'secondary'}
               onClick={() => onUpdate({ speed: s })}
               className={cn(
-                "px-3 py-2 rounded-xl text-[11px] font-bold transition-all cursor-pointer active:scale-90",
-                settings.speed === s
-                  ? "bg-accent/15 text-accent border border-accent/30"
-                  : "bg-black/40 text-stone-500 border border-white/5 hover:text-stone-300 hover:border-white/10"
+                "px-3 text-[11px] font-bold",
+                settings.speed === s && "border-accent/40 shadow-sm shadow-accent/10"
               )}
             >
               {s}x
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
       {/* Volume */}
-      <div className="space-y-4 px-1">
+      <div className="space-y-3 px-1">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <div className="w-1 h-3 bg-accent/40 rounded-full" />
-            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">
+            <div className="w-1 h-3 bg-accent/60 rounded-full" />
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">
               {t('volume', 'Volume')}
             </span>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            square
             onClick={() => onUpdate({ muted: !settings.muted })}
-            className={cn(
-              "p-1.5 rounded-lg transition-all active:scale-90 cursor-pointer",
-              settings.muted ? "bg-red-500/10 text-red-500" : "text-stone-500 hover:text-stone-300 hover:bg-white/5"
-            )}
+            className={settings.muted ? "bg-red-500/10 text-red-400 hover:text-red-300" : "text-stone-400"}
             aria-label={settings.muted ? t('unmute', 'Unmute') : t('mute', 'Mute')}
           >
-            {settings.muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-          </button>
+            {settings.muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </Button>
         </div>
         <div className={cn(
-          "bg-black/40 p-5 rounded-3xl border border-white/5 transition-opacity",
+          "bg-black/40 p-4 rounded-2xl border border-white/5 transition-opacity",
           settings.muted && "opacity-50 pointer-events-none"
         )}>
-          <CustomSlider
+          <Slider
+            mode="block"
+            label={t('volume', 'Volume')}
             min={0}
             max={1}
             step={0.01}
-            value={settings.volume}
+            value={settings.volume ?? 1}
             onChange={(v) => onUpdate({ volume: v })}
             formatValue={(v) => `${Math.round(v * 100)}%`}
           />
@@ -447,16 +278,16 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
       </div>
 
       {/* Audio Transitions */}
-      <div className="space-y-4 px-1">
+      <div className="space-y-3 px-1">
         <div className="flex items-center gap-2">
-          <div className="w-1 h-3 bg-accent/40 rounded-full" />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">
+          <div className="w-1 h-3 bg-accent/60 rounded-full" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">
             {t('audio_transitions', 'Audio Transitions')}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-black/40 p-4 rounded-3xl border border-white/5 space-y-3 group hover:border-white/10 transition-colors">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-stone-600 block px-0.5">
+          <div className="bg-black/40 p-3.5 rounded-2xl border border-white/5 space-y-2.5 hover:border-white/10 transition-colors">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-stone-500 block px-0.5">
               {t('fade_in', 'Fade In')}
             </span>
             <ScrubbableInput
@@ -468,8 +299,8 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
               className="bg-stone-900/50 rounded-xl px-3 py-2 border border-white/5"
             />
           </div>
-          <div className="bg-black/40 p-4 rounded-3xl border border-white/5 space-y-3 group hover:border-white/10 transition-colors">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-stone-600 block px-0.5">
+          <div className="bg-black/40 p-3.5 rounded-2xl border border-white/5 space-y-2.5 hover:border-white/10 transition-colors">
+            <span className="text-[9px] font-bold uppercase tracking-widest text-stone-500 block px-0.5">
               {t('fade_out', 'Fade Out')}
             </span>
             <ScrubbableInput
@@ -485,18 +316,18 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
       </div>
 
       {/* Trimming */}
-      <div className="space-y-4 px-1">
+      <div className="space-y-3 px-1">
         <div className="flex items-center gap-2">
-          <div className="w-1 h-3 bg-accent/40 rounded-full" />
-          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">
+          <div className="w-1 h-3 bg-accent/60 rounded-full" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-400">
             <Scissors className="w-3 h-3 inline mr-1.5" />
             {t('trimming', 'Trimming')}
           </span>
         </div>
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-black/40 p-4 rounded-3xl border border-white/5 space-y-3 group hover:border-white/10 transition-colors">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-stone-600 block px-0.5">
+            <div className="bg-black/40 p-3.5 rounded-2xl border border-white/5 space-y-2.5 hover:border-white/10 transition-colors">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-stone-500 block px-0.5">
                 {t('trim_start', 'Start')}
               </span>
               <ScrubbableInput
@@ -507,8 +338,8 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
                 className="bg-stone-900/50 rounded-xl px-3 py-2 border border-white/5"
               />
             </div>
-            <div className="bg-black/40 p-4 rounded-3xl border border-white/5 space-y-3 group hover:border-white/10 transition-colors">
-              <span className="text-[9px] font-bold uppercase tracking-widest text-stone-600 block px-0.5">
+            <div className="bg-black/40 p-3.5 rounded-2xl border border-white/5 space-y-2.5 hover:border-white/10 transition-colors">
+              <span className="text-[9px] font-bold uppercase tracking-widest text-stone-500 block px-0.5">
                 {t('trim_end', 'End')}
               </span>
               <ScrubbableInput
@@ -521,34 +352,30 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
             </div>
           </div>
           
-          {(settings.trimStart > 0 || settings.trimEnd > 0) && (
-            <button
+          {(Boolean(settings.trimStart && settings.trimStart > 0) || Boolean(settings.trimEnd && settings.trimEnd > 0)) && (
+            <Button
+              variant="primary"
+              size="md"
               onClick={handleApplyTrim}
               disabled={isTrimming}
-              className={cn(
-                "w-full flex items-center justify-center gap-2 p-3 rounded-2xl transition-all font-bold text-[11px] uppercase tracking-wider",
-                isTrimming 
-                  ? "bg-white/5 text-stone-500 cursor-wait" 
-                  : "bg-accent/10 border border-accent/20 text-accent hover:bg-accent/15 cursor-pointer active:scale-[0.98]"
-              )}
+              className="w-full justify-center gap-2"
             >
               <Scissors className={cn("w-4 h-4", isTrimming && "animate-pulse")} />
               {isTrimming ? t('trimming_wait', 'Applying Trim...') : t('apply_physical_trim', 'Apply Physical Trim')}
-            </button>
+            </Button>
           )}
         </div>
       </div>
 
       {/* Loop */}
-      <div className="space-y-4 px-1">
-        <button
-          type="button"
+      <div className="space-y-3 px-1">
+        <div
           onClick={() => onUpdate({ loop: !settings.loop })}
           className={cn(
-            "w-full flex items-center justify-between p-5 rounded-3xl border transition-all active:scale-[0.98] cursor-pointer",
+            "w-full flex items-center justify-between p-4 rounded-2xl border transition-all apple-press cursor-pointer",
             settings.loop
-              ? "bg-accent/10 border-accent/30 text-accent font-bold"
-              : "bg-black/40 border-white/5 text-stone-500 hover:border-white/10 hover:text-stone-300"
+              ? "bg-accent/15 border-accent/40 text-accent font-bold"
+              : "bg-black/40 border-white/5 text-stone-400 hover:border-white/10 hover:text-stone-200"
           )}
         >
           <div className="flex items-center gap-3">
@@ -556,34 +383,31 @@ export const VideoTabContent: React.FC<IVideoTabContentProps> = ({ settings, onU
               "p-2 rounded-xl border transition-colors",
               settings.loop ? "bg-accent/20 border-accent/20" : "bg-white/5 border-white/5"
             )}>
-              <Repeat className={cn("w-4 h-4", settings.loop ? "text-accent" : "text-stone-600")} />
+              <Repeat className={cn("w-4 h-4", settings.loop ? "text-accent" : "text-stone-500")} />
             </div>
             <span className="text-[11px] font-bold uppercase tracking-widest">
               {t('loop_playback', 'Loop Playback')}
             </span>
           </div>
-          <div className={cn(
-            "w-9 h-5 rounded-full relative transition-colors duration-300 flex items-center px-1",
-            settings.loop ? "bg-accent" : "bg-stone-800"
-          )}>
-            <div className={cn(
-              "w-3 h-3 rounded-full bg-white transition-all duration-300 shadow-sm",
-              settings.loop ? "ml-4" : "ml-0"
-            )} />
-          </div>
-        </button>
+          <Switch
+            checked={!!settings.loop}
+            onChange={(checked) => onUpdate({ loop: checked })}
+            size="sm"
+          />
+        </div>
       </div>
 
       {/* Remove Video */}
-      <div className="pt-6 border-t border-white/5 px-1">
-        <button
-          type="button"
+      <div className="pt-4 border-t border-white/5 px-1">
+        <Button
+          variant="danger"
+          size="md"
           onClick={() => onUpdate({ mediaId: undefined, posterFrame: undefined })}
-          className="w-full flex items-center justify-center gap-3 p-5 rounded-3xl bg-red-500/5 border border-red-500/10 text-red-500 hover:bg-red-500/10 hover:border-red-500/20 transition-all font-black uppercase tracking-[0.2em] text-[10px] cursor-pointer group"
+          className="w-full justify-center gap-2 text-[11px] font-bold tracking-wider"
         >
-          <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />
+          <Trash2 className="w-4 h-4" />
           {t('remove_video', 'Remove Video')}
-        </button>
+        </Button>
       </div>
     </div>
   );

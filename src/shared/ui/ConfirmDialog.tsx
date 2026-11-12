@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
+import { Button } from './Button';
 
 interface ConfirmDialogProps {
     isOpen: boolean;
@@ -54,14 +55,13 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
     return createPortal(
         <div
-            className="fixed inset-0 z-10010 flex items-center justify-center bg-black/60 backdrop-blur-lg animate-in fade-in duration-200"
+            className="fixed inset-0 z-10010 flex items-center justify-center bg-stone-950/75 backdrop-blur-xl apple-backdrop p-4"
             onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
         >
             <div
                 ref={panelRef}
                 className={cn(
-                    "relative w-full max-w-sm rounded-[24px] border shadow-2xl overflow-hidden",
-                    "animate-in zoom-in-95 slide-in-from-bottom-4 duration-300",
+                    "relative w-full max-w-sm rounded-2xl border shadow-2xl overflow-hidden ring-1 ring-white/5 apple-modal",
                     danger
                         ? "bg-stone-900 border-red-500/20"
                         : "bg-stone-900 border-white/10"
@@ -80,7 +80,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                     {/* Icon + Title */}
                     <div className="flex items-start gap-4 mb-4">
                         <div className={cn(
-                            "flex items-center justify-center w-11 h-11 rounded-2xl shrink-0 border",
+                            "flex items-center justify-center w-12 h-12 rounded-xl shrink-0 border",
                             danger
                                 ? "bg-red-500/10 border-red-500/20"
                                 : "bg-accent/10 border-accent/20"
@@ -91,52 +91,51 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                             }
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h3 className="text-sm font-black text-white uppercase tracking-wide leading-tight">
+                            <h3 className="text-sm font-bold text-white uppercase tracking-wider leading-tight">
                                 {title}
                             </h3>
                             {description && (
-                                <p className="text-[11px] text-stone-400 mt-1.5 leading-relaxed font-medium">
+                                <p className="text-xs text-stone-400 mt-1 leading-relaxed font-medium">
                                     {description}
                                 </p>
                             )}
                         </div>
-                        <button
-                            type="button"
+                        <Button
+                            size="sm"
+                            square
+                            variant="ghost"
                             onClick={onCancel}
-                            className="p-1.5 rounded-xl hover:bg-white/5 text-stone-600 hover:text-stone-300 transition-colors shrink-0"
+                            className="text-stone-500 hover:text-stone-300 shrink-0"
                         >
                             <X className="w-4 h-4" />
-                        </button>
+                        </Button>
                     </div>
 
-                    {/* Optional children slot (e.g. template picker, block selector) */}
+                    {/* Optional children slot */}
                     {children && (
-                        <div className="mb-5 pl-[60px]">
+                        <div className="mb-4 pl-16">
                             {children}
                         </div>
                     )}
 
                     {/* Actions */}
-                    <div className="flex gap-3 pl-[60px]">
-                        <button
-                            type="button"
+                    <div className="flex gap-3 pl-16">
+                        <Button
+                            size="sm"
+                            variant="outline"
                             onClick={onCancel}
-                            className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-stone-400 hover:text-stone-200 font-bold uppercase text-[10px] tracking-wider transition-all border border-white/5"
+                            className="flex-1"
                         >
                             {cancelLabel}
-                        </button>
-                        <button
-                            type="button"
+                        </Button>
+                        <Button
+                            size="sm"
+                            variant={danger ? 'danger' : 'primary'}
                             onClick={onConfirm}
-                            className={cn(
-                                "flex-1 px-4 py-2.5 rounded-xl font-bold uppercase text-[10px] tracking-wider transition-all border",
-                                danger
-                                    ? "bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 border-red-500/20 hover:border-red-500/30"
-                                    : "bg-accent/90 hover:bg-accent text-stone-900 border-accent/20"
-                            )}
+                            className="flex-1"
                         >
                             {confirmLabel}
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>

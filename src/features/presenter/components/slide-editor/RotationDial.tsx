@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Compass } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
@@ -8,7 +8,7 @@ interface RotationDialProps {
     value: number | 'mixed';
     onChange: (value: number) => void;
     className?: string;
-    t?: any;
+    t?: (key: string, fallback?: string) => string;
 }
 
 /**
@@ -24,7 +24,7 @@ export const RotationDial: React.FC<RotationDialProps> = ({
     const dialRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
 
-    const handleRotationChange = (e: MouseEvent | TouchEvent) => {
+    const handleRotationChange = useCallback((e: MouseEvent | TouchEvent) => {
         if (!dialRef.current) return;
         const rect = dialRef.current.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
@@ -41,7 +41,7 @@ export const RotationDial: React.FC<RotationDialProps> = ({
         if (deg < 0) deg += 360;
 
         onChange(Math.round(deg));
-    };
+    }, [onChange]);
 
     useEffect(() => {
         if (!isDragging) return;
@@ -63,14 +63,14 @@ export const RotationDial: React.FC<RotationDialProps> = ({
             window.removeEventListener('touchmove', onMove);
             window.removeEventListener('touchend', onUp);
         };
-    }, [isDragging]);
+    }, [isDragging, handleRotationChange]);
 
     const displayValue = value === 'mixed' ? 0 : value;
     const isMixed = value === 'mixed';
 
     return (
         <div className={cn("flex flex-col items-center gap-1.5", className)}>
-            <label className="text-[8px] font-black text-stone-500 uppercase tracking-[0.2em] mb-0.5">{label}</label>
+            <label className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-0.5">{label}</label>
             <div
                 ref={dialRef}
                 onMouseDown={async () => {
@@ -116,8 +116,8 @@ export const RotationDial: React.FC<RotationDialProps> = ({
                 {/* Value Badge */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <span className={cn(
-                        "text-[9px] font-bold transition-colors",
-                        isMixed ? "text-stone-600 italic" : "text-stone-400 group-hover:text-accent"
+                        "text-xs font-sans tabular-nums font-semibold transition-colors",
+                        isMixed ? "text-stone-600 italic" : "text-stone-300 group-hover:text-accent"
                     )}>
                         {isMixed ? 'Mixed' : `${displayValue}°`}
                     </span>

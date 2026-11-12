@@ -30,6 +30,16 @@
 
   # 2. Robust process termination
   # Kill the app before anything else starts to release file locks.
+  ${nsProcess::FindProcess} "Mirato.exe" $R0
+  ${If} $R0 == 0
+    ${nsProcess::KillProcess} "Mirato.exe" $R1
+    ExecWait 'taskkill /F /IM "Mirato.exe" /T'
+  ${EndIf}
+  ${nsProcess::FindProcess} "Deck.CE.exe" $R0
+  ${If} $R0 == 0
+    ${nsProcess::KillProcess} "Deck.CE.exe" $R1
+    ExecWait 'taskkill /F /IM "Deck.CE.exe" /T'
+  ${EndIf}
   ${nsProcess::FindProcess} "Ekklesienter.exe" $R0
   ${If} $R0 == 0
     # First try graceful/standard kill
@@ -44,7 +54,7 @@
     loop_wait:
       Sleep 500
       IntOp $1 $1 + 1
-      ${nsProcess::FindProcess} "Ekklesienter.exe" $R0
+      ${nsProcess::FindProcess} "Mirato.exe" $R0
       ${If} $R0 != 0
         Goto done_init
       ${EndIf}
@@ -63,6 +73,11 @@
 
 !macro customUnInit
   # Kill the app before uninstallation starts
+  ${nsProcess::FindProcess} "Deck.CE.exe" $R0
+  ${If} $R0 == 0
+    ${nsProcess::KillProcess} "Deck.CE.exe" $R1
+    ExecWait 'taskkill /F /IM "Deck.CE.exe" /T'
+  ${EndIf}
   ${nsProcess::FindProcess} "Ekklesienter.exe" $R0
   ${If} $R0 == 0
     ${nsProcess::KillProcess} "Ekklesienter.exe" $R1

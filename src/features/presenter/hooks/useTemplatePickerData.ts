@@ -28,8 +28,10 @@ export interface UseTemplatePickerDataReturn {
  */
 export function useTemplatePickerData(blockId?: string): UseTemplatePickerDataReturn {
   // ─── Data Queries ───
-  const allTemplates = useLiveQuery(() => PresentationDataService.getTemplates()) || [];
-  const allBlocks = useLiveQuery(() => PresentationDataService.getBlocks()) || [];
+  const liveTemplates = useLiveQuery(() => PresentationDataService.getTemplates());
+  const liveBlocks = useLiveQuery(() => PresentationDataService.getBlocks());
+  const allTemplates = useMemo(() => liveTemplates || [], [liveTemplates]);
+  const allBlocks = useMemo(() => liveBlocks || [], [liveBlocks]);
   const blocksMap = useMemo(() => new Map(allBlocks.map((b: IBlock) => [b.id, b])), [allBlocks]);
 
   // ─── Search ───

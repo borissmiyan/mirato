@@ -1,20 +1,15 @@
-import React from 'react';
-import { db } from '@/core/db';
-import DropdownSelector from '@/shared/ui/DropdownSelector';
+import React, { useState } from 'react';
 import {
-    Music, Type, Clock, Trash2, Plus, Palette, Zap, Sun, Keyboard, ArrowRight, CornerDownRight, ShieldAlert, GripVertical, MousePointer2, FileAudio, Import
+    Music, Type, Clock, Plus, Palette, Zap, Import
 } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
-import { ISlide, ITimerSettings, IStyleLayer, ITimerSlide, ICanvasSlide } from '@/core/types';
+import { ISlide, ITimerSettings, ITimerSlide, ICanvasSlide } from '@/core/types';
 import { ModalType } from '@/core/store/modalStore';
 import type { TFunction } from 'i18next';
 import { PlaylistItemRow } from './PlaylistItemRow';
-import { BackgroundPicker } from './BackgroundPicker';
-import { FloatingPopover } from '@/components/FloatingPopover';
-import { ensureLayers } from '@/core/utils/styleMigration';
-import { SlideBackground } from '../display/SlideBackground';
 import { MediaPersistenceService } from '../../services/MediaPersistenceService';
 import { usePresentationStore } from '../../store/presentationStore';
+import IconButton from '@/shared/ui/IconButton';
 import {
     DndContext,
     closestCenter,
@@ -30,8 +25,6 @@ import {
     sortableKeyboardCoordinates,
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-
-import { ITimerAction, ITimerTrigger } from '@/core/types/timer';
 import { TimerTriggerItem } from './TimerTriggerItem';
 import { TimerFillPicker } from './TimerFillPicker';
 
@@ -46,6 +39,17 @@ export const TimerTabContent: React.FC<ITimerTabContentProps> = ({
     selectedSlide, updateTimerSettings, openModal, t,
 }) => {
     const slides = usePresentationStore(state => state.activePresentation?.slides || []);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    const [localMins, setLocalMins] = useState<string | null>(null);
+    const [localSecs, setLocalSecs] = useState<string | null>(null);
+
     // TimerTabContent is primarily designed for normal slides with timer overlays
     if (selectedSlide.type !== 'normal' && selectedSlide.type !== 'timer') return null;
 
@@ -55,16 +59,6 @@ export const TimerTabContent: React.FC<ITimerTabContentProps> = ({
         : selectedSlide.type === 'timer' 
             ? (selectedSlide as ITimerSlide)
             : undefined;
-
-    const sensors = useSensors(
-        useSensor(PointerSensor),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
-    );
-
-    const [localMins, setLocalMins] = React.useState<string | null>(null);
-    const [localSecs, setLocalSecs] = React.useState<string | null>(null);
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
@@ -198,9 +192,10 @@ export const TimerTabContent: React.FC<ITimerTabContentProps> = ({
                     ].map((style) => (
                         <button
                             key={style}
+                            type="button"
                             onClick={() => updateTimerSettings(selectedSlide.id, { style: style as ITimerSettings['style'] })}
                             className={cn(
-                                "px-3 py-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all active:scale-95 cursor-pointer",
+                                "px-3 py-3 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer apple-press",
                                 ts?.style === style ? "bg-orange-500/20 border-orange-500/40 text-orange-400 shadow-lg shadow-orange-500/10" : "bg-white/3 border-white/5 text-stone-500 hover:border-white/10 hover:text-stone-300"
                             )}
                         >
@@ -296,7 +291,8 @@ export const TimerTabContent: React.FC<ITimerTabContentProps> = ({
                         <Music className="w-3.5 h-3.5 text-stone-400" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">{t('playlist', 'Playlist')}</span>
                     </div>
-                    <button
+                    <IconButton
+                        icon={<Import className="w-4 h-4" />}
                         onClick={() => openModal(ModalType.AUDIO_PICKER, {
                             type: 'audio',
                             multi: true,
@@ -305,12 +301,10 @@ export const TimerTabContent: React.FC<ITimerTabContentProps> = ({
                                 updateTimerSettings(selectedSlide.id, { playlist: Array.from(new Set([...current, ...ids])) });
                             }
                         })}
-                        className="p-1.5 bg-accent/10 border border-accent/20 rounded-lg text-accent hover:bg-accent/20 transition-all active:scale-95 cursor-pointer"
-                        title={t('import_file', 'Import File')}
-                        aria-label={t('import_file', 'Import File')}
-                    >
-                        <Import className="w-4 h-4" />
-                    </button>
+                        variant="primary"
+                        size="xs"
+                        label={t('import_file', 'Import File')}
+                    />
                 </div>
                 <div
                     onDragOver={(e) => {
@@ -365,7 +359,8 @@ export const TimerTabContent: React.FC<ITimerTabContentProps> = ({
                         <Zap className="w-3.5 h-3.5 text-stone-400" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-stone-500">{t('triggers_actions', 'Triggers & Actions')}</span>
                     </div>
-                    <button
+                    <IconButton
+                        icon={<Plus className="w-4 h-4" />}
                         onClick={() => {
                             const current = ts?.triggers || [];
                             updateTimerSettings(selectedSlide.id, {
@@ -376,10 +371,10 @@ export const TimerTabContent: React.FC<ITimerTabContentProps> = ({
                                 }]
                             });
                         }}
-                        className="p-1.5 hover:bg-accent/10 rounded-lg text-accent transition-all active:scale-95 group cursor-pointer"
-                    >
-                        <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
-                    </button>
+                        variant="ghost"
+                        size="xs"
+                        label={t('add_trigger', 'Add Trigger')}
+                    />
                 </div>
                 {(ts?.triggers || []).map((trigger, idx) => (
                     <TimerTriggerItem
@@ -399,3 +394,5 @@ export const TimerTabContent: React.FC<ITimerTabContentProps> = ({
         </div>
     );
 };
+
+export default TimerTabContent;

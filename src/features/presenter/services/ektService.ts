@@ -10,6 +10,12 @@ import { APP_VERSION, EKT_SCHEMA_VERSION } from '@/core/constants';
 // Types
 // ------------------------------------------------------------------ //
 
+interface FileSystemHandleWithPermissions {
+    queryPermission: (descriptor: { mode: 'readwrite' }) => Promise<PermissionState>;
+    requestPermission: (descriptor: { mode: 'readwrite' }) => Promise<PermissionState>;
+    createWritable: () => Promise<FileSystemWritableFileStream>;
+}
+
 export interface EktMediaManifest {
     [hash: string]: {
         filename: string;
@@ -95,7 +101,7 @@ export const EktService = {
         mediaPoolFolder.file('bins.json', JSON.stringify(bins, null, 2));
 
         // 4. Манифесты
-        const { fileHandle, ...serviceManifest } = service as any;
+        const { fileHandle, ...serviceManifest } = service as IServiceFile;
         serviceManifest.version = EKT_SCHEMA_VERSION;
         serviceManifest.engineVersion = APP_VERSION;
         zip.file('service.json', JSON.stringify(serviceManifest, null, 2));
@@ -112,15 +118,16 @@ export const EktService = {
         const service = await db.serviceFiles.get(serviceId);
         if (!service?.fileHandle) return;
 
-        const options = { mode: 'readwrite' };
-        if (await (service.fileHandle as any).queryPermission(options) !== 'granted') {
-            if (await (service.fileHandle as any).requestPermission(options) !== 'granted') {
+        const handle = service.fileHandle as FileSystemHandleWithPermissions;
+        const options = { mode: 'readwrite' as const };
+        if (await handle.queryPermission(options) !== 'granted') {
+            if (await handle.requestPermission(options) !== 'granted') {
                 throw new Error('Permission denied');
             }
         }
 
         const blob = await this.pack(serviceId);
-        const writable = await (service.fileHandle as any).createWritable();
+        const writable = await handle.createWritable();
         await writable.write(blob);
         await writable.close();
         await db.serviceFiles.update(serviceId, { updatedAt: new Date() });
@@ -250,7 +257,7 @@ export const EktService = {
             presentationIds: newPresentationIds,
             createdAt: new Date(),
             updatedAt: new Date(),
-            fileHandle: 'name' in blob ? (blob as any).handle : undefined,
+            fileHandle: (blob && typeof blob === 'object' && 'handle' in blob) ? (blob as { handle?: unknown }).handle as FileSystemHandle : undefined,
         };
 
         // Шаг 4: проверить конфликт

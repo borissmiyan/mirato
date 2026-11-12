@@ -5,6 +5,10 @@ import { ICanvasItem } from '@/core/types/canvas';
 import { IStyleLayer } from '@/core/types/style';
 import { PresenterSettings } from '@/core/types/settings';
 import CanvasItemView from './CanvasItemView';
+import { MaskGroupRenderer } from './renderers/MaskGroupRenderer';
+import { BooleanGroupRenderer } from './renderers/BooleanGroupRenderer';
+import { partitionMaskedItems } from '@/core/utils/canvasMasks';
+import { partitionBooleanGroups } from '@/core/utils/canvasBooleanGroups';
 import {
     Monitor, Music, Coins, Baby, Mic2, Megaphone,
     Presentation as PresentationIcon, BookOpen, Plus, Lock
@@ -68,6 +72,8 @@ interface SlideContentRendererProps {
     slide?: ISlide | null;
     /** Skip rendering canvas items (used when interactive SlideCanvas is present) */
     hideCanvasItems?: boolean;
+    /** Force muting audio on this instance (e.g. Stage view or duplicate preview) */
+    isMuted?: boolean;
     /** Whether this is for the projector window */
     isProjector?: boolean;
     /** Presenter settings for reference/labels */
@@ -115,9 +121,10 @@ const SlideContentRenderer: React.FC<SlideContentRendererProps> = ({
     blocksMap,
     templatesMap,
     isRemote = false,
-    isProjector = false
+    isProjector = false,
+    isMuted = false
 }) => {
-    const { settings: globalSettings } = usePresenterStore();
+    const globalSettings = usePresenterStore(state => state.settings);
     const settings = propSettings || globalSettings;
     const slide = propSlide;
 
@@ -136,7 +143,7 @@ const SlideContentRenderer: React.FC<SlideContentRendererProps> = ({
 
     const isRu = lang === 'ru';
     const ts = template?.textStyle;
-    const bg = backgroundOverride || (slide as any)?.backgroundOverride || template?.background;
+    const bg = backgroundOverride || (slide && 'backgroundOverride' in slide ? slide.backgroundOverride : undefined) || template?.background;
     const items = (canvasItems && canvasItems.length > 0)
         ? canvasItems
         : (slide?.type === 'normal' ? (slide as ICanvasSlide).content?.canvasItems : []);
@@ -170,7 +177,7 @@ const SlideContentRenderer: React.FC<SlideContentRendererProps> = ({
             {/* Background */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden">
                 {bg ? (
-                    <SlideBackground background={bg} />
+                    <SlideBackground background={bg} isPreview={isPreview} />
                 ) : (
                     <div 
                         className="absolute inset-0 transition-colors duration-500" 
@@ -314,13 +321,14 @@ const SlideContentRenderer: React.FC<SlideContentRendererProps> = ({
                         isLive={!isPreview && !isPreloading}
                         isPreloading={isPreloading}
                         isRemote={isRemote}
+                        isMuted={isMuted}
                     />
                 </div>
             )}
 
             {/* Lock badge for prebuilt templates */}
             {showLockBadge && (
-                <div className="absolute top-4 right-4 z-20 p-2 bg-black/40 backdrop-blur rounded-lg">
+                <div className="absolute top-4 right-4 z-20 p-2 bg-black/40 backdrop-blur rounded-xl">
                     <Lock className="w-4 h-4 text-white/50" />
                 </div>
             )}
@@ -330,10 +338,14 @@ const SlideContentRenderer: React.FC<SlideContentRendererProps> = ({
                 if (hideCanvasItems || !items || items.length === 0) return null;
                 
                 const sortedItems = [...items].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
+                const { regularItems: unmasked, maskGroups } = partitionMaskedItems(sortedItems.filter((ci: ICanvasItem) => ci.visible !== false));
+                const { regularItems, booleanGroups } = partitionBooleanGroups(unmasked);
 
                 return (
                     <div className="absolute inset-0 z-20 pointer-events-none overflow-visible">
-                        {sortedItems.filter((ci: ICanvasItem) => ci.visible).map((item: ICanvasItem) => {
+                        <MaskGroupRenderer maskGroups={maskGroups} isPreview={isPreview} />
+                        <BooleanGroupRenderer booleanGroups={booleanGroups} isPreview={isPreview} />
+                        {regularItems.map((item: ICanvasItem) => {
                         const isAutoWidth = item.type === 'text' && item.text?.resizingMode === 'auto-width';
                         const isAutoHeight = item.type === 'text' && item.text?.resizingMode === 'auto-height';
 

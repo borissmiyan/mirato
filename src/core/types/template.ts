@@ -1,13 +1,13 @@
 import { ICanvasItem } from './canvas';
 import { IStyleLayer } from './style';
-import type { SlideType } from './presentation';
+import type { SlideType } from './slide';
 
 export interface IAsset {
   id: string;
   type: 'text' | 'image' | 'video' | 'graphics';
   content: string;
   position: { x: number; y: number; w: number; h: number };
-  style?: any;
+  style?: Record<string, unknown>;
 }
 
 export interface ITemplateTextStyle {
@@ -43,4 +43,8 @@ export interface ITemplate {
   textStyle?: ITemplateTextStyle;
   canvasItems?: ICanvasItem[];       // Optional canvas items for the base template layout
   templateSlides?: ITemplateSlide[]; // Sub-slides saved within this template
+}
+
+export interface IEktmpFile extends ITemplate {
+  // Same as ITemplate for now, but designated as a file format
 }

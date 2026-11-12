@@ -1,0 +1,497 @@
+/* ==========================================================================
+   Deck.CE - Transitions & Apple HIG Motion Architecture
+   Spring physics: cubic-bezier(0.16, 1, 0.3, 1) & cubic-bezier(0.2, 0.8, 0.2, 1)
+   Hardware-accelerated transforms & zero main-thread jank (60/120fps ProMotion)
+   ========================================================================== */
+
+:root {
+    --transition-duration: 0.5s;
+
+    /* Apple HIG Spring Timing Curves */
+    --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring-press: cubic-bezier(0.2, 0.8, 0.2, 1);
+    --ease-spring-snappy: cubic-bezier(0.25, 1, 0.5, 1);
+    --ease-spring-bounce: cubic-bezier(0.34, 1.3, 0.64, 1);
+
+    /* Apple Motion Standard Durations */
+    --motion-press: 150ms;
+    --motion-spring: 200ms;
+    --motion-dropdown: 180ms;
+    --motion-modal: 200ms;
+    --motion-panel: 240ms;
+}
+
+/* ==========================================================================
+   1. Presentation Slide Transitions
+   ========================================================================== */
+
+.transition-active {
+    animation-duration: var(--transition-duration, 0.5s) !important;
+    animation-fill-mode: both !important;
+    pointer-events: none;
+}
+
+.transition-fade { animation-name: ts-fade; }
+.transition-blur { animation-name: ts-blur; }
+.transition-burn { animation-name: ts-burn; animation-timing-function: ease-out; }
+.transition-comic-dots-sweep { animation-name: ts-comic-dots; }
+.transition-iris { animation-name: ts-iris; animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+.transition-glitch { animation-name: ts-glitch; }
+.transition-curtain-split { animation-name: ts-curtain; }
+.transition-angled-wipe { animation-name: ts-angled; animation-timing-function: linear; }
+.transition-venetian-blinds { animation-name: ts-venetian; }
+.transition-diamond { animation-name: ts-diamond; }
+
+.transition-checkerboard-container {
+    perspective: 1200px;
+    transform-style: preserve-3d;
+}
+
+.transition-checkerboard-cell {
+    animation: ts-checkerboard-flip var(--tile-duration, var(--transition-duration)) var(--tile-delay, 0s) both cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: center;
+    backface-visibility: hidden;
+}
+
+.transition-comic-dot-cell {
+    animation: ts-comic-dot-scale var(--transition-duration) var(--tile-delay, 0s) both ease-out;
+    transform-origin: center;
+    border-radius: 50%;
+    backface-visibility: hidden;
+}
+
+.transition-slide {
+    animation-name: ts-dynamic-slide;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.transition-push {
+    animation-name: ts-dynamic-slide;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.transition-zoom {
+    animation-name: ts-dynamic-scale;
+    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.transition-pan {
+    animation-name: ts-dynamic-pan;
+    animation-timing-function: ease-in-out;
+}
+
+/* ==========================================================================
+   2. Presentation Transition Keyframes
+   ========================================================================== */
+
+@keyframes ts-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes ts-blur {
+    from { opacity: 0; filter: blur(20px); }
+    to { opacity: 1; filter: blur(0); }
+}
+
+@keyframes ts-burn {
+    0% { opacity: 0; filter: contrast(3) brightness(3) sepia(1) blur(5px); }
+    40% { opacity: 1; filter: contrast(2) brightness(2) sepia(0.5) blur(2px); }
+    100% { filter: none; }
+}
+
+@keyframes ts-comic-dots {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes ts-iris {
+    from { clip-path: circle(0% at 50% 50%); }
+    to { clip-path: circle(120% at 50% 50%); }
+}
+
+@keyframes ts-glitch {
+    0% { transform: translate(0); clip-path: inset(0 0 0 0); }
+    20% { transform: translate(-5px, 2px); clip-path: inset(10% 0 40% 0); }
+    40% { transform: translate(5px, -2px); clip-path: inset(50% 0 10% 0); }
+    60% { transform: translate(-2px, 5px); clip-path: inset(30% 0 20% 0); }
+    80% { transform: translate(2px, -5px); clip-path: inset(15% 0 50% 0); }
+    100% { transform: translate(0); clip-path: inset(0 0 0 0); }
+}
+
+@keyframes ts-curtain {
+    from { clip-path: inset(0 50% 0 50%); }
+    to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes ts-angled {
+    from { clip-path: polygon(0 0, 0 0, -100% 100%, 0 100%); }
+    to { clip-path: polygon(0 0, 200% 0, 100% 100%, 0 100%); }
+}
+
+@keyframes ts-venetian {
+    from { clip-path: inset(0 100% 0 0); }
+    to { clip-path: inset(0 0 0 0); }
+}
+
+@keyframes ts-diamond {
+    from { clip-path: polygon(50% 50%, 50% 50%, 50% 50%, 50% 50%); }
+    to { clip-path: polygon(50% -75%, 175% 50%, 50% 175%, -75% 50%); }
+}
+
+@keyframes ts-dynamic-slide {
+    from {
+        transform: translate(var(--tx-start, 0%), var(--ty-start, 0%)) scale(var(--s-start, 1));
+        opacity: var(--op-start, 1);
+    }
+    to {
+        transform: translate(0%, 0%) scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes ts-dynamic-scale {
+    from {
+        transform: scale(var(--s-start, 1));
+        opacity: var(--op-start, 1);
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes ts-dynamic-pan {
+    from {
+        transform: translate(var(--tx-start, 0%), var(--ty-start, 0%)) scale(1.05);
+        opacity: var(--op-start, 1);
+    }
+    to {
+        transform: translate(0%, 0%) scale(1.05);
+        opacity: 1;
+    }
+}
+
+@keyframes ts-checkerboard-flip {
+    0% {
+        transform: rotateY(-90deg) scale3d(0.9, 0.9, 1);
+        opacity: 0;
+    }
+    100% {
+        transform: rotateY(0deg) scale3d(1, 1, 1);
+        opacity: 1;
+    }
+}
+
+@keyframes ts-comic-dot-scale {
+    0% {
+        transform: scale3d(0, 0, 1);
+        opacity: 0;
+        border-radius: 50%;
+    }
+    60% {
+        transform: scale3d(1, 1, 1);
+        opacity: 1;
+        border-radius: 50%;
+    }
+    100% {
+        transform: scale3d(1, 1, 1);
+        opacity: 1;
+        border-radius: 0%;
+    }
+}
+
+/* ==========================================================================
+   3. Apple HIG Motion Keyframes (Spring Physics)
+   ========================================================================== */
+
+@keyframes apple-modal-in {
+    0% { opacity: 0; transform: scale(0.96); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes apple-modal-out {
+    0% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.96); }
+}
+
+@keyframes apple-dropdown-in {
+    0% { opacity: 0; transform: scale(0.96) translateY(-4px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes apple-dropdown-out {
+    0% { opacity: 1; transform: scale(1) translateY(0); }
+    100% { opacity: 0; transform: scale(0.96) translateY(-4px); }
+}
+
+@keyframes apple-spring-in {
+    0% { opacity: 0; transform: scale(0.94) translateY(6px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes apple-panel-slide-in {
+    0% { opacity: 0; transform: translateX(24px) scale(0.98); }
+    100% { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+/* ==========================================================================
+   4. Apple HIG Motion Utility Classes
+   ========================================================================== */
+
+/* Tactile Spring Press: fast compression, elastic return */
+.apple-press {
+    transition: transform var(--motion-press) var(--ease-spring-press);
+    will-change: transform;
+}
+.apple-press:active {
+    transform: scale(0.97);
+}
+
+/* Apple Spring Transition: swift response, smooth settle */
+.apple-spring {
+    transition: transform var(--motion-spring) var(--ease-spring),
+                opacity var(--motion-spring) var(--ease-spring);
+}
+
+/* Modal Window Animation (Apple Spring, 120Hz compositor-only) */
+.apple-modal {
+    animation: apple-modal-in 220ms var(--ease-spring) both;
+    transform-origin: center center;
+    will-change: transform, opacity;
+}
+
+/* Modal Backdrop Animation */
+.apple-backdrop {
+    animation: apple-modal-backdrop-in 200ms ease-out both;
+    will-change: opacity;
+}
+
+/* Dropdown Window Animation */
+.apple-dropdown {
+    animation: apple-dropdown-in var(--motion-dropdown) var(--ease-spring) both;
+    transform-origin: top center;
+    will-change: transform, opacity;
+}
+
+/* 120Hz ProMotion Apple HIG Slide Entrance:
+   Slide grows up from the bottom (transform-origin: bottom center) with fluid spring physics,
+   while sibling slides smoothly glide aside via hardware-accelerated FLIP. */
+.animate-timeline-slide-in {
+    animation: timeline-slide-grow-up 380ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+    transform-origin: bottom center;
+    will-change: transform, opacity, box-shadow;
+}
+
+.animate-timeline-block-expand {
+    display: contents;
+}
+
+@keyframes timeline-slide-grow-up {
+    0% {
+        opacity: 0;
+        transform: translateY(28px) scale3d(0.55, 0.55, 1);
+        box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.6), 0 0 20px rgba(234, 179, 8, 0.45);
+    }
+    40% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale3d(1, 1, 1);
+        box-shadow: none;
+    }
+}
+
+@keyframes apple-modal-in {
+    0% {
+        opacity: 0;
+        transform: scale3d(0.94, 0.94, 1) translate3d(0, 8px, 0);
+    }
+    100% {
+        opacity: 1;
+        transform: scale3d(1, 1, 1) translate3d(0, 0, 0);
+    }
+}
+
+@keyframes apple-modal-backdrop-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes apple-dropdown-in {
+    0% {
+        opacity: 0;
+        transform: scale3d(0.96, 0.96, 1) translate3d(0, -6px, 0);
+    }
+    100% {
+        opacity: 1;
+        transform: scale3d(1, 1, 1) translate3d(0, 0, 0);
+    }
+}
+
+/* Tactile Card Elevation */
+.apple-card-hover {
+    transition: transform var(--motion-spring) var(--ease-spring),
+                box-shadow var(--motion-spring) var(--ease-spring),
+                border-color var(--motion-spring) var(--ease-spring);
+}
+.apple-card-hover:hover {
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Tactile List Item Shift (2px ProMotion glide) */
+.apple-list-item {
+    transition: transform 180ms var(--ease-spring),
+                background-color 180ms var(--ease-spring);
+}
+.apple-list-item:hover {
+    transform: translateX(2px);
+}
+
+/* Soft Border & Ring Glow */
+.apple-glow {
+    transition: border-color var(--motion-spring) var(--ease-spring),
+                box-shadow var(--motion-spring) var(--ease-spring);
+}
+.apple-glow:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* ==========================================================================
+   5. Tailwind-Animate Compatibility Classes (Apple Spring Powered)
+   ========================================================================== */
+
+.animate-in {
+    animation-duration: var(--animation-duration, 180ms);
+    animation-timing-function: var(--animation-ease, var(--ease-spring));
+    animation-fill-mode: both;
+}
+
+.fade-in { animation-name: apple-fade-in; }
+.zoom-in-95 { animation-name: apple-zoom-in-95; }
+.zoom-in { animation-name: apple-zoom-in-90; }
+.zoom-in-50 { animation-name: apple-zoom-in-50; }
+
+@keyframes apple-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes apple-zoom-in-95 {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes apple-zoom-in-90 {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes apple-zoom-in-50 {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.slide-in-from-top-1 { animation-name: apple-slide-from-top-1; }
+.slide-in-from-top-2 { animation-name: apple-slide-from-top-2; }
+.slide-in-from-top-4 { animation-name: apple-slide-from-top-4; }
+.slide-in-from-bottom-2 { animation-name: apple-slide-from-bottom-2; }
+.slide-in-from-bottom-4 { animation-name: apple-slide-from-bottom-4; }
+.slide-in-from-bottom-10 { animation-name: apple-slide-from-bottom-10; }
+.slide-in-from-left-4 { animation-name: apple-slide-from-left-4; }
+.slide-in-from-right-2 { animation-name: apple-slide-from-right-2; }
+.slide-in-from-right-4 { animation-name: apple-slide-from-right-4; }
+
+@keyframes apple-slide-from-top-1 {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes apple-slide-from-top-2 {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes apple-slide-from-top-4 {
+    from { opacity: 0; transform: translateY(-16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes apple-slide-from-bottom-2 {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes apple-slide-from-bottom-4 {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes apple-slide-from-bottom-10 {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes apple-slide-from-left-4 {
+    from { opacity: 0; transform: translateX(-16px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes apple-slide-from-right-2 {
+    from { opacity: 0; transform: translateX(8px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+@keyframes apple-slide-from-right-4 {
+    from { opacity: 0; transform: translateX(16px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes apple-drag-lift {
+    0% { transform: scale(0.98) rotate(0deg); opacity: 0.92; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); }
+    50% { transform: scale(1.045) rotate(-1.8deg); opacity: 1; box-shadow: 0 22px 34px -8px rgba(0, 0, 0, 0.65), 0 0 24px rgba(234, 179, 8, 0.25); }
+    100% { transform: scale(1.03) rotate(-1.5deg); opacity: 1; box-shadow: 0 18px 28px -6px rgba(0, 0, 0, 0.55), 0 0 18px rgba(234, 179, 8, 0.2); }
+}
+.animate-apple-drag-lift {
+    animation: apple-drag-lift 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes apple-drag-drop {
+    0% { transform: scale(1.03) rotate(-1.5deg); box-shadow: 0 18px 28px -6px rgba(0, 0, 0, 0.55), 0 0 18px rgba(234, 179, 8, 0.2); }
+    100% { transform: scale(1) rotate(0deg); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); }
+}
+.animate-apple-drag-drop {
+    animation: apple-drag-drop 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ==========================================================================
+   6. Accessibility: Reduced Motion Support
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    .transition-active,
+    .animate-in,
+    .apple-press,
+    .apple-spring,
+    .apple-dropdown,
+    .apple-modal,
+    .apple-backdrop,
+    .animate-timeline-block-expand,
+    .animate-timeline-slide-in,
+    .apple-card-hover,
+    .apple-list-item,
+    .animate-apple-drag-lift,
+    .animate-apple-drag-drop,
+    .apple-glow {
+        animation: none !important;
+        transition: none !important;
+        transform: none !important;
+    }
+}

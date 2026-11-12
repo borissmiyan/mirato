@@ -77,12 +77,25 @@ export const useTimelineShortcuts = ({
                     // Or if we have a preview slide
                     if (state.previewSlideId) pasteAudioScope(state.previewSlideId);
                 } else if (state.activePresentationId) {
-                    pasteSlides(state.activePresentationId);
+                    let targetIdx: number | undefined = undefined;
+                    if (state.selectedSlideIds.length > 0) {
+                        const indices = state.selectedSlideIds.map(id => state.slides.findIndex(s => s.id === id)).filter(idx => idx !== -1);
+                        if (indices.length > 0) {
+                            targetIdx = Math.max(...indices) + 1;
+                        }
+                    } else if (state.previewSlideId) {
+                        const idx = state.slides.findIndex(s => s.id === state.previewSlideId);
+                        if (idx !== -1) {
+                            targetIdx = idx + 1;
+                        }
+                    }
+                    pasteSlides(state.activePresentationId, targetIdx);
                 }
             } else if (isMod && e.key === 'd') {
                 if (!isTimelineHoveredRef.current) return;
                 // Command+D for duplication
                 e.preventDefault();
+                e.stopImmediatePropagation?.();
                 if (state.selectedAudioScopeId) {
                     duplicateAudioScope(state.selectedAudioScopeId);
                 } else if (state.selectedSlideIds.length > 0) {
@@ -112,5 +125,5 @@ export const useTimelineShortcuts = ({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [copySlides, pasteSlides, duplicateSlides, removeSlides, clearSelection, duplicateSlide, removeSlide, setSelectedSlideIds, isTimelineHoveredRef, copyAudioScope, pasteAudioScope, duplicateAudioScope]);
+    }, [copySlides, pasteSlides, duplicateSlides, removeSlides, clearSelection, duplicateSlide, removeSlide, setSelectedSlideIds, setLiveSlide, isTimelineHoveredRef, copyAudioScope, pasteAudioScope, duplicateAudioScope]);
 };

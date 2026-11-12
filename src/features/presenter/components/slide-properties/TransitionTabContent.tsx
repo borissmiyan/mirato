@@ -11,6 +11,7 @@ import { ISlide, ISlideTransition, TransitionDirection, ICanvasSlide } from '@/c
 import { TRANSITIONS, TRANSITION_CATEGORIES } from '../../constants/transitions';
 import { ScrubbableInput } from '../slide-properties/ScrubbableInput';
 import { PropertySection } from '../slide-properties/PropertySection';
+import { Tooltip } from '@/shared/ui';
 
 interface TransitionTabContentProps {
     selectedSlide?: ISlide; // Optional if editing presentation-level transition
@@ -32,7 +33,6 @@ export const TransitionTabContent: React.FC<TransitionTabContentProps> = ({
     const currentIndex = selectedSlide ? slides.findIndex(s => s.id === selectedSlide.id) : -1;
     const prevSlide = currentIndex > 0 ? slides[currentIndex - 1] : (currentIndex === 0 ? null : (slides.length > 0 ? slides[slides.length - 1] : null));
 
-    const [hoveredTransitionId, setHoveredTransitionId] = useState<string | null>(null);
     const currentTransition = passedTransition || (selectedSlide?.type === 'normal' ? (selectedSlide as ICanvasSlide).transition : undefined) || { type: 'none', duration: 0.5 };
 
     const handleTypeChange = (type: string) => {
@@ -129,19 +129,21 @@ export const TransitionTabContent: React.FC<TransitionTabContentProps> = ({
                                 </div>
                                 <div className="grid grid-cols-3 gap-1 bg-black/40 p-1.5 rounded-xl border border-white/5">
                                     {directions.map(({ id, icon: Icon, label }) => (
-                                        <button
-                                            key={id}
-                                            onClick={() => handleDirectionChange(id)}
-                                            className={cn(
-                                                "w-8 h-8 flex items-center justify-center rounded-lg transition-all cursor-pointer",
-                                                currentTransition.direction === id || (!currentTransition.direction && id === 'right')
-                                                    ? "bg-accent/20 text-accent border border-accent/30 shadow-[0_0_10px_rgba(234,179,8,0.1)]"
-                                                    : "text-stone-500 hover:bg-white/5 hover:text-stone-300 border border-transparent"
-                                            )}
-                                            title={label}
-                                        >
-                                            <Icon className="w-4 h-4" />
-                                        </button>
+                                        <Tooltip key={id} content={label} position="top">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDirectionChange(id)}
+                                                className={cn(
+                                                    "w-8 h-8 flex items-center justify-center rounded-xl transition-all cursor-pointer apple-press",
+                                                    currentTransition.direction === id || (!currentTransition.direction && id === 'right')
+                                                        ? "bg-accent/20 text-accent border border-accent/30 shadow-[0_0_10px_rgba(234,179,8,0.1)]"
+                                                        : "text-stone-500 hover:bg-white/5 hover:text-stone-300 border border-transparent"
+                                                )}
+                                                aria-label={label}
+                                            >
+                                                <Icon className="w-4 h-4" />
+                                            </button>
+                                        </Tooltip>
                                     ))}
                                 </div>
                             </div>
@@ -154,9 +156,10 @@ export const TransitionTabContent: React.FC<TransitionTabContentProps> = ({
             <div className="space-y-2">
                 {/* None Option */}
                 <button
+                    type="button"
                     onClick={() => handleTypeChange('none')}
                     className={cn(
-                        "w-full flex items-center gap-3 p-3 rounded-2xl border transition-all duration-200 group cursor-pointer",
+                        "w-full flex items-center gap-3 p-3 rounded-2xl border transition-all duration-200 group cursor-pointer apple-press",
                         currentTransition.type === 'none'
                             ? "bg-accent/10 border-accent/20 text-accent"
                             : "bg-black/40 border-white/5 text-stone-500 hover:bg-white/5 hover:border-white/10 hover:text-stone-300"
@@ -182,11 +185,10 @@ export const TransitionTabContent: React.FC<TransitionTabContentProps> = ({
                             {group.items.map(tr => (
                                 <button
                                     key={tr.id}
+                                    type="button"
                                     onClick={() => handleTypeChange(tr.id)}
-                                    onMouseEnter={() => setHoveredTransitionId(tr.id)}
-                                    onMouseLeave={() => setHoveredTransitionId(null)}
                                     className={cn(
-                                        "flex items-center justify-between p-2 rounded-xl transition-all duration-200 group text-left cursor-pointer",
+                                        "flex items-center justify-between p-2 rounded-xl transition-all duration-200 group text-left cursor-pointer apple-press",
                                         currentTransition.type === tr.id
                                             ? "bg-accent/10 text-accent"
                                             : "hover:bg-white/5 text-stone-400 hover:text-stone-200"
@@ -194,7 +196,7 @@ export const TransitionTabContent: React.FC<TransitionTabContentProps> = ({
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className={cn(
-                                            "w-7 h-7 rounded-lg flex items-center justify-center border transition-all duration-300",
+                                            "w-7 h-7 rounded-xl flex items-center justify-center border transition-all duration-300",
                                             currentTransition.type === tr.id ? "bg-accent/20 border-accent/30" : "bg-black/20 border-white/5"
                                         )}>
                                             {tr.icon ? <tr.icon className="w-3.5 h-3.5" /> : <div className="w-1 h-1 rounded-full bg-current opacity-40" />}

@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useSetAtom } from 'jotai';
+import { useShallow } from 'zustand/react/shallow';
 import { useDisplayStore } from '@/core/store/displayStore';
+import { canvasEffectiveScaleAtom } from '@/core/store/uiAtoms';
 import { cn } from '@/core/utils/cn';
 
 interface LogicalCanvasProps {
@@ -39,7 +42,12 @@ export const LogicalCanvas: React.FC<LogicalCanvasProps> = ({
     const [scale, setScale] = useState(1);
     const [containerRatio, setContainerRatio] = useState<number | null>(null);
 
-    const { aspectRatio, initElectronListener } = useDisplayStore();
+    const { aspectRatio, initElectronListener } = useDisplayStore(
+        useShallow(s => ({
+            aspectRatio: s.aspectRatio,
+            initElectronListener: s.initElectronListener,
+        }))
+    );
 
     // Ratio logic
     const safeRatio = aspectRatioOverride || (autoFill ? containerRatio : null) || (aspectRatio && aspectRatio > 0 ? aspectRatio : 16 / 9);
@@ -47,10 +55,11 @@ export const LogicalCanvas: React.FC<LogicalCanvasProps> = ({
 
     // Initialize Electron listener on mount
     useEffect(() => {
-        const result = initElectronListener();
-        const unsub = typeof result === 'function' ? result : undefined;
+        const unsub = initElectronListener();
         return () => {
-            if (unsub) unsub();
+            if (typeof unsub === 'function') {
+                unsub();
+            }
         };
     }, [initElectronListener]);
 
@@ -70,7 +79,7 @@ export const LogicalCanvas: React.FC<LogicalCanvasProps> = ({
                 const targetScaleY = safeH / logicalHeight;
                 const newScale = Math.min(targetScaleX, targetScaleY);
                 
-                // 🚀 PERFORMANCE: Update DOM directly during animation to avoid React render lag
+                // <Rocket className="w-4 h-4 inline-block" /> PERFORMANCE: Update DOM directly during animation to avoid React render lag
                 if (boundingBoxRef.current) {
                     boundingBoxRef.current.style.width = `${logicalWidth * newScale}px`;
                     boundingBoxRef.current.style.height = `${logicalHeight * newScale}px`;
@@ -102,6 +111,10 @@ export const LogicalCanvas: React.FC<LogicalCanvasProps> = ({
     }, [scale, zoom]);
 
     const effectiveScale = zoom === 1.0 ? scale : lastFitScale.current * zoom;
+    const setEffectiveCanvasScale = useSetAtom(canvasEffectiveScaleAtom);
+    useEffect(() => {
+        setEffectiveCanvasScale(effectiveScale);
+    }, [effectiveScale, setEffectiveCanvasScale]);
     
     // Calculate base offset to center the slide in the safe area
     const safeOffsetX = (viewportPadding.left - viewportPadding.right) / 2;
@@ -110,6 +123,8 @@ export const LogicalCanvas: React.FC<LogicalCanvasProps> = ({
     const effectiveOffset = zoom === 1.0 
         ? { x: safeOffsetX, y: safeOffsetY } 
         : { x: offset.x + safeOffsetX, y: offset.y + safeOffsetY };
+
+    const isStaticAdaptive = zoom === 1.0 && offset.x === 0 && offset.y === 0;
 
     return (
         <div
@@ -120,7 +135,7 @@ export const LogicalCanvas: React.FC<LogicalCanvasProps> = ({
                 ref={boundingBoxRef}
                 className={cn(
                     "relative overflow-visible shrink-0",
-                    zoom === 1.0 && "transition-all duration-300 ease-in-out", // Only animate in adaptive mode
+                    isStaticAdaptive && "transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]", // Apple HIG spring animation only when resetting/centering
                     containerClassName
                 )}
                 style={{
@@ -135,7 +150,7 @@ export const LogicalCanvas: React.FC<LogicalCanvasProps> = ({
                     ref={innerRef}
                     className={cn(
                         "absolute top-1/2 left-1/2 origin-center overflow-visible",
-                        zoom === 1.0 && "transition-transform duration-300 ease-in-out", // Only animate in adaptive mode
+                        isStaticAdaptive && "transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
                         className
                     )}
                     style={{

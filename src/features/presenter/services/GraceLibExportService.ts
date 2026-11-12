@@ -105,7 +105,7 @@ export const GraceLibExportService = {
                 // Restore binId from manifest
                 if (manifest) {
                     const originalId = path.split('/').pop()!.replace('.ektp', '');
-                    const meta = manifest.presentations.find((p: any) => p.id === originalId);
+                    const meta = manifest.presentations.find((p: { id: string; binId?: string }) => p.id === originalId);
                     if (meta?.binId) {
                         await db.presentationFiles.update(newId, { binId: meta.binId });
                     }
@@ -156,12 +156,12 @@ export const GraceLibExportService = {
             }
 
             const extension = type === 'presentations' ? '.ektp' : '.ektmp';
-            const itemType = type === 'presentations' ? 'presentation' : 'template';
+            const itemType = (type === 'presentations' ? 'presentation' : 'template') as 'presentation' | 'template';
 
             let savedCount = 0;
             for (const item of items) {
-                const blob = await this.packSingleItem(item.id, itemType as any);
-                const saved = await this._saveFile(blob, `${item.name}${extension}`, itemType as any);
+                const blob = await this.packSingleItem(item.id, itemType);
+                const saved = await this._saveFile(blob, `${item.name}${extension}`, itemType);
                 if (saved) savedCount++;
             }
 
@@ -191,7 +191,7 @@ export const GraceLibExportService = {
      */
     async _saveFile(blob: Blob, filename: string, type: string) {
         // Electron approach
-        if ((window as any).electron?.ipcRenderer?.invoke) {
+        if (window.electron?.ipcRenderer?.invoke) {
             const uint8Array = new Uint8Array(await blob.arrayBuffer());
             const extMap: Record<string, string[]> = {
                 presentation: ['ektp'],
@@ -202,7 +202,7 @@ export const GraceLibExportService = {
             // Clean filename to prevent double extensions if passed wrongly
             const cleanName = filename.endsWith(`.${extMap[type]?.[0]}`) ? filename : `${filename}.${extMap[type]?.[0] || 'bin'}`;
             
-            const saved = await (window as any).electron.ipcRenderer.invoke('export:save-file', {
+            const saved = await window.electron.ipcRenderer.invoke('export:save-file', {
                 filename: cleanName,
                 data: uint8Array,
                 title: i18n.t('export_item', 'Export Item'),
@@ -216,9 +216,9 @@ export const GraceLibExportService = {
         }
 
         // Web fallback (File System Access API)
-        if ('showSaveFilePicker' in window) {
+        if ('showSaveFilePicker' in window && window.showSaveFilePicker) {
             try {
-                const handle = await (window as any).showSaveFilePicker({
+                const handle = await window.showSaveFilePicker({
                     suggestedName: filename,
                     types: [{ description: type, accept: { 'application/zip': [`.${filename.split('.').pop()}`] } }]
                 });
@@ -226,8 +226,8 @@ export const GraceLibExportService = {
                 await writable.write(blob);
                 await writable.close();
                 return true;
-            } catch (e: any) {
-                if (e.name === 'AbortError') return false;
+            } catch (e: unknown) {
+                if (e instanceof Error && e.name === 'AbortError') return false;
             }
         }
 

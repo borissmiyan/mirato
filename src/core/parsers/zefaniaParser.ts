@@ -1,6 +1,6 @@
 import { BibleData, Book, Verse, Translation } from '@/core/types';
 import { SEQUENTIAL_TO_STANDARD, getBookName, getBookOrder } from '@/core/data/bookData';
-import { extractWords } from '@/features/search/utils/bibleSearchUtils';
+import { extractWords } from '@/core/utils/textUtils';
 
 /**
  * Parsers for Zefania XML Bible Format

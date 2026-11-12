@@ -1,6 +1,7 @@
 import React from 'react';
 import { Zap, Trash2 } from 'lucide-react';
 import DropdownSelector from '@/shared/ui/DropdownSelector';
+import { Input, IconButton } from '@/shared/ui';
 import type { TFunction } from 'i18next';
 import { ITimerTrigger, ITimerSettings, ITimerAction } from '@/core/types/timer';
 import { ISlide } from '@/core/types';
@@ -41,7 +42,7 @@ const TimerTriggerItemComponent: React.FC<ITimerTriggerItemProps> = ({
         <div className="bg-black/40 rounded-3xl border border-white/5 overflow-hidden shadow-inner p-4 space-y-4">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-6 h-6 rounded-lg bg-accent/10 flex items-center justify-center border border-accent/20">
+                    <div className="w-6 h-6 rounded-xl bg-accent/10 flex items-center justify-center border border-accent/20">
                         <Zap className="w-3 h-3 text-accent" />
                     </div>
                     <DropdownSelector
@@ -74,16 +75,17 @@ const TimerTriggerItemComponent: React.FC<ITimerTriggerItemProps> = ({
                         className="py-1 px-2 border-none bg-stone-100/5 text-[10px] font-black"
                     />
                 </div>
-                <button
+                <IconButton
+                    icon={Trash2}
+                    label={t('delete', 'Delete')}
+                    variant="danger"
+                    size="xs"
                     onClick={() => {
                         const p = [...(ts?.triggers || [])];
                         p.splice(idx, 1);
                         updateTimerSettings(selectedSlideId, { triggers: p });
                     }}
-                    className="p-1.5 hover:bg-red-500/20 text-stone-600 hover:text-red-400 rounded-lg transition-all cursor-pointer"
-                >
-                    <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                />
             </div>
             <div className="space-y-3">
                 <div className="flex items-center justify-between px-1">
@@ -112,8 +114,8 @@ const TimerTriggerItemComponent: React.FC<ITimerTriggerItemProps> = ({
                                     case 'close_override':
                                     case 'blackout':
                                     case 'flash':
-                                        actionToAdd = { id, type: val as any }; break;
-                                    default: actionToAdd = { id, type: val as any } as ITimerAction;
+                                        actionToAdd = { id, type: val as 'next_slide' | 'prev_slide' | 'blackout' | 'flash' | 'close_override' }; break;
+                                    default: actionToAdd = { id, type: val as unknown } as ITimerAction;
                                 }
 
                                 newActions.push(actionToAdd);
@@ -209,10 +211,11 @@ const TimerTriggerItemComponent: React.FC<ITimerTriggerItemProps> = ({
                             trigger.type === 'on_keypress' ? t('trigger_key', 'Trigger Key') : t('value_seconds', 'Seconds')}
                     </label>
                     {trigger.type === 'on_keypress' ? (
-                        <input
+                        <Input
                             type="text"
+                            size="xs"
                             placeholder="e.g. Enter, Space, f"
-                            value={(trigger as any).triggerValue || ''}
+                            value={trigger.triggerValue || ''}
                             onChange={(e) => {
                                 const p = [...(ts?.triggers || [])];
                                 const current = p[idx];
@@ -221,11 +224,12 @@ const TimerTriggerItemComponent: React.FC<ITimerTriggerItemProps> = ({
                                     updateTimerSettings(selectedSlideId, { triggers: p });
                                 }
                             }}
-                            className="w-full bg-stone-100/5 focus:bg-stone-100/10 border-none rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-0 placeholder:text-stone-700 transition-colors"
+                            className="w-full bg-stone-100/5 focus:bg-stone-100/10 border-white/5 text-xs font-medium placeholder:text-stone-700"
                         />
                     ) : (
-                        <input
+                        <Input
                             type="text"
+                            size="xs"
                             inputMode="numeric"
                             value={localValue !== null ? localValue : (('value' in trigger) ? trigger.value : 0)}
                             onChange={(e) => {
@@ -239,7 +243,7 @@ const TimerTriggerItemComponent: React.FC<ITimerTriggerItemProps> = ({
                                 }
                             }}
                             onBlur={() => setLocalValue(null)}
-                            className="w-full bg-stone-100/50 border-none rounded-lg px-3 py-2 text-xs font-medium focus:outline-none focus:ring-0 placeholder:text-stone-400"
+                            className="w-full bg-stone-100/5 border-white/5 text-xs font-medium placeholder:text-stone-500"
                         />
                     )}
                 </div>

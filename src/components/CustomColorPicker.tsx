@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Pipette } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
+import { useEyeDropper } from '@/shared/hooks/useEyeDropper';
 
 interface CustomColorPickerProps {
     color: string;
@@ -76,6 +79,8 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({
     label,
     className
 }) => {
+    const { t } = useTranslation();
+    const { isSupported, openEyeDropper } = useEyeDropper();
     const [hsv, setHsv] = useState(hexToHsv(color || '#FFFFFF'));
     const [isPickingSaturation, setIsPickingSaturation] = useState(false);
     const [isPickingHue, setIsPickingHue] = useState(false);
@@ -86,15 +91,24 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({
     // Sync state with prop
     useEffect(() => {
         const newHsv = hexToHsv(color || '#FFFFFF');
-        // Only update if hex is different (to avoid jitter during interaction)
-        if (hsvToHex(hsv.h, hsv.s, hsv.v) !== color.toUpperCase()) {
-            setHsv(newHsv);
-        }
+        setHsv(prev => {
+            if (hsvToHex(prev.h, prev.s, prev.v) !== color.toUpperCase()) {
+                return newHsv;
+            }
+            return prev;
+        });
     }, [color]);
 
-    const updateColor = useCallback((newHsv: { h: number, s: number, v: number }) => {
-        setHsv(newHsv);
-        onChange(hsvToHex(newHsv.h, newHsv.s, newHsv.v));
+    const handleSaturationMove = useCallback((e: React.PointerEvent | MouseEvent) => {
+        if (!saturationRef.current) return;
+        const rect = saturationRef.current.getBoundingClientRect();
+        const s = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+        const v = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
+        setHsv(prev => {
+            const next = { ...prev, s, v };
+            onChange(hsvToHex(next.h, next.s, next.v));
+            return next;
+        });
     }, [onChange]);
 
     const handleSaturationPointerDown = (e: React.PointerEvent) => {
@@ -103,25 +117,21 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
     };
 
-    const handleSaturationMove = (e: React.PointerEvent | MouseEvent) => {
-        if (!saturationRef.current) return;
-        const rect = saturationRef.current.getBoundingClientRect();
-        const s = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-        const v = Math.max(0, Math.min(100, (1 - (e.clientY - rect.top) / rect.height) * 100));
-        updateColor({ ...hsv, s, v });
-    };
+    const handleHueMove = useCallback((e: PointerEvent | React.PointerEvent) => {
+        if (!hueRef.current) return;
+        const rect = hueRef.current.getBoundingClientRect();
+        const h = Math.max(0, Math.min(360, ((e.clientX - rect.left) / rect.width) * 360));
+        setHsv(prev => {
+            const next = { ...prev, h };
+            onChange(hsvToHex(next.h, next.s, next.v));
+            return next;
+        });
+    }, [onChange]);
 
     const handleHuePointerDown = (e: React.PointerEvent) => {
         setIsPickingHue(true);
         handleHueMove(e);
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    };
-
-    const handleHueMove = (e: PointerEvent | React.PointerEvent) => {
-        if (!hueRef.current) return;
-        const rect = hueRef.current.getBoundingClientRect();
-        const h = Math.max(0, Math.min(360, ((e.clientX - rect.left) / rect.width) * 360));
-        updateColor({ ...hsv, h });
     };
 
     useEffect(() => {
@@ -134,7 +144,7 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({
             window.removeEventListener('pointermove', onMove);
             window.removeEventListener('pointerup', onUp);
         };
-    }, [isPickingSaturation, hsv, updateColor]);
+    }, [isPickingSaturation, handleSaturationMove]);
 
     useEffect(() => {
         if (!isPickingHue) return;
@@ -146,7 +156,7 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({
             window.removeEventListener('pointermove', onMove);
             window.removeEventListener('pointerup', onUp);
         };
-    }, [isPickingHue, hsv, updateColor]);
+    }, [isPickingHue, handleHueMove]);
 
     return (
         <div className={cn("space-y-4", className)}>
@@ -182,13 +192,13 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({
                 <div className="space-y-2">
                     <div
                         ref={hueRef}
-                        className="relative h-6 w-full rounded-lg cursor-pointer select-none overflow-hidden"
+                        className="relative h-6 w-full rounded-xl cursor-pointer select-none overflow-hidden"
                         style={{ background: 'linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)' }}
                         onPointerDown={handleHuePointerDown}
                     >
                         {/* Hue Handle */}
                         <div
-                            className="absolute inset-y-0 w-2 bg-white border border-black/20 rounded-md shadow-md -translate-x-1/2 pointer-events-none transition-all duration-75"
+                            className="absolute inset-y-0 w-2 bg-white border border-black/20 rounded-xl shadow-md -translate-x-1/2 pointer-events-none transition-all duration-75"
                             style={{ left: `${(hsv.h / 360) * 100}%` }}
                         />
                     </div>
@@ -200,9 +210,11 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({
                         {PRESET_COLORS.map((p) => (
                             <button
                                 key={p}
+                                type="button"
+                                aria-label={`Select color ${p}`}
                                 onClick={() => onChange(p)}
                                 className={cn(
-                                    "aspect-square rounded-lg border-2 transition-all hover:scale-110 active:scale-95",
+                                    "aspect-square rounded-xl border-2 transition-all hover:scale-110 active:scale-95 apple-press cursor-pointer",
                                     color.toUpperCase() === p ? "border-accent scale-110" : "border-white/5"
                                 )}
                                 style={{ backgroundColor: p }}
@@ -210,7 +222,21 @@ export const CustomColorPicker: React.FC<CustomColorPickerProps> = ({
                         ))}
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-center">
+                        {isSupported && (
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    const picked = await openEyeDropper();
+                                    if (picked) onChange(picked);
+                                }}
+                                className="h-10 px-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-accent/40 text-stone-400 hover:text-accent transition-colors apple-press cursor-pointer shrink-0 flex items-center justify-center"
+                                title={t('eyedropper', 'Пипетка цвета')}
+                                aria-label={t('eyedropper', 'Пипетка цвета')}
+                            >
+                                <Pipette className="w-4 h-4" />
+                            </button>
+                        )}
                         <div className="relative flex-1">
                             <input
                                 type="text"

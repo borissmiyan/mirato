@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+set -e
+
+node scripts/verify-no-test-tampering.mjs
+node scripts/verify-diff-budget.mjs
+node scripts/verify-no-secrets.mjs
+node scripts/verify-no-debug-leftovers.mjs
+node scripts/verify-no-large-files.mjs
+node scripts/verify-no-circular.mjs
+node scripts/verify-resource-hygiene.mjs
+node scripts/verify-esm-and-path-hygiene.mjs
+node scripts/verify-electron-smoke.mjs
+node scripts/verify-memoization.mjs
+node scripts/verify-security-antipatterns.mjs
+node scripts/verify-schema-drift.mjs
+node scripts/verify-component-budget.mjs --staged
+node scripts/verify-design-system.mjs --staged
+npx lint-staged

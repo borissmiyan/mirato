@@ -6,8 +6,10 @@ import { getCursorForCorner, getRotateAngle } from '@/core/utils/canvasMath';
 interface ResizeHandleProps {
     pos: string;
     itemRotation: number;
-    itemScale: number;
+    itemScale?: number;
+    canvasScale?: number;
     onMouseDown: (e: React.MouseEvent) => void;
+    onDoubleClick?: (e: React.MouseEvent) => void;
     onRotateMouseDown?: (e: React.MouseEvent) => void;
     onRotateHover?: (angle: number | null) => void;
 }
@@ -15,20 +17,22 @@ interface ResizeHandleProps {
 export const ResizeHandle: React.FC<ResizeHandleProps> = ({ 
     pos, 
     itemRotation, 
-    itemScale, 
+    itemScale = 1,
+    canvasScale = 1,
     onMouseDown, 
+    onDoubleClick,
     onRotateMouseDown, 
     onRotateHover 
 }) => {
     const classes: Record<string, string> = {
-        'top-left': '-top-1.25 -left-1.25',
-        'top-center': '-top-1.25 left-1/2 -translate-x-1/2',
-        'top-right': '-top-1.25 -right-1.25',
-        'middle-left': 'top-1/2 -left-1.25 -translate-y-1/2',
-        'middle-right': 'top-1/2 -right-1.25 -translate-y-1/2',
-        'bottom-left': '-bottom-1.25 -left-1.25',
-        'bottom-center': '-bottom-1.25 left-1/2 -translate-x-1/2',
-        'bottom-right': '-bottom-1.25 -right-1.25',
+        'top-left': 'top-0 left-0',
+        'top-center': 'top-0 left-1/2',
+        'top-right': 'top-0 left-full',
+        'middle-left': 'top-1/2 left-0',
+        'middle-right': 'top-1/2 left-full',
+        'bottom-left': 'top-full left-0',
+        'bottom-center': 'top-full left-1/2',
+        'bottom-right': 'top-full left-full',
     };
 
     const isCorner = (pos.includes('-left') || pos.includes('-right')) && !pos.includes('middle');
@@ -37,14 +41,20 @@ export const ResizeHandle: React.FC<ResizeHandleProps> = ({
 
     // Rotation zone: 16px outward from the corner, positioned OUTSIDE the element.
     const rotateZoneOffsets: Record<string, React.CSSProperties> = {
-        'top-left': { top: -16, left: -16, width: 26, height: 26 },
-        'top-right': { top: -16, right: -16, width: 26, height: 26 },
-        'bottom-left': { bottom: -16, left: -16, width: 26, height: 26 },
-        'bottom-right': { bottom: -16, right: -16, width: 26, height: 26 },
+        'top-left': { top: -14, left: -14, width: 24, height: 24 },
+        'top-right': { top: -14, right: -14, width: 24, height: 24 },
+        'bottom-left': { bottom: -14, left: -14, width: 24, height: 24 },
+        'bottom-right': { bottom: -14, right: -14, width: 24, height: 24 },
     };
 
+    const effectiveTotalScale = (itemScale || 1) * (canvasScale || 1);
+    const counterScale = effectiveTotalScale > 0 ? 1 / effectiveTotalScale : 1;
+
     return (
-        <div className={cn("absolute z-50", classes[pos])} style={{ transform: `scale(${1 / itemScale})` }}>
+        <div 
+            className={cn("absolute z-50", classes[pos])} 
+            style={{ transform: `translate(-50%, -50%) scale(${counterScale})` }}
+        >
             {/* Rotation Hit Zone — 16px outward from corner, hides system cursor */}
             {isCorner && onRotateMouseDown && (
                 <div
@@ -60,12 +70,17 @@ export const ResizeHandle: React.FC<ResizeHandleProps> = ({
             )}
             {/* The visible square handle — resize (on top of rotation zone) */}
             <div
-                className="relative z-10 w-2.5 h-2.5 bg-accent border border-accent shadow-sm"
+                className="relative z-10 w-2 h-2 bg-accent border border-black/50 shadow-xs"
                 style={{ cursor: resizeCursor }}
                 onMouseEnter={() => onRotateHover?.(null)}
                 onMouseDown={(e) => {
                     e.stopPropagation();
                     onMouseDown(e);
+                }}
+                onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onDoubleClick?.(e);
                 }}
             />
         </div>
@@ -75,16 +90,22 @@ export const ResizeHandle: React.FC<ResizeHandleProps> = ({
 export const PivotHandle: React.FC<{
     x: number;
     y: number;
-    itemScale: number;
+    itemRotation?: number;
+    itemScale?: number;
+    canvasScale?: number;
     onMouseDown: (e: React.MouseEvent) => void;
-}> = ({ x, y, itemScale, onMouseDown }) => {
+}> = ({ x, y, itemRotation = 0, itemScale = 1, canvasScale = 1, onMouseDown }) => {
+    const effectiveTotalScale = (itemScale || 1) * (canvasScale || 1);
+    const counterScale = effectiveTotalScale > 0 ? 1 / effectiveTotalScale : 1;
+
     return (
         <div
-            className="absolute z-60 cursor-crosshair group/pivot w-4 h-4"
+            className="absolute z-60 cursor-crosshair group/pivot w-3 h-3"
             style={{
                 left: `${x}%`,
                 top: `${y}%`,
-                transform: `scale(${1 / itemScale}) translate(-50%, -50%)`
+                transform: `translate(-50%, -50%) rotate(-${itemRotation}deg) scale(${counterScale})`,
+                transformOrigin: 'center center',
             }}
             onMouseDown={(e) => {
                 e.stopPropagation();
@@ -92,14 +113,14 @@ export const PivotHandle: React.FC<{
             }}
         >
             {/* The visual crosshair center */}
-            <div className="w-full h-full rounded-full border border-accent bg-accent/20 flex items-center justify-center shadow-lg">
+            <div className="w-full h-full rounded-full border border-accent bg-accent/20 flex items-center justify-center shadow-xs">
                 <div className="w-1 h-1 bg-accent rounded-full" />
                 {/* Visual lines */}
-                <div className="absolute w-6 h-px bg-accent/40" />
-                <div className="absolute w-px h-6 bg-accent/40" />
+                <div className="absolute w-4 h-px bg-accent/60" />
+                <div className="absolute w-px h-4 bg-accent/60" />
             </div>
             {/* Label on hover */}
-            <div className="absolute top-6 left-1/2 -translate-x-1/2 bg-accent px-1.5 py-0.5 rounded text-[8px] font-bold text-accent-foreground opacity-0 group-hover/pivot:opacity-100 transition-opacity whitespace-nowrap">
+            <div className="absolute top-5 left-1/2 -translate-x-1/2 bg-accent px-1.5 py-0.5 rounded text-[8px] font-bold text-accent-foreground opacity-0 group-hover/pivot:opacity-100 transition-opacity whitespace-nowrap">
                 PIVOT
             </div>
         </div>

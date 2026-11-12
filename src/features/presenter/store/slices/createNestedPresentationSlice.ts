@@ -1,6 +1,6 @@
 import { db } from '@/core/db';
 import { PresentationSliceCreator } from '../types';
-import { ISlide } from '@/core/types';
+import { ISlide, ICanvasSlide } from '@/core/types';
 import { toast } from '@/core/utils/toast';
 import i18n from '@/core/i18n';
 
@@ -37,7 +37,7 @@ export const createNestedPresentationSlice: PresentationSliceCreator = (set, get
             localNestedPresentationId: slide.linkedPresentationId || slide.masterPresentationId,
             linkedPresentationId: undefined,
             masterPresentationId: undefined
-        } as any;
+        } as ICanvasSlide;
 
         await get().updatePresentationSlides(activePresentationId, newSlides);
     },
@@ -78,7 +78,7 @@ export const createNestedPresentationSlice: PresentationSliceCreator = (set, get
                 linkedPresentationId = presentationId;
             }
 
-            const newSlide: ISlide = {
+            const newSlide: ICanvasSlide = {
                 id: crypto.randomUUID(),
                 type: 'normal',
                 order: 0, 
@@ -89,7 +89,7 @@ export const createNestedPresentationSlice: PresentationSliceCreator = (set, get
                 linkedPresentationId,
                 lastSyncedAt: libraryPres.updatedAt ? new Date(libraryPres.updatedAt).toISOString() : new Date().toISOString(),
                 isExpanded: true
-            } as any;
+            };
 
             const updatedSlides = [...activePresentation.slides];
             const insertIdx = index !== undefined ? index : updatedSlides.length;

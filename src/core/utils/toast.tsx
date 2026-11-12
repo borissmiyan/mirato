@@ -18,6 +18,14 @@ const PremiumToast = ({ title, description, type, toastId }: ToastProps) => {
         warning: <AlertTriangle className="w-5 h-5 text-amber-400" />,
     };
 
+    const handleDismiss = () => {
+        if (toastId !== undefined) {
+            sonnerToast.dismiss(toastId);
+        } else {
+            sonnerToast.dismiss();
+        }
+    };
+
     return (
         <div className={cn(
             "group relative flex items-center gap-3 p-4 min-w-[320px] max-w-[420px]",
@@ -59,14 +67,9 @@ const PremiumToast = ({ title, description, type, toastId }: ToastProps) => {
 
             {/* Close Button - subtle */}
             <button
-                onClick={() => {
-                    if (toastId !== undefined) {
-                        sonnerToast.dismiss(toastId);
-                    } else {
-                        sonnerToast.dismiss();
-                    }
-                }}
-                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white/5 rounded-lg text-stone-600 hover:text-stone-300 absolute top-3 right-3"
+                type="button"
+                onClick={handleDismiss}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-white/5 rounded-xl text-stone-600 hover:text-stone-300 absolute top-3 right-3"
             >
                 <X className="w-3.5 h-3.5" />
             </button>
@@ -100,7 +103,7 @@ export const toast = {
         { loading, success, error }: {
             loading: string;
             success: (data: T) => string;
-            error: (err: any) => string;
+            error: (err: unknown) => string;
         }
     ) => {
         return sonnerToast.promise(promise, {
@@ -109,7 +112,7 @@ export const toast = {
                 const title = success(data);
                 return <PremiumToast title={title} type="success" />;
             },
-            error: (err: any) => {
+            error: (err: unknown) => {
                 const title = error(err);
                 return <PremiumToast title={title} type="error" />;
             },

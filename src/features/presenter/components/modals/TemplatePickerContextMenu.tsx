@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pencil, Copy, Download, Trash2, Plus, ArrowRight, RefreshCw } from 'lucide-react';
 import { ITemplate, ITemplateSlide } from '@/core/types';
@@ -51,11 +51,12 @@ export const TemplatePickerContextMenu: React.FC<TemplatePickerContextMenuProps>
   requestDeleteSlide,
 }) => {
   const { t } = useTranslation();
+  const handleClose = useCallback(() => setContextMenu(null), [setContextMenu]);
 
   if (!contextMenu) return null;
 
   return (
-    <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+    <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={handleClose}>
       {contextMenu.type === 'template' && (() => {
         const tmpl = contextMenu.data.template as ITemplate;
         return (

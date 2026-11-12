@@ -10,4 +10,3 @@ import '@fontsource/lora/700.css';
 import '@fontsource/crimson-pro';
 import '@fontsource/crimson-pro/600.css';
 import '@fontsource/crimson-pro/700.css';
-import '@fontsource/crimson-pro/400-italic.css';

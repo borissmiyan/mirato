@@ -53,6 +53,7 @@ export const TransitionSeparator: React.FC<TransitionSeparatorProps> = ({
             <div className="absolute inset-y-0 -inset-x-2 cursor-pointer" />
 
             <button
+                type="button"
                 onClick={(e) => {
                     e.stopPropagation();
                     if (!targetId) return;
@@ -65,7 +66,7 @@ export const TransitionSeparator: React.FC<TransitionSeparatorProps> = ({
                     setPanelOpen(true);
                 }}
                 className={cn(
-                    "w-7 h-7 rounded-lg flex items-center justify-center transition-all shadow-xl backdrop-blur-md cursor-pointer z-20 border",
+                    "w-7 h-7 rounded-xl flex items-center justify-center transition-all shadow-xl backdrop-blur-md cursor-pointer z-20 border apple-press",
                     isSelected
                         ? "bg-accent border-accent text-stone-900 scale-110"
                         : hasTransition
@@ -73,6 +74,7 @@ export const TransitionSeparator: React.FC<TransitionSeparatorProps> = ({
                             : "bg-stone-900 border-white/10 text-stone-400 opacity-0 group-hover/sep:opacity-100 scale-90 hover:scale-105 hover:border-accent/40 hover:text-accent"
                 )}
                 title={isEnd ? t('configure_end_transition', 'Configure End Transition') : t('configure_transition', 'Configure Transition')}
+                aria-label={isEnd ? t('configure_end_transition', 'Configure End Transition') : t('configure_transition', 'Configure Transition')}
             >
                 <ArrowRightLeft className={cn("w-3.5 h-3.5", isSelected && "animate-pulse")} />
             </button>

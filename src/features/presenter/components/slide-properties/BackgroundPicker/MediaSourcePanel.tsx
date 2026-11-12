@@ -2,21 +2,30 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Upload, Image as ImageIcon, Check } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
-import { IStyleLayer } from '@/core/types';
+import { IStyleLayer, MediaSource } from '@/core/types';
 import { getBackgroundIdentity } from '@/core/store/historyStore';
 import { SlideBackground } from '../../display/SlideBackground';
 import { VideoSequencePreview } from './VideoSequencePreview';
+import { SearchInput } from '@/shared/ui';
+
+export interface MediaSearchResult {
+    id?: string;
+    url: string;
+    thumb?: string;
+    author?: string;
+    source?: MediaSource;
+}
 
 interface MediaSourcePanelProps {
     activeLayer: IStyleLayer;
-    recentBackgrounds: any[];
+    recentBackgrounds: Partial<IStyleLayer>[];
     searchQuery: string;
     setSearchQuery: (query: string) => void;
     onSearch: (query: string) => void;
-    searchResults: any[];
+    searchResults: MediaSearchResult[];
     isLoading: boolean;
     onSelectRecent: (index: number) => void;
-    onSelectResult: (result: any) => void;
+    onSelectResult: (result: MediaSearchResult) => void;
     onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
@@ -51,7 +60,7 @@ export const MediaSourcePanel: React.FC<MediaSourcePanelProps> = ({
                                     key={`${bg.type}-${idx}`}
                                     onClick={() => onSelectRecent(idx)}
                                     className={cn(
-                                        "relative w-16 aspect-video rounded-lg overflow-hidden border border-white/5 shrink-0 transition-all hover:scale-110 active:scale-95 group bg-stone-900 shadow-lg",
+                                        "relative w-16 aspect-video rounded-xl overflow-hidden border border-white/5 shrink-0 transition-all hover:scale-110 active:scale-95 group bg-stone-900 shadow-lg",
                                         isSelected ? "border-accent ring-1 ring-accent/30" : "hover:border-white/20"
                                     )}
                                 >
@@ -83,19 +92,15 @@ export const MediaSourcePanel: React.FC<MediaSourcePanelProps> = ({
                 </div>
             )}
 
-            <div className="relative group">
-                <div className="absolute inset-y-0 left-3.5 flex items-center pointer-events-none">
-                    <Search className="w-3.5 h-3.5 text-stone-600 group-focus-within:text-accent" />
-                </div>
-                <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && onSearch(searchQuery)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-xs text-stone-300 focus:outline-none focus:ring-1 focus:ring-accent/40"
-                    placeholder={activeLayer.type === 'image' ? t('search_unsplash', 'Search Unsplash...') : t('search_pexels', 'Search Pexels Videos...')}
-                />
-            </div>
+            <SearchInput
+                size="xs"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onClear={() => setSearchQuery('')}
+                onKeyDown={(e) => e.key === 'Enter' && onSearch(searchQuery)}
+                placeholder={activeLayer.type === 'image' ? t('search_unsplash', 'Search Unsplash...') : t('search_pexels', 'Search Pexels Videos...')}
+                className="w-full bg-black/40 border-white/10"
+            />
 
             <div className="grid grid-cols-2 gap-2">
                 <label className="aspect-video rounded-xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center cursor-pointer hover:bg-white/5 hover:border-accent/40 transition-all group overflow-hidden relative">
@@ -107,9 +112,10 @@ export const MediaSourcePanel: React.FC<MediaSourcePanelProps> = ({
 
                 {searchResults.map((r, i) => (
                     <button
+                        type="button"
                         key={i}
                         onClick={() => onSelectResult(r)}
-                        className="aspect-video rounded-xl overflow-hidden border border-white/5 hover:border-accent/40 bg-stone-900 group relative transition-all"
+                        className="aspect-video rounded-xl overflow-hidden border border-white/5 hover:border-accent/40 bg-stone-900 group relative transition-all apple-press cursor-pointer"
                     >
                         {r.thumb ? (
                             <img src={r.thumb} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />

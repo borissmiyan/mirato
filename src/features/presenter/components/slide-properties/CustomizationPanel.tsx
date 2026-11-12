@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePresenterStore } from '@/features/presenter/store/presenterStore';
 import { createPortal } from 'react-dom';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
@@ -20,13 +21,17 @@ import { LogicalCanvas } from '../slide-editor/LogicalCanvas';
 import { ParallelVerseDisplay } from '../bible/ParallelVerseDisplay';
 import { MultiVerseDisplay } from '../bible/MultiVerseDisplay';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
-import { ICanvasSlide } from '@/core/types';
+import { ICanvasSlide, Verse } from '@/core/types';
+
+import Button from '@/shared/ui/Button';
+import IconButton from '@/shared/ui/IconButton';
 
 type Tab = 'background' | 'font' | 'translation' | 'style' | 'layout';
 
 const CustomizationPanel: React.FC = () => {
     const { t } = useTranslation();
-    const { closeModal, isModalOpen } = useModalStore();
+    const closeModal = useModalStore(s => s.closeModal);
+    const isOpen = useModalStore(s => s.isModalOpen(ModalType.CUSTOMIZATION));
     const {
         settings,
         draftSettings,
@@ -35,13 +40,30 @@ const CustomizationPanel: React.FC = () => {
         commitDraft,
         cancelEditing,
         resetSettings
-    } = usePresenterStore();
+    } = usePresenterStore(
+        useShallow(s => ({
+            settings: s.settings,
+            draftSettings: s.draftSettings,
+            startEditing: s.startEditing,
+            updateDraft: s.updateDraft,
+            commitDraft: s.commitDraft,
+            cancelEditing: s.cancelEditing,
+            resetSettings: s.resetSettings,
+        }))
+    );
     const {
         activeVerse,
         secondTranslationId,
         selectedVerses,
         isMultiVerseMode
-    } = useBibleStore();
+    } = useBibleStore(
+        useShallow(s => ({
+            activeVerse: s.activeVerse,
+            secondTranslationId: s.secondTranslationId,
+            selectedVerses: s.selectedVerses,
+            isMultiVerseMode: s.isMultiVerseMode,
+        }))
+    );
 
     const parallelVerse = useLiveQuery(
         async () => {
@@ -55,21 +77,24 @@ const CustomizationPanel: React.FC = () => {
         [activeVerse?.bookId, activeVerse?.chapter, activeVerse?.verseNumber, secondTranslationId]
     );
 
-    const { activePresentation, previewSlideId } = usePresentationStore();
+    const { activePresentation, previewSlideId } = usePresentationStore(
+        useShallow(s => ({
+            activePresentation: s.activePresentation,
+            previewSlideId: s.previewSlideId,
+        }))
+    );
     const selectedSlide = activePresentation?.slides.find(s => s.id === previewSlideId);
     const isBibleSlide = selectedSlide?.blockId === 'bible';
 
     const [activeTab, setActiveTab] = useState<Tab>('background');
 
-    const isOpen = isModalOpen(ModalType.CUSTOMIZATION);
     const ratio = settings.display.aspectRatio || 16 / 9;
-    const { width: fitW, height: fitH, containerRef: previewRef } = useContainFit(ratio, 24);
+    const { containerRef: previewRef } = useContainFit(ratio, 24);
 
     const canvasSlide = (isBibleSlide && selectedSlide?.type === 'normal') ? selectedSlide as ICanvasSlide : null;
 
-    const currentVerse = canvasSlide?.content?.variables ? (
+    const currentVerse: Verse = canvasSlide?.content?.variables ? (
         {
-            id: selectedSlide!.id,
             bookId: canvasSlide.content.variables.bookId as string || 'GEN',
             chapter: Number(canvasSlide.content.variables.chapter) || 1,
             verseNumber: Number(canvasSlide.content.variables.verseStart || canvasSlide.content.variables.verse) || 1,
@@ -86,13 +111,13 @@ const CustomizationPanel: React.FC = () => {
 
     // Fetch multiple verses if it's a Bible slide with multiverses
     const bibleVerses = useLiveQuery(async () => {
-        const canvasSlide = (isBibleSlide && selectedSlide?.type === 'normal') ? selectedSlide as ICanvasSlide : null;
-        if (!canvasSlide || !canvasSlide.content?.variables?.verses) return null;
+        const cs = (isBibleSlide && selectedSlide?.type === 'normal') ? selectedSlide as ICanvasSlide : null;
+        if (!cs || !cs.content?.variables?.verses) return null;
         try {
-            const verseNumbers = JSON.parse(canvasSlide.content.variables.verses as string) as number[];
-            const translationId = (canvasSlide.content.variables.translationId as string) || 'KJV';
-            const bookId = (canvasSlide.content.variables.bookId as string) || 'GEN';
-            const chapter = Number(canvasSlide.content.variables.chapter) || 1;
+            const verseNumbers = JSON.parse(cs.content.variables.verses as string) as number[];
+            const translationId = (cs.content.variables.translationId as string) || 'KJV';
+            const bookId = (cs.content.variables.bookId as string) || 'GEN';
+            const chapter = Number(cs.content.variables.chapter) || 1;
 
             return await db.verses
                 .where('[translationId+bookId+chapter]')
@@ -103,7 +128,7 @@ const CustomizationPanel: React.FC = () => {
             console.error('Failed to parse verses for customization panel preview', e);
             return null;
         }
-    }, [selectedSlide]);
+    }, [selectedSlide, isBibleSlide]);
 
     const activeMultiVerses = isBibleSlide ? (bibleVerses || []) : selectedVerses;
     const isMultiMode = isBibleSlide ? (activeMultiVerses.length > 1) : (isMultiVerseMode || selectedVerses.length > 1);
@@ -115,7 +140,7 @@ const CustomizationPanel: React.FC = () => {
         } else {
             cancelEditing();
         }
-    }, [isOpen]);
+    }, [isOpen, startEditing, cancelEditing]);
 
     if (!isOpen) return null;
 
@@ -138,7 +163,7 @@ const CustomizationPanel: React.FC = () => {
     };
 
     return createPortal(
-        <div className="fixed inset-0 z-10000 flex overflow-hidden bg-black/60 backdrop-blur-md animate-in fade-in duration-500">
+        <div className="fixed inset-0 z-10000 flex overflow-hidden apple-backdrop bg-stone-950/75 backdrop-blur-xl">
             {/* Left Side: Live Preview */}
             <div ref={previewRef} className="flex-1 relative overflow-hidden p-6 flex items-center justify-center">
                 {/* Close/Cancel Backdrop Click */}
@@ -165,14 +190,14 @@ const CustomizationPanel: React.FC = () => {
                             />
                         ) : parallelVerse ? (
                             <ParallelVerseDisplay
-                                verse1={currentVerse as any}
+                                verse1={currentVerse}
                                 verse2={parallelVerse}
                                 autoFit={true}
                                 settings={draftSettings || settings}
                             />
                         ) : (
                             <VerseDisplay
-                                verse={currentVerse as any}
+                                verse={currentVerse}
                                 settings={draftSettings || settings}
                                 autoFit={true}
                                 showReference={true}
@@ -210,13 +235,13 @@ const CustomizationPanel: React.FC = () => {
                                 <p className="text-[9px] text-stone-600 uppercase tracking-[0.2em] font-bold mt-1">{t('appearance_editor')}</p>
                             </div>
                         </div>
-                        <button
+                        <IconButton
+                            icon={<X className="w-4 h-4" />}
                             onClick={handleCancel}
-                            className="p-2 bg-white/5 hover:bg-white/10 hover:text-white rounded-xl text-stone-500 transition-all border border-white/5 active:scale-95"
-                            aria-label="Close"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
+                            variant="ghost"
+                            size="sm"
+                            label={t('close', 'Close')}
+                        />
                     </div>
 
                     {/* ─── Segmented Tab Control ─── */}
@@ -224,11 +249,12 @@ const CustomizationPanel: React.FC = () => {
                         {tabs.map((tab) => (
                             <button
                                 key={tab.id}
+                                type="button"
                                 onClick={() => setActiveTab(tab.id)}
                                 className={cn(
-                                    "flex-1 flex flex-col items-center justify-center gap-1.5 py-3 px-1 rounded-xl transition-all duration-200 relative group",
+                                    "flex-1 flex flex-col items-center justify-center gap-1.5 py-3 px-1 rounded-xl transition-all duration-200 relative group apple-press cursor-pointer",
                                     activeTab === tab.id
-                                        ? "text-accent bg-accent/10"
+                                        ? "text-accent bg-accent/10 shadow-sm"
                                         : "text-stone-400 hover:text-stone-200 hover:bg-white/5"
                                 )}
                                 title={tab.label}
@@ -260,29 +286,33 @@ const CustomizationPanel: React.FC = () => {
                 {/* ─── Footer Actions ─── */}
                 <div className="relative z-10 px-6 pb-6 pt-4 border-t border-white/5 bg-stone-950/80 backdrop-blur-xl shrink-0">
                     <div className="flex gap-3">
-                        <button
+                        <Button
+                            variant="secondary"
+                            size="md"
                             onClick={handleCancel}
-                            className="flex-1 py-3.5 bg-white/5 hover:bg-white/10 text-stone-500 hover:text-stone-200 rounded-2xl transition-all border border-white/5 active:scale-95 text-[11px] font-bold uppercase tracking-wider cursor-pointer"
+                            className="flex-1 font-bold uppercase tracking-wider text-[11px]"
                         >
                             {t('discard')}
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            variant="primary"
+                            size="md"
                             onClick={handleDone}
-                            className="flex-2 py-3.5 bg-accent text-accent-foreground rounded-2xl transition-all border border-accent/20 shadow-[0_8px_30px_rgba(var(--accent-rgb),0.25)] hover:shadow-[0_8px_40px_rgba(var(--accent-rgb),0.35)] hover:scale-[1.02] active:scale-[0.98] text-[11px] font-black uppercase tracking-widest cursor-pointer"
+                            className="flex-2 font-black uppercase tracking-widest text-[11px]"
                         >
                             {t('save_profile')}
-                        </button>
+                        </Button>
                     </div>
                     <div className="mt-3 flex justify-center">
-                        <button
+                        <Button
+                            variant="ghost"
+                            size="xs"
                             onClick={resetSettings}
-                            className="group flex items-center gap-1.5 py-1.5 px-3 rounded-lg hover:bg-white/5 transition-all cursor-pointer"
+                            leftIcon={<RotateCcw className="w-3 h-3 text-stone-500 group-hover:text-stone-300 transition-colors" />}
+                            className="text-[10px] font-bold text-stone-500 hover:text-stone-300 uppercase tracking-widest"
                         >
-                            <RotateCcw className="w-3 h-3 text-stone-700 group-hover:text-stone-400 transition-colors" />
-                            <span className="text-[10px] font-bold text-stone-700 group-hover:text-stone-400 uppercase tracking-widest transition-colors">
-                                {t('restore_factory_settings')}
-                            </span>
-                        </button>
+                            {t('restore_factory_settings')}
+                        </Button>
                     </div>
                 </div>
             </div>

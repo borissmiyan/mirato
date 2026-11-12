@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { GripHorizontal, X } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
+import { IconButton } from '@/shared/ui';
 
 interface FloatingPopoverProps {
     isOpen: boolean;
@@ -146,12 +147,13 @@ export const FloatingPopover: React.FC<FloatingPopoverProps> = ({
                     <GripHorizontal className="w-4 h-4" />
                     {title && <span className="text-[10px] font-bold uppercase tracking-widest">{title}</span>}
                 </div>
-                <button
+                <IconButton
+                    icon={X}
+                    label="Close"
+                    variant="ghost"
+                    size="xs"
                     onClick={(e) => { e.stopPropagation(); onClose(); }}
-                    className="p-1 hover:bg-white/10 rounded-lg text-stone-400 hover:text-white transition-colors cursor-pointer"
-                >
-                    <X className="w-3 h-3" />
-                </button>
+                />
             </div>
 
             {/* Content */}

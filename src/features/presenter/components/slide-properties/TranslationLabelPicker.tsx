@@ -6,6 +6,7 @@ import { Type, Languages, SlidersHorizontal, Eye, EyeOff, Check, Palette } from 
 import { cn } from '@/core/utils/cn';
 import { CustomSlider } from '@/components/CustomSlider';
 import { CompactColorPicker } from '@/components/CompactColorPicker';
+import { Switch } from '@/shared/ui';
 
 import { AVAILABLE_FONTS } from '@/core/data/fonts';
 
@@ -46,18 +47,11 @@ export const TranslationLabelPicker: React.FC = () => {
                         </div>
                     </div>
 
-                    <button
-                        onClick={() => updateLabel({ enabled: !translationLabel.enabled })}
-                        className={cn(
-                            "w-14 h-7 rounded-full transition-all duration-500 relative overflow-hidden flex items-center shadow-inner cursor-pointer",
-                            translationLabel.enabled ? "bg-accent" : "bg-stone-800"
-                        )}
-                    >
-                        <div className={cn(
-                            "absolute w-5 h-5 bg-white rounded-full transition-all duration-500 shadow-xl",
-                            translationLabel.enabled ? "translate-x-8" : "translate-x-1"
-                        )} />
-                    </button>
+                    <Switch
+                        checked={!!translationLabel.enabled}
+                        onChange={(enabled) => updateLabel({ enabled })}
+                        size="md"
+                    />
                 </div>
             </div>
 
@@ -69,7 +63,7 @@ export const TranslationLabelPicker: React.FC = () => {
                 {/* Typography & Color */}
                 <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-3xl p-6 space-y-6 shadow-xl">
                     <div className="flex items-center gap-3 px-1">
-                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
+                        <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
                             <Type className="w-4 h-4 text-stone-500" />
                         </div>
                         <label className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em]">{t('typography')}</label>
@@ -81,11 +75,12 @@ export const TranslationLabelPicker: React.FC = () => {
                             {AVAILABLE_FONTS.map((f) => (
                                 <button
                                     key={f.name}
+                                    type="button"
                                     onClick={() => handleFontSelect(f.name)}
                                     className={cn(
-                                        "flex items-center justify-between px-5 py-4 rounded-2xl border transition-all duration-300 group relative overflow-hidden",
+                                        "flex items-center justify-between px-5 py-4 rounded-2xl border transition-all duration-300 group relative overflow-hidden cursor-pointer apple-press",
                                         translationLabel.fontFamily === f.name
-                                            ? "bg-accent/15 border-accent/40 text-accent shadow-md ring-1 ring-accent/20"
+                                            ? "bg-accent/15 border-accent/40 text-accent shadow-md ring-1 ring-accent/20 font-bold"
                                             : "bg-black/20 border-white/5 text-stone-400 hover:border-white/20 hover:bg-white/5"
                                     )}
                                     style={{ fontFamily: f.name }}
@@ -126,7 +121,7 @@ export const TranslationLabelPicker: React.FC = () => {
                 {/* Appearance Block */}
                 <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-3xl p-6 space-y-6 shadow-xl">
                     <div className="flex items-center gap-3 px-1">
-                        <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
+                        <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
                             <Palette className="w-4 h-4 text-stone-500" />
                         </div>
                         <label className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em]">{t('appearance')}</label>

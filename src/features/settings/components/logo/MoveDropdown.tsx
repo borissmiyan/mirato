@@ -14,13 +14,13 @@ export const MoveDropdown: React.FC<MoveDropdownProps> = ({ groups, currentGroup
     const { t } = useTranslation();
 
     return (
-        <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] bg-stone-900 border border-white/10 rounded-2xl shadow-xl p-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+        <div className="absolute top-full left-0 mt-1 z-50 min-w-[180px] bg-stone-900 border border-white/10 rounded-xl shadow-xl p-1.5 animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col gap-0.5">
             {/* Ungrouped option */}
             {currentGroupId && (
                 <button
                     type="button"
                     onClick={() => { onMove(null); onClose(); }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-stone-300 hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-stone-300 hover:bg-white/5 rounded-xl transition-colors cursor-pointer apple-press"
                 >
                     <ImageIcon className="w-3.5 h-3.5 text-stone-500" />
                     {t('ungrouped_logos')}
@@ -33,7 +33,7 @@ export const MoveDropdown: React.FC<MoveDropdownProps> = ({ groups, currentGroup
                         key={g.id}
                         type="button"
                         onClick={() => { onMove(g.id); onClose(); }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-stone-300 hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-stone-300 hover:bg-white/5 rounded-xl transition-colors cursor-pointer apple-press"
                     >
                         <Group className="w-3.5 h-3.5 text-accent/60" />
                         {g.name}

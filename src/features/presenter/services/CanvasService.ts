@@ -1,4 +1,5 @@
 import { ICanvasItem } from '@/core/types';
+import { TextAnchor } from '@/core/types/hymn';
 import { isEqual } from '@/core/utils/isEqual';
 
 /**
@@ -72,6 +73,34 @@ export class CanvasService {
     }
 
     /**
+     * Resolves a 9-point text anchor into percentage coordinate (x, y: 0–100%) and pivot (pivotX, pivotY: 0–1) updates.
+     */
+    static getAnchorPositionUpdates(item: ICanvasItem, anchor: TextAnchor): Partial<ICanvasItem> {
+        switch (anchor) {
+            case 'top-left':
+                return { x: 0, y: 0, pivotX: 0, pivotY: 0 };
+            case 'top-center':
+                return { x: 50, y: 0, pivotX: 0.5, pivotY: 0 };
+            case 'top-right':
+                return { x: 100, y: 0, pivotX: 1, pivotY: 0 };
+            case 'center-left':
+                return { x: 0, y: 50, pivotX: 0, pivotY: 0.5 };
+            case 'center':
+                return { x: 50, y: 50, pivotX: 0.5, pivotY: 0.5 };
+            case 'center-right':
+                return { x: 100, y: 50, pivotX: 1, pivotY: 0.5 };
+            case 'bottom-left':
+                return { x: 0, y: 100, pivotX: 0, pivotY: 1 };
+            case 'bottom-center':
+                return { x: 50, y: 100, pivotX: 0.5, pivotY: 1 };
+            case 'bottom-right':
+                return { x: 100, y: 100, pivotX: 1, pivotY: 1 };
+            default:
+                return {};
+        }
+    }
+
+    /**
      * Determines the common value across multiple items for a property.
      * Returns the value if all match, or 'mixed' if they differ.
      */
@@ -80,7 +109,7 @@ export class CanvasService {
         canvasItems: ICanvasItem[],
         getter: (item: ICanvasItem) => T
     ): T | 'mixed' {
-        if (selectedIds.length === 0) return 'mixed' as any;
+        if (selectedIds.length === 0) return 'mixed';
         
         const firstId = selectedIds[0];
         const firstItem = canvasItems.find(i => i.id === firstId);

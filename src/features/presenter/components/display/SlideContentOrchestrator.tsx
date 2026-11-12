@@ -21,8 +21,10 @@ import {
   getTransitionVariables 
 } from './transitions/SlideTransitions';
 
+const EMPTY_CANVAS_ITEMS: ICanvasItem[] = [];
+
 interface SlideContentOrchestratorProps {
-  appMode: 'scripture' | 'presentation';
+  appMode: 'scripture' | 'presentation' | 'hymns';
   isMultiVerseMode: boolean;
   multiVerses: Verse[] | null;
   activeVerse: Verse | null;
@@ -34,6 +36,8 @@ interface SlideContentOrchestratorProps {
   settings: PresenterSettings;
   isProjector: boolean;
   isPreloading?: boolean;
+  isPreview?: boolean;
+  isMuted?: boolean;
   lang: string;
   
   // Transition related
@@ -61,6 +65,8 @@ export const SlideContentOrchestrator: React.FC<SlideContentOrchestratorProps> =
   settings,
   isProjector,
   isPreloading = false,
+  isPreview = false,
+  isMuted = false,
   lang,
   isTransitioning,
   lastTransitionTrigger,
@@ -93,9 +99,7 @@ export const SlideContentOrchestrator: React.FC<SlideContentOrchestratorProps> =
           </div>
         );
       }
-      return (
-        <div className="h-full w-full bg-black flex items-center justify-center" />
-      );
+      return null;
     }
 
     return parallelVerse ? (
@@ -134,9 +138,7 @@ export const SlideContentOrchestrator: React.FC<SlideContentOrchestratorProps> =
           </div>
         );
       }
-      return (
-        <div className="h-full w-full bg-black flex items-center justify-center" />
-      );
+      return null;
     }
 
     const block = blocksMap.get(selectedSlide.blockId);
@@ -198,9 +200,10 @@ export const SlideContentOrchestrator: React.FC<SlideContentOrchestratorProps> =
             slide={selectedSlide}
             slideId={selectedSlide.id}
             settings={settings}
-            isPreview={!isProjector}
+            isPreview={isPreview || !isProjector}
             isProjector={isProjector}
             isPreloading={isPreloading}
+            isMuted={isMuted}
             bibleVerses={bibleVerses}
             bibleSecondVerse={bibleSecondVerse}
             isTransitioning={isTransitioning}
@@ -225,13 +228,13 @@ export const SlideContentOrchestrator: React.FC<SlideContentOrchestratorProps> =
             canvasItems={isProjector ? (selectedSlide as ICanvasSlide).content?.canvasItems : undefined}
             slide={selectedSlide}
             slideId={selectedSlide.id}
-            isPreview={!isProjector}
+            isPreview={isPreview || !isProjector}
             isProjector={isProjector}
             isPreloading={isPreloading}
             hideCanvasItems={!isProjector}
           />
           {!isProjector && (
-            <SlideCanvas slideId={selectedSlide.id} canvasItems={(selectedSlide as ICanvasSlide).content?.canvasItems || []} />
+            <SlideCanvas slideId={selectedSlide.id} canvasItems={(selectedSlide as ICanvasSlide).content?.canvasItems || EMPTY_CANVAS_ITEMS} />
           )}
         </div>
       );

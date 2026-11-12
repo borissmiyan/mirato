@@ -27,13 +27,10 @@ export const liveSyncService = {
         });
     },
 
-    showAppMode(mode: 'scripture' | 'presentation') {
+    showAppMode(mode: 'scripture' | 'presentation' | 'hymns') {
         ipcService.send('projector-command', 'set-app-mode', mode);
     },
 
-    /**
-     * Send a slide to the projector
-     */
     showSlide(slide: ISlide, presentationId?: string, rootPresentationId?: string, navigationParentSlideId?: string | null) {
         ipcService.send('projector-command', 'show-slide', { 
             slide, 
@@ -100,11 +97,11 @@ export const liveSyncService = {
     /**
      * Send current audio playback status from controller to anyone watching (toolbar/remote)
      */
-    sendAudioStatus(scopeId: string, currentTime: number, isPlaying: boolean, duration: number, fileId: string) {
-        ipcService.send('projector-command', 'audio-status', { scopeId, currentTime, isPlaying, duration, fileId });
+    sendAudioStatus(scopeId: string, currentTime: number, isPlaying: boolean, duration: number, fileId: string, fileName?: string) {
+        ipcService.send('projector-command', 'audio-status', { scopeId, currentTime, isPlaying, duration, fileId, fileName });
     },
 
-    syncAudioMetadata(slides: any[], scopes: any[]) {
+    syncAudioMetadata(slides: unknown[], scopes: unknown[]) {
         ipcService.send('projector-command', 'sync-audio-metadata', { slides, scopes });
     },
 
@@ -126,24 +123,24 @@ export const liveSyncService = {
         ipcService.send('projector-command', 'timer-command', { slideId, command });
     },
 
-    sendTimerAction(action: 'next_slide' | 'prev_slide' | 'navigate_to' | 'override', payload?: any) {
+    sendTimerAction(action: 'next_slide' | 'prev_slide' | 'navigate_to' | 'override', payload?: unknown) {
         ipcService.send('projector-command', 'timer-action', { action, payload });
     },
 
     onVideoCommand(callback: (data: { slideId: string; command: string; value?: number | boolean }) => void) {
         // Since the Main process relays commands via 'projector-command', we listen on that channel
         // and filter for 'video-command' actions.
-        return ipcService.on('projector-command', (command: any, payload: any) => {
+        return ipcService.on('projector-command', (command: unknown, payload: unknown) => {
             if (command === 'video-command') {
-                callback(payload);
+                callback(payload as { slideId: string; command: string; value?: number | boolean });
             }
         });
     },
 
     onVideoStatus(callback: (data: { slideId: string; currentTime: number; isPlaying: boolean; duration: number }) => void) {
-        return ipcService.on('projector-command', (command: any, payload: any) => {
+        return ipcService.on('projector-command', (command: unknown, payload: unknown) => {
             if (command === 'video-status') {
-                callback(payload);
+                callback(payload as { slideId: string; currentTime: number; isPlaying: boolean; duration: number });
             }
         });
     },
@@ -152,49 +149,49 @@ export const liveSyncService = {
      * Listener for status requests (used by projector)
      */
     onVideoStatusRequest(callback: () => void) {
-        return ipcService.on('projector-command', (command: any) => {
+        return ipcService.on('projector-command', (command: unknown) => {
             if (command === 'request-video-status') {
                 callback();
             }
         });
     },
 
-    onAudioStatus(callback: (data: { scopeId: string; currentTime: number; isPlaying: boolean; duration: number; fileId: string }) => void) {
-        return ipcService.on('projector-command', (command: any, payload: any) => {
+    onAudioStatus(callback: (data: { scopeId: string; currentTime: number; isPlaying: boolean; duration: number; fileId: string; fileName?: string }) => void) {
+        return ipcService.on('projector-command', (command: unknown, payload: unknown) => {
             if (command === 'audio-status') {
-                callback(payload);
+                callback(payload as { scopeId: string; currentTime: number; isPlaying: boolean; duration: number; fileId: string; fileName?: string });
             }
         });
     },
 
     onAudioCommand(callback: (data: { scopeId: string; command: string; value?: number | boolean }) => void) {
-        return ipcService.on('projector-command', (command: any, payload: any) => {
+        return ipcService.on('projector-command', (command: unknown, payload: unknown) => {
             if (command === 'audio-command') {
-                callback(payload);
+                callback(payload as { scopeId: string; command: string; value?: number | boolean });
             }
         });
     },
 
     onPlaylistCommand(callback: (data: { slideId: string; command: 'next' | 'prev' }) => void) {
-        return ipcService.on('projector-command', (command: any, payload: any) => {
+        return ipcService.on('projector-command', (command: unknown, payload: unknown) => {
             if (command === 'playlist-command') {
-                callback(payload);
+                callback(payload as { slideId: string; command: 'next' | 'prev' });
             }
         });
     },
 
     onTimerCommand(callback: (data: { slideId: string; command: 'toggle' | 'pause' | 'resume' }) => void) {
-        return ipcService.on('projector-command', (command: any, payload: any) => {
+        return ipcService.on('projector-command', (command: unknown, payload: unknown) => {
             if (command === 'timer-command') {
-                callback(payload);
+                callback(payload as { slideId: string; command: 'toggle' | 'pause' | 'resume' });
             }
         });
     },
 
-    onTimerAction(callback: (data: { action: 'next_slide' | 'prev_slide' | 'navigate_to' | 'override'; payload?: any }) => void) {
-        return ipcService.on('projector-command', (command: any, payload: any) => {
+    onTimerAction(callback: (data: { action: 'next_slide' | 'prev_slide' | 'navigate_to' | 'override'; payload?: unknown }) => void) {
+        return ipcService.on('projector-command', (command: unknown, payload: unknown) => {
             if (command === 'timer-action') {
-                callback(payload);
+                callback(payload as { action: 'next_slide' | 'prev_slide' | 'navigate_to' | 'override'; payload?: unknown });
             }
         });
     }

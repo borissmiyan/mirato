@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ITimerSettings } from '@/core/types';
 import { getFillColor } from './TimerStyleUtils';
 
@@ -36,6 +36,16 @@ const AnimatedFlipDigit = ({ digit, color, panelColor }: { digit: string, color:
     const [isFlipping, setIsFlipping] = useState(false);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+    const endAnimation = useCallback((targetDigit: string) => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        setCurrentDisplay(targetDigit);
+        setIsFlipping(false);
+    }, []);
+
+    const handleAnimationEnd = useCallback(() => {
+        endAnimation(nextDisplay);
+    }, [endAnimation, nextDisplay]);
+
     useEffect(() => {
         if (digit !== currentDisplay) {
             if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -43,16 +53,13 @@ const AnimatedFlipDigit = ({ digit, color, panelColor }: { digit: string, color:
             setIsFlipping(true);
 
             timeoutRef.current = setTimeout(() => {
-                handleAnimationEnd();
+                endAnimation(digit);
             }, 600);
         }
-    }, [digit]);
-
-    const handleAnimationEnd = () => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        setCurrentDisplay(nextDisplay);
-        setIsFlipping(false);
-    };
+        return () => {
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        };
+    }, [digit, currentDisplay, endAnimation]);
 
     return (
         <div

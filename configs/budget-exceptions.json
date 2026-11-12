@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Registry of authorized component/hook size exceptions (ADR D-04). Bypasses via inline comments in source code are strictly forbidden.",
+  "exceptions": {
+    "src/features/presenter/services/AudioService.ts": 750,
+    "src/features/presenter/services/PptxImportService.ts": 850,
+    "src/features/presenter/store/slices/createNavigationSlice.ts": 650,
+    "src/features/presenter/store/slices/createSlideOperationsSlice.ts": 750,
+    "src/app/hooks/useControllerLogic.ts": 400,
+    "src/app/hooks/useGlobalShortcuts.ts": 450,
+    "src/features/presenter/components/timeline/hooks/useTimelineDragAndDrop.ts": 300,
+    "src/features/presenter/hooks/useTimerCore.ts": 300,
+    "src/features/presenter/hooks/useVideoPlayback.ts": 320,
+    "src/features/presenter/hooks/useCanvasInteraction.ts": 400
+  }
+}

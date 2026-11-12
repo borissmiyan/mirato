@@ -1,7 +1,5 @@
 import { myBibleParser } from '@/core/parsers/myBibleParser';
 
-/* eslint-disable no-restricted-globals */
-
 self.onmessage = async (e: MessageEvent) => {
     const { fileType, content, fileName } = e.data;
 
@@ -18,7 +16,7 @@ self.onmessage = async (e: MessageEvent) => {
         } else {
             throw new Error(`Unsupported file type: ${fileType}`);
         }
-    } catch (err: any) {
+    } catch (err: unknown) {
         console.error('[ParserWorker] Error:', err);
         self.postMessage({
             type: 'error',

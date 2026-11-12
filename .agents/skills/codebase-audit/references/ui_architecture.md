@@ -13,6 +13,10 @@ This document outlines the strict UI architecture and defensive rendering princi
 7. [Semantic Interaction (onClick Divs)](#7-semantic-interaction-onclick-divs)
 8. [Z-Index Magic Numbers](#8-z-index-magic-numbers)
 9. [Inline Massive SVGs](#9-inline-massive-svgs)
+10. [Focus Management in Modals (Beyond onClick-Div A11y)](#10-focus-management-in-modals-beyond-onclick-div-a11y)
+10b. [Modal Managers: Lazy Mounting](#10b-modal-managers-lazy-mounting)
+11. [Async Status Announcements (aria-live)](#11-async-status-announcements-aria-live)
+12. [Render Crash Resilience](#12-render-crash-resilience)
 
 ---
 
@@ -190,7 +194,7 @@ Never use `div`, `span`, or `p` for buttons. Anything clickable must have `curso
 
 ### Self-Correction Rule
 
-If `onClick` is attached to a non-interactive tag → **WARNING: A11y Violation**. Convert to `<button type="button">`.
+If `onClick` is attached to a non-interactive tag → **WARNING: A11y Violation**. Convert to `<button type="button">`. Note: this is only ONE of several accessibility failure modes — see sections 10 and 11 below, which the original audit skipped entirely. A component can pass this check and still be unusable via keyboard/screen reader.
 
 ---
 
@@ -215,3 +219,137 @@ Do not dump raw 50+ line `<svg>` code directly into feature components or pages.
 ### Self-Correction Rule
 
 If an `<svg>` block exceeds 20 lines inside a standard React component → **WARNING: Inline SVG**. Extract to an icon component.
+
+---
+
+## 10. Focus Management in Modals (Beyond onClick-Div A11y)
+
+### Constraint
+
+Every Modal/Dialog/BottomSheet MUST trap keyboard focus while open (Tab
+cycles only within the modal, not the page behind it) and MUST return focus
+to the triggering element when closed. A modal that satisfies section 1
+(rendered via portal) and section 7 (uses `<button>`, not `<div onClick>`)
+can still be completely broken for keyboard/screen-reader users if focus
+isn't managed — Tab can leave the modal into content the user can't see
+behind the overlay.
+
+### Bad
+
+```tsx
+// ❌ Portal-rendered, uses semantic buttons, still fails: Tab moves focus
+// into the page content behind the overlay, and focus isn't restored on close
+{isOpen && createPortal(
+  <div className="fixed inset-0 z-50 bg-black/50">
+    <div className="modal-content">...</div>
+  </div>,
+  document.body
+)}
+```
+
+### Good
+
+```tsx
+// ✅ Use a library that handles focus trapping (Radix Dialog, Headless UI,
+// react-focus-lock) rather than reimplementing it
+<Dialog.Root open={isOpen} onOpenChange={setIsOpen}>
+  <Dialog.Portal>
+    <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+    <Dialog.Content className="modal-content">...</Dialog.Content>
+  </Dialog.Portal>
+</Dialog.Root>
+```
+
+### Self-Correction Rule
+
+If a Modal/Dialog/BottomSheet component is hand-rolled (raw `createPortal` +
+conditional render, not a Radix/Headless-UI/react-aria primitive) with no
+focus-trap library and no manual `useEffect` restoring `document.activeElement`
+on close → **WARNING: Missing Focus Management**.
+
+---
+
+## 10b. Modal Managers: Lazy Mounting
+
+### Constraint
+
+A central Modal Manager component that renders multiple possible modals
+MUST conditionally mount each one (`{isOpen && <TheModal />}`), not mount
+all of them unconditionally and toggle only their visibility (CSS
+`opacity`/`display`). An always-mounted heavy modal keeps its own
+subscriptions, timers, and data-fetching hooks alive in the background even
+while visually hidden.
+
+### Bad
+
+```tsx
+// ❌ FamilyDashboard is mounted (and its hooks/subscriptions run) even
+// when the modal is closed — only its wrapper's visibility changes
+function PremiumModals({ activeModal }: Props) {
+  return (
+    <div className={activeModal === 'family' ? 'block' : 'hidden'}>
+      <FamilyDashboard />
+    </div>
+  );
+}
+```
+
+### Good
+
+```tsx
+// ✅ Unmounts (and tears down subscriptions) when not active
+function PremiumModals({ activeModal }: Props) {
+  return activeModal === 'family' ? <FamilyDashboard /> : null;
+}
+```
+
+### Self-Correction Rule
+
+If a component with "Manager"/"Modals"/"Sheets" in its name renders one or
+more heavy child components using CSS visibility (`hidden`, `opacity-0`,
+`display: none`) instead of a conditional `&&`/ternary mount → **WARNING:
+Background-Mounted Modal**.
+
+---
+
+## 11. Async Status Announcements (aria-live)
+
+### Constraint
+
+Status changes that happen without user-initiated navigation — form
+validation errors appearing, a save succeeding, a sync completing — MUST be
+announced to screen readers via `aria-live="polite"` (or `"assertive"` for
+errors that block submission). Without it, a sighted user sees the toast;
+a screen reader user gets nothing.
+
+### Bad
+
+```tsx
+// ❌ Visually apparent, silent to screen readers
+{error && <p className="text-red-500">{error}</p>}
+```
+
+### Good
+
+```tsx
+// ✅ Announced to assistive tech when it appears
+{error && <p role="alert" aria-live="assertive" className="text-red-500">{error}</p>}
+```
+
+### Self-Correction Rule
+
+If a toast/notification component or inline form-error component has no
+`aria-live` or `role="alert"`/`role="status"` → **WARNING: Silent Status
+Update**.
+
+---
+
+## 12. Render Crash Resilience
+
+### Constraint
+
+See `references/error_boundaries.md` for the full reference. In short: a
+Naked Modal fix, focus management, and i18n compliance are all irrelevant if
+an uncaught render error in one card blanks the entire TMA WebView with no
+visible way to recover. Cross-check this file's findings against
+`error_boundaries.md` when auditing any page-level component.

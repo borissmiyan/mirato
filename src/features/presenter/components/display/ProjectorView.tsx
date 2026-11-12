@@ -8,19 +8,17 @@ import { DEFAULT_SETTINGS } from '@/features/presenter/store/presenterStore';
 import { db } from '@/core/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { cn } from '@/core/utils/cn';
-import { ILogo } from '@/core/types';
+import { ILogo, ILogoGroup } from '@/core/types';
 import { useLogoUrl } from '@/core/hooks/useLogoUrl';
 import { PRELOADED_LOGOS } from '@/core/data/logoData';
 import { PresenterService } from '../../services/presenterService';
 import { IpcService } from '@/core/services/ipcService';
-import { useAudioSync } from '@/app/hooks/useAudioSync';
 import { usePresentationStore } from '../../store/presentationStore';
+import { WebRtcRelayService, WebRtcSignal } from '@/core/services/WebRtcRelayService';
 
 const ProjectorView: React.FC = () => {
     const { t } = useTranslation();
     
-    // Background Audio Sync (Active playback on projector)
-    useAudioSync(true);
     const [verse, setVerse] = useState<Verse | null>(null);
     const [multiVerses, setMultiVerses] = useState<Verse[] | null>(null);
     const [isMultiVerseMode, setIsMultiVerseMode] = useState(false);
@@ -29,6 +27,9 @@ const ProjectorView: React.FC = () => {
     const [appMode, setAppMode] = useState<'scripture' | 'presentation'>('scripture');
     const [secondTranslationId, setSecondTranslationId] = useState<string | null>(null);
     const [settings, setSettings] = useState<PresenterSettings>(DEFAULT_SETTINGS);
+    const [relayStream, setRelayStream] = useState<MediaStream | null>(null);
+    const videoRef = React.useRef<HTMLVideoElement | null>(null);
+    const webRtcReceiverRef = React.useRef<WebRtcRelayService | null>(null);
     const settingsRef = React.useRef(settings);
 
     useEffect(() => {
@@ -66,6 +67,13 @@ const ProjectorView: React.FC = () => {
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!IpcService.isElectron()) return;
 
+            // Direct Fullscreen Toggle
+            if (e.key === 'F11' || (e.code === 'KeyF' && (e.metaKey || e.ctrlKey))) {
+                e.preventDefault();
+                IpcService.invoke('projector:toggle-fullscreen');
+                return;
+            }
+
             // List of codes to relay to the main window (layout independent)
             const codesToRelay = [
                 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp',
@@ -92,87 +100,130 @@ const ProjectorView: React.FC = () => {
             
             const allLogos = [
                 ...(logoSettings.customLogos || []),
-                ...(logoSettings.customGroups?.flatMap((g: any) => g.logos) || []),
-                ...(logoSettings.logoGroups?.flatMap((g: any) => g.logos) || []),
+                ...(logoSettings.customGroups?.flatMap((g: ILogoGroup) => g.logos) || []),
+                ...(logoSettings.logoGroups?.flatMap((g: ILogoGroup) => g.logos) || []),
                 ...PRELOADED_LOGOS.flatMap(g => g.logos)
             ];
             
             return allLogos.find(l => l.id === id) || null;
         };
 
-        const handleCommand = (command: string, payload: any) => {
+        const handleCommand = (command: string, rawPayload: unknown) => {
+            const payload = (rawPayload ?? {}) as Record<string, unknown>;
             switch (command) {
                 case 'show-verse':
-                    setVerse(payload.verse);
+                    setVerse(payload.verse as Verse);
                     setMultiVerses(null);
                     setIsMultiVerseMode(false);
-                    setSecondTranslationId(payload.secondTranslationId);
+                    setSecondTranslationId(payload.secondTranslationId as string | null);
                     setSlide(null);
                     break;
                 case 'show-multiverses':
-                    setMultiVerses(payload.verses);
+                    setMultiVerses(payload.verses as Verse[]);
                     setIsMultiVerseMode(true);
                     setVerse(null);
-                    setSecondTranslationId(payload.secondTranslationId);
+                    setSecondTranslationId(payload.secondTranslationId as string | null);
                     setSlide(null);
                     break;
-                case 'show-slide':
-                    setSlide(payload.slide);
+                case 'show-slide': {
+                    const slideObj = payload.slide as ISlide;
+                    setSlide(slideObj);
                     setVerse(null);
                     setMultiVerses(null);
                     setIsMultiVerseMode(false);
                     // Update store locally so useAudioSync knows what's live
-                    usePresentationStore.getState().setLiveSlide(
-                        payload.slide.id, 
-                        payload.presentationId,
-                        payload.rootPresentationId,
-                        payload.navigationParentSlideId
-                    );
-                    break;
-                case 'show-preview-slide':
-                    setPreviewSlide(payload.slide);
-                    if (payload.slide) {
-                        usePresentationStore.getState().setPreviewSlide(
-                            payload.slide.id, 
-                            payload.presentationId,
-                            payload.rootPresentationId,
-                            payload.navigationParentSlideId
+                    if (slideObj) {
+                        usePresentationStore.getState().setLiveSlide(
+                            slideObj.id, 
+                            payload.presentationId as string | undefined,
+                            payload.rootPresentationId as string | undefined,
+                            payload.navigationParentSlideId as string | null | undefined
                         );
                     }
                     break;
+                }
+                case 'show-preview-slide': {
+                    const previewObj = payload.slide as ISlide | null;
+                    setPreviewSlide(previewObj);
+                    if (previewObj) {
+                        usePresentationStore.getState().setPreviewSlide(
+                            previewObj.id, 
+                            payload.presentationId as string | undefined,
+                            payload.rootPresentationId as string | undefined,
+                            payload.navigationParentSlideId as string | null | undefined
+                        );
+                    }
+                    break;
+                }
                 case 'set-app-mode':
-                    setAppMode(payload);
+                    setAppMode(rawPayload as 'scripture' | 'presentation');
                     break;
                 case 'set-override':
-                    setActiveOverride(payload.type);
+                    setActiveOverride(payload.type as 'blackout' | 'whiteout' | 'logo' | null);
                     if (payload.type === 'logo') {
                         if (payload.logo) {
-                            setActiveLogo(payload.logo);
+                            setActiveLogo(payload.logo as ILogo);
                         } else {
                             // Try to resolve from ID if payload.logo is missing
                             const active = findLogo(settingsRef.current.logo.activeLogoId, settingsRef.current.logo);
                             setActiveLogo(active);
                         }
                     } else if (payload.url) {
-                        setActiveLogo({ id: 'legacy', name: 'Legacy', url: payload.url });
+                        setActiveLogo({ id: 'legacy', name: 'Legacy', url: payload.url as string });
                     } else {
                         setActiveLogo(null);
                     }
                     break;
                 case 'update-theme':
-                    document.documentElement.setAttribute('data-theme', payload);
+                    document.documentElement.setAttribute('data-theme', String(rawPayload));
                     break;
                 case 'sync-state':
-                case 'update-settings':
+                case 'update-settings': {
                     // Receive settings update
-                    const logoId = payload.logo?.activeLogoId;
+                    const settingsPayload = rawPayload as PresenterSettings;
+                    const logoId = settingsPayload.logo?.activeLogoId;
                     if (logoId) {
-                        const active = findLogo(logoId, payload.logo);
+                        const active = findLogo(logoId, settingsPayload.logo);
                         if (active) {
                             setActiveLogo(active);
                         }
                     }
-                    setSettings(payload);
+                    setSettings(settingsPayload);
+                    break;
+                }
+                case 'relay-signal':
+                    if (!webRtcReceiverRef.current) {
+                        webRtcReceiverRef.current = new WebRtcRelayService();
+                    }
+                    if (payload.type === 'offer') {
+                        const sendSignal = (sig: unknown) => {
+                            if (window.electron?.ipcRenderer?.remote?.sendRelaySignal) {
+                                window.electron.ipcRenderer.remote.sendRelaySignal(sig);
+                            } else if (window.electron?.ipcRenderer?.send) {
+                                window.electron.ipcRenderer.send('remote:send-relay-signal', sig);
+                            }
+                        };
+                        webRtcReceiverRef.current.initReceiver(
+                            rawPayload as RTCSessionDescriptionInit,
+                            (stream) => {
+                                setRelayStream(stream);
+                            },
+                            (answerSignal) => {
+                                sendSignal(answerSignal);
+                            }
+                        ).then((answer) => {
+                            sendSignal(answer);
+                        });
+                    } else {
+                        webRtcReceiverRef.current.handleSignal(rawPayload as WebRtcSignal);
+                    }
+                    break;
+                case 'stop-relay':
+                    if (webRtcReceiverRef.current) {
+                        webRtcReceiverRef.current.cleanup();
+                        webRtcReceiverRef.current = null;
+                    }
+                    setRelayStream(null);
                     break;
                 case 'clear':
                     setVerse(null);
@@ -196,55 +247,77 @@ const ProjectorView: React.FC = () => {
             document.body.classList.remove('projector-mode');
             window.removeEventListener('resize', reportRatio);
             window.removeEventListener('keydown', handleKeyDown, true);
+            if (webRtcReceiverRef.current) {
+                webRtcReceiverRef.current.cleanup();
+                webRtcReceiverRef.current = null;
+            }
             unsubscribe?.();
         };
     }, []);
 
-    return (
-        <div className="w-screen h-screen overflow-hidden bg-black relative">
-            <div className={cn(
-                "w-full h-full transition-opacity duration-500",
-                activeOverride ? "opacity-0" : "opacity-100"
-            )}>
-                <SlideDisplay
-                    isProjector={true}
-                    activeVerse={verse}
-                    selectedSlide={slide}
-                    parallelVerse={parallelVerse}
-                    multiVerses={multiVerses}
-                    isMultiVerseMode={isMultiVerseMode}
-                    appMode={appMode}
-                    settings={settings}
-                />
-            </div>
+    useEffect(() => {
+        if (videoRef.current && relayStream) {
+            videoRef.current.srcObject = relayStream;
+        }
+    }, [relayStream]);
 
-            {/* Preload Layer (Hidden) */}
-            {previewSlide && (
-                <div className="fixed inset-0 pointer-events-none opacity-0 invisible" aria-hidden="true">
+    const handleDoubleClick = () => {
+        if (IpcService.isElectron()) {
+            IpcService.invoke('projector:toggle-fullscreen');
+        }
+    };
+
+    return (
+        <div 
+            className="w-screen h-screen overflow-hidden bg-black relative select-none"
+            onDoubleClick={handleDoubleClick}
+        >
+            {relayStream ? (
+                <div className="w-full h-full flex items-center justify-center bg-black">
+                    <video 
+                        ref={videoRef}
+                        autoPlay
+                        playsInline
+                        className="w-full h-full object-contain"
+                    />
+                </div>
+            ) : (
+                <div className={cn(
+                    "w-full h-full transition-opacity duration-500",
+                    activeOverride ? "opacity-0" : "opacity-100"
+                )}>
                     <SlideDisplay
                         isProjector={true}
-                        isPreloading={true}
+                        activeVerse={verse}
+                        selectedSlide={slide}
+                        parallelVerse={parallelVerse}
+                        multiVerses={multiVerses}
+                        isMultiVerseMode={isMultiVerseMode}
                         appMode={appMode}
-                        selectedSlide={previewSlide}
                         settings={settings}
                     />
                 </div>
             )}
 
+
             {/* Blackout Overlay */}
             <div className={cn(
                 "absolute inset-0 z-100 transition-opacity duration-700 pointer-events-none",
-                activeOverride === 'blackout' ? "opacity-100" : "opacity-0"
+                activeOverride === 'blackout' ? "opacity-100" : "opacity-0 invisible"
             )}>
-                <SlideBackground background={settings.overrides.blackout.background} />
+                {activeOverride === 'blackout' && (
+                    <SlideBackground background={settings.overrides.blackout.background} />
+                )}
             </div>
 
             {/* Whiteout Overlay */}
             <div className={cn(
                 "absolute inset-0 z-101 transition-opacity duration-700 pointer-events-none",
-                activeOverride === 'whiteout' ? "opacity-100" : "opacity-0"
+                activeOverride === 'whiteout' ? "opacity-100" : "opacity-0 invisible"
             )}>
-                <SlideBackground background={settings.overrides.whiteout.background} />
+                {activeOverride === 'whiteout' && (
+                    <SlideBackground background={settings.overrides.whiteout.background} />
+                )}
             </div>
 
             {/* Logo Overlay */}
@@ -252,21 +325,25 @@ const ProjectorView: React.FC = () => {
                 "absolute inset-0 z-102 transition-opacity duration-700 pointer-events-none",
                 activeOverride === 'logo' ? "opacity-100" : "opacity-0 invisible"
             )}>
-                <SlideBackground background={settings.overrides.logo.background} />
-                <div className="absolute inset-0 flex items-center justify-center p-24">
-                    <div className="relative z-10 w-full h-full flex items-center justify-center font-serif">
-                        {logoUrl ? (
-                            <img src={logoUrl} alt="Church Logo" className="max-w-[70%] max-h-[70%] object-contain" />
-                        ) : (
-                            <div className="text-stone-700 flex flex-col items-center gap-6">
-                                <div className="w-32 h-32 rounded-full border-4 border-stone-800 flex items-center justify-center opacity-20">
-                                    <span className="text-4xl font-black">E</span>
-                                </div>
-                                <h1 className="text-2xl font-black uppercase tracking-[0.3em] opacity-20">Ekklesienter</h1>
+                {activeOverride === 'logo' && (
+                    <>
+                        <SlideBackground background={settings.overrides.logo.background} />
+                        <div className="absolute inset-0 flex items-center justify-center p-24">
+                            <div className="relative z-10 w-full h-full flex items-center justify-center font-serif">
+                                {logoUrl ? (
+                                    <img src={logoUrl} alt="Church Logo" className="max-w-[70%] max-h-[70%] object-contain" />
+                                ) : (
+                                    <div className="text-stone-700 flex flex-col items-center gap-6">
+                                        <div className="w-32 h-32 rounded-full border-4 border-stone-800 flex items-center justify-center opacity-20">
+                                            <span className="text-4xl font-black">D</span>
+                                        </div>
+                                        <h1 className="text-2xl font-black uppercase tracking-[0.3em] opacity-20">Deck.CE</h1>
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
-                </div>
+                        </div>
+                    </>
+                )}
             </div>
         </div>
     );

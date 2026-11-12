@@ -1,24 +1,35 @@
 import React, { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
-import { CheckCircle2, X } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
+import { CheckCircle2 } from 'lucide-react';
+import { Modal, ModalHeader, ModalBody, ModalFooter } from './Modal';
+import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
 
 interface PromptModalProps {
     title: string;
     defaultValue?: string;
     type?: 'text' | 'password';
     onSelection: (value: string | null) => void;
+    [key: string]: unknown;
 }
 
 const PromptModal: React.FC = () => {
     const { t } = useTranslation();
-    const { closeModal, stack } = useModalStore();
-    // Find the LAST instance of PROMPT to correctly support nested modals
-    const modalData = [...stack].reverse().find(m => m.id === ModalType.PROMPT);
+    const closeModal = useModalStore(s => s.closeModal);
+    const { modalData, stackIndex } = useModalStore(
+        useShallow(s => {
+            for (let i = s.stack.length - 1; i >= 0; i--) {
+                if (s.stack[i].id === ModalType.PROMPT) {
+                    return { modalData: s.stack[i], stackIndex: i };
+                }
+            }
+            return { modalData: undefined, stackIndex: -1 };
+        })
+    );
     const isOpen = !!modalData;
     const props = modalData?.props as PromptModalProps;
-
 
     const [value, setValue] = useState(props?.defaultValue || '');
 
@@ -52,56 +63,52 @@ const PromptModal: React.FC = () => {
         if (e.key === 'Escape') handleCancel();
     };
 
-    const zIndex = 10010 + stack.indexOf(modalData) * 10;
+    const zIndex = 10010 + stackIndex * 10;
 
-    return createPortal(
-        <div 
-            className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-            style={{ zIndex }}
+    return (
+        <Modal
+            isOpen={isOpen}
+            onClose={handleCancel}
+            size="sm"
+            zIndex={zIndex}
         >
-            <div
-                className="bg-stone-900 border border-white/10 rounded-2xl w-full max-w-sm flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300"
-                onKeyDown={handleKeyDown}
-            >
-                <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">{props.title}</h3>
-                    <button
-                        onClick={handleCancel}
-                        className="text-stone-500 hover:text-white transition-colors"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
+            <div onKeyDown={handleKeyDown}>
+                <ModalHeader
+                    title={props.title}
+                    onClose={handleCancel}
+                />
 
-                <div className="px-6 py-6">
-                    <input
+                <ModalBody>
+                    <Input
                         autoFocus
+                        size="sm"
                         type={props.type || 'text'}
                         value={value}
                         onChange={(e) => setValue(e.target.value)}
-                        className="w-full bg-stone-950 border border-white/10 rounded-lg px-4 py-3 text-sm text-white focus:outline-none focus:ring-1 focus:ring-accent transition-all"
                         placeholder={t('type_here', 'Type here...')}
                     />
-                </div>
+                </ModalBody>
 
-                <div className="px-6 py-4 bg-stone-950/50 border-t border-white/5 flex justify-end gap-2">
-                    <button
+                <ModalFooter>
+                    <Button
+                        size="sm"
+                        variant="ghost"
                         onClick={handleCancel}
-                        className="px-4 py-2 text-[10px] font-bold text-stone-500 hover:text-stone-300 uppercase tracking-widest transition-colors"
                     >
                         {t('cancel', 'Cancel')}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="primary"
                         onClick={handleConfirm}
-                        className="flex items-center gap-2 px-6 py-2 bg-accent hover:bg-accent/80 text-white rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all shadow-lg shadow-accent/20"
+                        className="gap-2"
                     >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <CheckCircle2 className="w-4 h-4" />
                         <span>{t('confirm', 'Confirm')}</span>
-                    </button>
-                </div>
+                    </Button>
+                </ModalFooter>
             </div>
-        </div>,
-        document.body
+        </Modal>
     );
 };
 

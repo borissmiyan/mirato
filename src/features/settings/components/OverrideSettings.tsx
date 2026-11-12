@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Moon, Sun, Image as ImageIcon, Lock, Plus, FolderOpen, Trash2, ChevronDown, ChevronRight, FolderPlus, Group, RefreshCw, AlertCircle, Library } from 'lucide-react';
+import { Moon, Sun, Image as ImageIcon, Lock, Plus, FolderOpen, ChevronDown, ChevronRight, AlertCircle, Library } from 'lucide-react';
 import { usePresenterStore } from '@/features/presenter/store/presenterStore';
 import { cn } from '@/core/utils/cn';
 import { BackgroundPicker } from '@/features/presenter/components/slide-properties/BackgroundPicker';
@@ -12,8 +12,139 @@ import { LogoGrid } from './logo/LogoGrid';
 import { CreateGroupDialog } from './logo/CreateGroupDialog';
 import { LogoCard } from './logo/LogoCard';
 import { IpcService } from '@/core/services/ipcService';
+import { SegmentedControl, IconButton, Card, EmptyState } from '@/shared/ui';
+import type { ILogo, ILogoGroup } from '@/core/types/media';
+import type { PresenterSettings } from '@/core/types/settings';
 
 type OverrideTab = 'blackout' | 'whiteout' | 'logo';
+
+interface OverrideTabDefinition {
+    id: OverrideTab;
+    label: string;
+    desc: string;
+    locked?: boolean;
+    icon: React.ComponentType<{ className?: string }> | React.ElementType;
+}
+
+const OverrideTabButton: React.FC<{
+    tab: OverrideTabDefinition;
+    isSelected: boolean;
+    onSelect: (id: OverrideTab) => void;
+    settings: PresenterSettings;
+    logoUrl: string | null;
+}> = React.memo(({ tab, isSelected, onSelect, settings, logoUrl }) => {
+    const Icon = tab.icon;
+    const handleClick = useCallback(() => onSelect(tab.id), [onSelect, tab.id]);
+    return (
+        <button
+            type="button"
+            onClick={handleClick}
+            className={cn(
+                "flex-1 group relative flex flex-col items-center gap-3 p-5 rounded-2xl border transition-all duration-200 cursor-pointer overflow-hidden select-none active:scale-[0.98] will-change-transform",
+                isSelected
+                    ? "bg-accent/10 border-accent/30 shadow-lg ring-1 ring-accent/20"
+                    : "bg-stone-900/40 border-white/5 hover:border-white/10 hover:bg-stone-900/60"
+            )}
+        >
+            <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-white/5 shadow-inner">
+                <SlideBackground background={settings.overrides[tab.id].background} />
+                {tab.id === 'logo' && (
+                    <div className="relative z-10 w-full h-full flex items-center justify-center p-4">
+                        {logoUrl ? (
+                            <img src={logoUrl} alt="Logo" className="max-w-full max-h-full object-contain drop-shadow-md" />
+                        ) : (
+                            <div className="w-8 h-8 rounded-full border-2 border-white/20 flex items-center justify-center">
+                                <span className="text-[10px] font-black text-white/30">E</span>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+
+            <div className="text-center">
+                <div className="flex items-center justify-center gap-2">
+                    <Icon className={cn(
+                        "w-4 h-4 transition-colors",
+                        isSelected ? "text-accent" : "text-stone-500"
+                    )} />
+                    <span className={cn(
+                        "text-xs font-bold uppercase tracking-widest transition-colors",
+                        isSelected ? "text-white" : "text-stone-400"
+                    )}>
+                        {tab.label}
+                    </span>
+                    {tab.locked && <Lock className="w-3 h-3 text-stone-600" />}
+                </div>
+                <p className="text-[10px] text-stone-600 font-medium mt-1">{tab.desc}</p>
+            </div>
+
+            {isSelected && (
+                <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_var(--accent-glow)]" />
+            )}
+        </button>
+    );
+});
+OverrideTabButton.displayName = 'OverrideTabButton';
+
+const OverrideGroupItem: React.FC<{
+    group: ILogoGroup;
+    isCollapsed: boolean;
+    onToggle: (id: string) => void;
+    activeLogoId: string | null;
+    customGroups: ILogoGroup[];
+    onSelect: (id: string) => void;
+    onRemoveLogo: (groupId: string, logoId: string) => void;
+    onMove: (logoId: string, targetGroupId: string | null) => void;
+}> = React.memo(({ group, isCollapsed, onToggle, activeLogoId, customGroups, onSelect, onRemoveLogo, onMove }) => {
+    const handleToggle = useCallback(() => onToggle(group.id), [onToggle, group.id]);
+    const handleRemove = useCallback((logoId: string) => onRemoveLogo(group.id, logoId), [onRemoveLogo, group.id]);
+    return (
+        <div className="space-y-3">
+            <div className="flex items-center gap-2">
+                <button
+                    type="button"
+                    onClick={handleToggle}
+                    className="p-1 hover:bg-white/5 rounded cursor-pointer transition-colors"
+                >
+                    {isCollapsed ? <ChevronRight className="w-3 h-3 text-stone-500" /> : <ChevronDown className="w-3 h-3 text-stone-500" />}
+                </button>
+                <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{group.name}</h4>
+                <span className="text-[10px] text-stone-600 font-mono">({group.logos.length})</span>
+            </div>
+            {!isCollapsed && (
+                <LogoGrid
+                    logos={group.logos}
+                    activeLogoId={activeLogoId}
+                    onSelect={onSelect}
+                    onRemove={handleRemove}
+                    allGroups={customGroups}
+                    onMove={onMove}
+                />
+            )}
+        </div>
+    );
+});
+OverrideGroupItem.displayName = 'OverrideGroupItem';
+
+const OverridePreloadedLogoItem: React.FC<{
+    logo: ILogo;
+    isActive: boolean;
+    onSelect: (id: string) => void;
+    customGroups: ILogoGroup[];
+    onMove: (logoId: string, targetGroupId: string | null) => void;
+}> = React.memo(({ logo, isActive, onSelect, customGroups, onMove }) => {
+    const handleSelect = useCallback(() => onSelect(logo.id), [onSelect, logo.id]);
+    return (
+        <LogoCard
+            logo={logo}
+            isActive={isActive}
+            onSelect={handleSelect}
+            allGroups={customGroups}
+            onMove={onMove}
+        />
+    );
+});
+OverridePreloadedLogoItem.displayName = 'OverridePreloadedLogoItem';
 
 const OverrideSettings: React.FC = () => {
     const { t } = useTranslation();
@@ -25,22 +156,22 @@ const OverrideSettings: React.FC = () => {
         settings,
         activeLogoId,
         customGroups,
-        isImporting,
         showCreateGroup,
         collapsedGroups,
-        importTargetGroupId,
         setShowCreateGroup,
         handleSelectFile,
         handleImportFolder,
-        handleRefreshFolder,
         handleCreateGroup,
         toggleCollapse,
         handleRemoveFromGroup,
         removeCustomLogo,
         setActiveLogo,
         moveLogoToGroup,
-        removeLogoGroup,
     } = useLogoSettings();
+
+    const handleCloseCreateGroup = useCallback(() => setShowCreateGroup(false), [setShowCreateGroup]);
+    const handleSelectFileDirect = useCallback(() => handleSelectFile(), [handleSelectFile]);
+    const handleImportFolderDirect = useCallback(() => handleImportFolder(), [handleImportFolder]);
 
     // Find active logo object
     const activeLogo = React.useMemo(() => {
@@ -77,112 +208,56 @@ const OverrideSettings: React.FC = () => {
     ];
 
     return (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Override Tabs */}
             <div className="flex gap-3">
-                {tabs.map((tab) => {
-                    const Icon = tab.icon;
-                    return (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={cn(
-                                "flex-1 group relative flex flex-col items-center gap-3 p-5 rounded-3xl border transition-all duration-300 cursor-pointer overflow-hidden",
-                                activeTab === tab.id
-                                    ? "bg-accent/10 border-accent/30 shadow-lg ring-1 ring-accent/20"
-                                    : "bg-stone-900/40 border-white/5 hover:border-white/10 hover:bg-stone-900/60"
-                            )}
-                        >
-                            {/* Preview Thumbnail */}
-                            <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/5 shadow-inner">
-                                <SlideBackground background={settings.overrides[tab.id].background} />
-                                {tab.id === 'logo' && (
-                                    <div className="relative z-10 w-full h-full flex items-center justify-center p-4">
-                                        {logoUrl ? (
-                                            <img src={logoUrl} alt="Logo" className="max-w-full max-h-full object-contain drop-shadow-md" />
-                                        ) : (
-                                            <div className="w-8 h-8 rounded-full border-2 border-white/20 flex items-center justify-center">
-                                                <span className="text-[10px] font-black text-white/30">E</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                    <Icon className={cn(
-                                        "w-4 h-4 transition-colors",
-                                        activeTab === tab.id ? "text-accent" : "text-stone-500"
-                                    )} />
-                                    <span className={cn(
-                                        "text-xs font-bold uppercase tracking-widest transition-colors",
-                                        activeTab === tab.id ? "text-white" : "text-stone-400"
-                                    )}>
-                                        {tab.label}
-                                    </span>
-                                    {tab.locked && <Lock className="w-3 h-3 text-stone-600" />}
-                                </div>
-                                <p className="text-[10px] text-stone-600 font-medium mt-1">{tab.desc}</p>
-                            </div>
-
-                            {/* Active indicator */}
-                            {activeTab === tab.id && (
-                                <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_var(--accent-glow)]" />
-                            )}
-                        </button>
-                    );
-                })}
+                {tabs.map((tab) => (
+                    <OverrideTabButton
+                        key={tab.id}
+                        tab={tab}
+                        isSelected={activeTab === tab.id}
+                        onSelect={setActiveTab}
+                        settings={settings}
+                        logoUrl={logoUrl}
+                    />
+                ))}
             </div>
 
             {/* Content area */}
-            <div className="bg-stone-900/30 border border-white/5 rounded-3xl p-6 relative overflow-hidden flex flex-col min-h-[400px]">
-                <div className="absolute top-0 right-0 w-40 h-40 bg-accent/3 blur-3xl rounded-full translate-x-10 -translate-y-10 pointer-events-none" />
+            <Card padding="lg" rounded="xl" className="relative overflow-hidden flex flex-col min-h-[400px]">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-accent/5 blur-3xl rounded-full translate-x-10 -translate-y-10 pointer-events-none" />
 
                 <div className="relative z-10 flex-1 flex flex-col">
                     {activeTab === 'logo' ? (
                         <div className="flex flex-col h-full gap-6">
                             {/* Logo Sub-Tabs */}
                             <div className="flex items-center justify-between">
-                                <div className="flex bg-stone-950/40 p-1 rounded-xl border border-white/5">
-                                    <button
-                                        onClick={() => setLogoSubTab('library')}
-                                        className={cn(
-                                            "flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-all",
-                                            logoSubTab === 'library' ? "bg-stone-800 text-white shadow-lg" : "text-stone-500 hover:text-stone-300"
-                                        )}
-                                    >
-                                        <Library className="w-3.5 h-3.5" />
-                                        {t('logo_library', 'Library')}
-                                    </button>
-                                    <button
-                                        onClick={() => setLogoSubTab('background')}
-                                        className={cn(
-                                            "flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-bold transition-all",
-                                            logoSubTab === 'background' ? "bg-stone-800 text-white shadow-lg" : "text-stone-500 hover:text-stone-300"
-                                        )}
-                                    >
-                                        <ImageIcon className="w-3.5 h-3.5" />
-                                        {t('background', 'Background')}
-                                    </button>
-                                </div>
+                                <SegmentedControl
+                                    value={logoSubTab}
+                                    onChange={(val) => setLogoSubTab(val as 'library' | 'background')}
+                                    options={[
+                                        { value: 'library', label: t('logo_library', 'Library'), icon: <Library className="w-3.5 h-3.5" /> },
+                                        { value: 'background', label: t('background', 'Background'), icon: <ImageIcon className="w-3.5 h-3.5" /> },
+                                    ]}
+                                    size="sm"
+                                />
 
                                 {logoSubTab === 'library' && (
                                     <div className="flex gap-2">
-                                        <button
-                                            onClick={() => handleSelectFile()}
-                                            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-xl border border-white/5 transition-colors text-stone-300 hover:text-white"
-                                            title={t('add_logo', 'Add Logo')}
-                                        >
-                                            <Plus className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleImportFolder()}
-                                            className="p-2 bg-stone-800 hover:bg-stone-700 rounded-xl border border-white/5 transition-colors text-stone-300 hover:text-white"
-                                            title={t('import_folder', 'Import Folder')}
-                                        >
-                                            <FolderOpen className="w-4 h-4" />
-                                        </button>
+                                        <IconButton
+                                            icon={<Plus className="w-4 h-4" />}
+                                            label={t('add_logo', 'Add Logo')}
+                                            variant="surface"
+                                            size="xs"
+                                            onClick={handleSelectFileDirect}
+                                        />
+                                        <IconButton
+                                            icon={<FolderOpen className="w-4 h-4" />}
+                                            label={t('import_folder', 'Import Folder')}
+                                            variant="surface"
+                                            size="xs"
+                                            onClick={handleImportFolderDirect}
+                                        />
                                     </div>
                                 )}
                             </div>
@@ -217,12 +292,11 @@ const OverrideSettings: React.FC = () => {
                                     )}
 
                                     {showCreateGroup && (
-                                        <CreateGroupDialog onSubmit={handleCreateGroup} onCancel={() => setShowCreateGroup(false)} />
+                                        <CreateGroupDialog onSubmit={handleCreateGroup} onCancel={handleCloseCreateGroup} />
                                     )}
 
-                                    {/* Library Content (Simplified version of LogoSettings) */}
+                                    {/* Library Content */}
                                     <div className="space-y-6">
-                                        {/* Custom Logos */}
                                         {(settings.logo.customLogos.length > 0 || customGroups.length > 0) ? (
                                             <>
                                                 {settings.logo.customLogos.length > 0 && (
@@ -240,32 +314,25 @@ const OverrideSettings: React.FC = () => {
                                                 )}
 
                                                 {customGroups.map(group => (
-                                                    <div key={group.id} className="space-y-3">
-                                                        <div className="flex items-center gap-2">
-                                                            <button onClick={() => toggleCollapse(group.id)} className="p-1 hover:bg-white/5 rounded">
-                                                                {collapsedGroups.has(group.id) ? <ChevronRight className="w-3 h-3 text-stone-600" /> : <ChevronDown className="w-3 h-3 text-stone-600" />}
-                                                            </button>
-                                                            <h4 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">{group.name}</h4>
-                                                            <span className="text-[10px] text-stone-700">{group.logos.length}</span>
-                                                        </div>
-                                                        {!collapsedGroups.has(group.id) && (
-                                                            <LogoGrid
-                                                                logos={group.logos}
-                                                                activeLogoId={activeLogoId}
-                                                                onSelect={setActiveLogo}
-                                                                onRemove={(id) => handleRemoveFromGroup(id, group.id)}
-                                                                allGroups={customGroups}
-                                                                onMove={moveLogoToGroup}
-                                                            />
-                                                        )}
-                                                    </div>
+                                                    <OverrideGroupItem
+                                                        key={group.id}
+                                                        group={group}
+                                                        isCollapsed={collapsedGroups.has(group.id)}
+                                                        onToggle={toggleCollapse}
+                                                        activeLogoId={activeLogoId}
+                                                        customGroups={customGroups}
+                                                        onSelect={setActiveLogo}
+                                                        onRemoveLogo={handleRemoveFromGroup}
+                                                        onMove={moveLogoToGroup}
+                                                    />
                                                 ))}
                                             </>
                                         ) : (
-                                            <div className="py-8 flex flex-col items-center justify-center border-2 border-dashed border-white/5 rounded-2xl text-stone-600">
-                                                <ImageIcon className="w-8 h-8 opacity-10 mb-2" />
-                                                <p className="text-[10px] font-medium">{t('no_logos_added', 'No custom logos added yet')}</p>
-                                            </div>
+                                            <EmptyState
+                                                icon={ImageIcon}
+                                                title={t('no_logos_added', 'No custom logos added yet')}
+                                                size="sm"
+                                            />
                                         )}
 
                                         {/* Preloaded Section */}
@@ -276,12 +343,12 @@ const OverrideSettings: React.FC = () => {
                                                     <p className="text-[10px] font-bold text-stone-500">{group.name}</p>
                                                     <div className="grid grid-cols-3 gap-3">
                                                         {group.logos.map((logo) => (
-                                                            <LogoCard
+                                                            <OverridePreloadedLogoItem
                                                                 key={logo.id}
                                                                 logo={logo}
                                                                 isActive={activeLogoId === logo.id}
-                                                                onSelect={() => setActiveLogo(logo.id)}
-                                                                allGroups={customGroups}
+                                                                onSelect={setActiveLogo}
+                                                                customGroups={customGroups}
                                                                 onMove={moveLogoToGroup}
                                                             />
                                                         ))}
@@ -296,7 +363,7 @@ const OverrideSettings: React.FC = () => {
                     ) : (
                         <div className="flex flex-col items-center justify-center py-12 gap-4 h-full">
                             <div className={cn(
-                                "w-20 h-20 rounded-3xl border-2 flex items-center justify-center",
+                                "w-20 h-20 rounded-2xl border-2 flex items-center justify-center shadow-lg transition-transform",
                                 activeTab === 'blackout'
                                     ? "bg-black border-stone-800"
                                     : "bg-white border-stone-200"
@@ -317,7 +384,7 @@ const OverrideSettings: React.FC = () => {
                         </div>
                     )}
                 </div>
-            </div>
+            </Card>
         </div>
     );
 };

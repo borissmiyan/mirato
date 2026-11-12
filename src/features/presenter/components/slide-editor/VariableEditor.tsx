@@ -6,10 +6,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { PresentationDataService } from '@/features/presenter/services/PresentationDataService';
 import { Type, Subtitles, AlignLeft, Layout, Settings2, Layers, Music, Plus } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
+import { Input } from '@/shared/ui';
 
 const VariableEditor: React.FC = () => {
     const { t } = useTranslation();
-    const { activePresentationId, selectedPresentationId, previewSlideId, updateSlideVariable } = usePresentationStore();
+    const selectedPresentationId = usePresentationStore(s => s.selectedPresentationId);
+    const previewSlideId = usePresentationStore(s => s.previewSlideId);
+    const updateSlideVariable = usePresentationStore(s => s.updateSlideVariable);
 
     const presentation = useLiveQuery(
         () => selectedPresentationId ? PresentationDataService.getPresentation(selectedPresentationId) : undefined,
@@ -48,12 +51,13 @@ const VariableEditor: React.FC = () => {
                         <Type className="w-3 h-3" />
                         {t('slide_title', 'Title')}
                     </label>
-                    <input
+                    <Input
                         type="text"
+                        size="xs"
                         value={vars.title || ''}
                         onChange={(e) => handleUpdate('title', e.target.value)}
                         placeholder={t('enter_title', 'Enter title...')}
-                        className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-sm text-white placeholder:text-stone-700 focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-all font-medium"
+                        className="w-full bg-black/40 border-white/5 text-sm text-white placeholder:text-stone-700 font-medium"
                     />
                 </div>
 
@@ -63,12 +67,13 @@ const VariableEditor: React.FC = () => {
                         <Subtitles className="w-3 h-3" />
                         {t('slide_subtitle', 'Subtitle')}
                     </label>
-                    <input
+                    <Input
                         type="text"
+                        size="xs"
                         value={vars.subtitle || ''}
                         onChange={(e) => handleUpdate('subtitle', e.target.value)}
                         placeholder={t('enter_subtitle', 'Enter subtitle...')}
-                        className="w-full bg-black/40 border border-white/5 rounded-xl px-3 py-2 text-sm text-white placeholder:text-stone-700 focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-all font-medium"
+                        className="w-full bg-black/40 border-white/5 text-sm text-white placeholder:text-stone-700 font-medium"
                     />
                 </div>
 
@@ -99,7 +104,7 @@ const VariableEditor: React.FC = () => {
                                 <button
                                     key={type}
                                     className={cn(
-                                        "flex-1 py-1.5 text-[10px] font-bold uppercase rounded-lg transition-all",
+                                        "flex-1 py-1.5 text-[10px] font-bold uppercase rounded-xl transition-all",
                                         type === 'Fade' ? "bg-accent/20 text-accent shadow-sm" : "text-stone-600 hover:text-stone-400"
                                     )}
                                 >

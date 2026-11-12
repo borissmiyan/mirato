@@ -4,6 +4,7 @@ import { ChevronRight, Download, LayoutTemplate, Presentation, Music, Layers, ty
 import { cn } from '@/core/utils/cn';
 import { IPresentationBin } from '@/core/types';
 import { ITemplateNav } from './LibraryTemplatesSection';
+import { Button, Tooltip } from '@/shared/ui';
 
 interface LibraryHeaderProps {
     graceLibSection: string | null;
@@ -35,12 +36,13 @@ export const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                     <React.Fragment key={`${nav.id}-${index}`}>
                         {index > 0 && <ChevronRight className="w-3 h-3 text-stone-700 shrink-0" />}
                         <button
+                            type="button"
                             onClick={() => setTemplateNavPath(templateNavPath.slice(0, index + 1))}
                             className={cn(
-                                "text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors flex items-center gap-1.5",
+                                "text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-all flex items-center gap-1.5",
                                 index === templateNavPath.length - 1
                                     ? "text-stone-300 pointer-events-none"
-                                    : "text-stone-600 hover:text-accent cursor-pointer"
+                                    : "text-stone-600 hover:text-accent cursor-pointer active:scale-[0.97]"
                             )}
                         >
                             {index === 0 && <LayoutTemplate className="w-3.5 h-3.5" />}
@@ -52,10 +54,11 @@ export const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 {graceLibSection === 'presentations' && (
                     <div className="flex items-center gap-1.5 min-w-0">
                         <button
+                            type="button"
                             onClick={() => setPresentationBinNavPath([])}
                             className={cn(
-                                "text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors flex items-center gap-1.5",
-                                presentationBinNavPath.length === 0 ? "text-stone-300" : "text-stone-600 hover:text-accent"
+                                "text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-all flex items-center gap-1.5",
+                                presentationBinNavPath.length === 0 ? "text-stone-300" : "text-stone-600 hover:text-accent cursor-pointer active:scale-[0.97]"
                             )}
                         >
                             <Presentation className="w-3.5 h-3.5" />
@@ -68,12 +71,13 @@ export const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                                 <React.Fragment key={binId}>
                                     <ChevronRight className="w-3 h-3 text-stone-700 shrink-0" />
                                     <button
+                                        type="button"
                                         onClick={() => setPresentationBinNavPath(presentationBinNavPath.slice(0, index + 1))}
                                         className={cn(
-                                            "text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-colors",
+                                            "text-[9px] font-bold uppercase tracking-widest whitespace-nowrap transition-all",
                                             index === presentationBinNavPath.length - 1
                                                 ? "text-stone-300 pointer-events-none"
-                                                : "text-stone-600 hover:text-accent cursor-pointer"
+                                                : "text-stone-600 hover:text-accent cursor-pointer active:scale-[0.97]"
                                         )}
                                     >
                                         {bin.name}
@@ -99,14 +103,17 @@ export const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                 )}
             </div>
 
-            <button
-                onClick={handleImportClick}
-                className="ml-auto flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-accent/20 hover:bg-accent/30 text-accent border border-accent/20 transition-all shrink-0 cursor-pointer shadow-lg outline-none"
-                title={t('import_files_desc', 'Import presentations, templates, or media')}
-            >
-                <Download className="w-3.5 h-3.5" />
-                <span className="text-[10px] font-black uppercase tracking-widest hidden @[200px]:block">{t('import', 'Import')}</span>
-            </button>
+            <Tooltip content={t('import_files_desc', 'Import presentations, templates, or media')} position="bottom" className="ml-auto shrink-0">
+                <Button
+                    size="xs"
+                    variant="accent"
+                    onClick={handleImportClick}
+                    leftIcon={<Download className="w-3.5 h-3.5" />}
+                    className="shadow-lg shadow-accent/20"
+                >
+                    <span className="text-[10px] font-black uppercase tracking-widest hidden @[200px]:block">{t('import', 'Import')}</span>
+                </Button>
+            </Tooltip>
         </div>
     );
 };

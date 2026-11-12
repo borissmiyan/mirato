@@ -27,6 +27,7 @@ export const AVAILABLE_FONTS: FontDefinition[] = [
     { name: 'Comfortaa', category: 'Display', tags: ['Latin', 'Cyrillic'], source: 'bundled', weights: [{ name: 'Regular', value: '400' }] },
     { name: 'Lobster', category: 'Display', tags: ['Latin', 'Cyrillic'], source: 'bundled', weights: [{ name: 'Regular', value: '400' }] },
     { name: 'Caveat', category: 'Display', tags: ['Latin', 'Cyrillic'], source: 'bundled', weights: [{ name: 'Regular', value: '400' }] },
+    { name: 'Trajan Pro', category: 'Serif', tags: ['Latin', 'Cyrillic'], source: 'bundled', weights: [{ name: 'Regular', value: '400' }, { name: 'Bold', value: '700' }] },
     { name: 'Crimson Pro', category: 'Serif', tags: ['Latin', 'Cyrillic'], source: 'bundled', weights: [{ name: 'Regular', value: '400' }, { name: 'Italic', value: '400 italic' }, { name: 'Semi Bold', value: '600' }, { name: 'Bold', value: '700' }] },
     { name: 'Dancing Script', category: 'Handwriting', tags: ['Latin'], source: 'bundled', weights: [{ name: 'Regular', value: '400' }] },
 ];

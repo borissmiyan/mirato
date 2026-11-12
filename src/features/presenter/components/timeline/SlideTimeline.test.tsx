@@ -41,9 +41,12 @@ const { mockPresentationStore } = vi.hoisted(() => ({
   }
 }));
 
-vi.mock('@/features/presenter/store/presentationStore', () => ({
-  usePresentationStore: vi.fn((selector: any) => selector ? selector(mockPresentationStore) : mockPresentationStore),
-}));
+vi.mock('@/features/presenter/store/presentationStore', () => {
+  const storeHook: any = vi.fn((selector: any) => selector ? selector(mockPresentationStore) : mockPresentationStore);
+  storeHook.getState = vi.fn(() => mockPresentationStore);
+  storeHook.setState = vi.fn((updates: any) => Object.assign(mockPresentationStore, updates));
+  return { usePresentationStore: storeHook };
+});
 
 vi.mock('@/features/presenter/store/presenterStore', () => ({
   usePresenterStore: vi.fn(() => ({})),
@@ -79,6 +82,7 @@ vi.mock('jotai', () => ({
 
 vi.mock('@/core/store/uiAtoms', () => ({
   appModeAtom: { initialValue: 'presentation' },
+  activeHymnalIdAtom: { initialValue: null },
   isTimelineHoveredAtom: { initialValue: false },
   slideDesignPanelOpenAtom: { initialValue: false },
   slideDesignTabAtom: { initialValue: 'design' },
@@ -202,7 +206,7 @@ describe('SlideTimeline', () => {
       fireEvent.click(slide);
     }
     
-    expect(setPreviewSlide).toHaveBeenCalledWith(mockSlides[0].id, 'p1');
+    expect(setPreviewSlide).toHaveBeenCalledWith(mockSlides[0].id, 'p1', undefined, undefined, undefined, true);
   });
 
   it('should render "LIVE" badge for the live slide', async () => {

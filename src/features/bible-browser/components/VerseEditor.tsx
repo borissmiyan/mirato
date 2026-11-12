@@ -3,6 +3,7 @@ import { Verse } from '@/core/types';
 import { Save, X, Edit3, Keyboard } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { useTranslation } from 'react-i18next';
+import { Button } from '@/shared/ui';
 
 interface VerseEditorProps {
     verse: Verse;
@@ -86,25 +87,24 @@ const VerseEditor: React.FC<VerseEditorProps> = ({ verse, onSave, onCancel }) =>
                     />
 
                     <div className="flex gap-2 mt-2">
-                        <button
+                        <Button
+                            variant="primary"
                             onClick={handleSave}
                             title={t('save_changes')}
                             aria-label={t('save_changes')}
-                            className={cn(
-                                "flex-1 flex items-center justify-center h-10 rounded-xl transition-all active:scale-95 shadow-lg shadow-accent/10 whitespace-nowrap",
-                                "bg-accent text-accent-foreground hover:bg-accent/90"
-                            )}
+                            className="flex-1 h-10 shadow-lg shadow-accent/10 whitespace-nowrap"
                         >
                             <Save className="w-5 h-5" />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                            variant="secondary"
                             onClick={handleCancel}
                             title={t('cancel')}
                             aria-label={t('cancel')}
-                            className="flex-1 flex items-center justify-center h-10 rounded-xl text-stone-500 hover:text-stone-200 hover:bg-white/5 transition-all active:scale-95 group whitespace-nowrap"
+                            className="flex-1 h-10 text-stone-500 hover:text-stone-200 group whitespace-nowrap"
                         >
                             <X className="w-5 h-5 transition-transform group-hover:rotate-90" />
-                        </button>
+                        </Button>
                     </div>
                 </div>
             </div>

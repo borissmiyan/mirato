@@ -10,7 +10,7 @@ export const PresenterService = {
    * Sends a command to the projector window.
    */
   sendCommand: (command: IProjectorCommand) => {
-    IpcService.send('projector-command', command);
+    IpcService.send('projector-command', command.type, command.payload);
   },
 
   /**
@@ -24,10 +24,7 @@ export const PresenterService = {
    * Synchronizes state with the projector.
    */
   syncProjectorState: (state: IProjectorState) => {
-    IpcService.send('projector-command', {
-      type: 'sync-state',
-      payload: state
-    });
+    IpcService.send('projector-command', 'sync-state', state);
   },
 
   /**
@@ -65,7 +62,7 @@ export const PresenterService = {
    * Subscribes to projector commands.
    * Returns an unsubscribe function.
    */
-  subscribeToCommands: (callback: (command: string, payload: any) => void) => {
+  subscribeToCommands: (callback: (command: string, payload: unknown) => void) => {
     return IpcService.on('projector-command', callback);
   }
 };

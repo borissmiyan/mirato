@@ -1,5 +1,5 @@
 import { db } from '@/core/db';
-import { IStyleLayer, ISlide, ICanvasSlide, ITimerSlide, SlideType, IAudioScope } from '@/core/types';
+import { IStyleLayer, ISlide, ICanvasSlide, ITimerSlide, SlideType, IAudioScope, IMediaItem } from '@/core/types';
 import { IpcService } from '@/core/services/ipcService';
 
 export interface MediaManifest {
@@ -14,37 +14,7 @@ export interface MediaManifest {
     }
 }
 
-/**
- * SHA-256 content-based hashing for blobs.
- * Optmized for large files: If file > 20MB, hashes a sample (head + mid + tail + size)
- * for near-instant deduplication without reading the whole file into RAM.
- */
-export async function sha256(blob: Blob): Promise<string> {
-    const SIZE_LIMIT = 20 * 1024 * 1024; // 20MB
-    const SAMPLE_SIZE = 1 * 1024 * 1024; // 1MB
-    
-    let content: Blob;
-    if (blob.size <= SIZE_LIMIT) {
-        content = blob;
-    } else {
-        // Sampled hashing for massive files (Video/Large Audio)
-        const head = blob.slice(0, SAMPLE_SIZE);
-        const mid = blob.slice(Math.floor(blob.size / 2), Math.floor(blob.size / 2) + SAMPLE_SIZE);
-        const tail = blob.slice(blob.size - SAMPLE_SIZE);
-        const meta = new Blob([
-            blob.size.toString(), 
-            blob.type,
-            // Include a middle-of-the-way sample too for safety
-            blob.slice(Math.floor(blob.size / 4), Math.floor(blob.size / 4) + SAMPLE_SIZE / 2)
-        ]);
-        content = new Blob([head, mid, tail, meta]);
-    }
-    
-    const arrayBuffer = await content.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+export { sha256 } from '@/core/utils/hashUtils';
 
 /**
  * Extracts a filesystem path from a local-resource:// or file:/// URL.
@@ -135,7 +105,7 @@ export function extToMime(ext: string): string {
  * Finds a custom font in the media pool.
  * Deprecated: Used single-pass font loading in collectMediaRefs instead.
  */
-export async function findFontMedia(fontFamily: string, fontWeight?: string | number) {
+export async function findFontMedia(fontFamily: string, fontWeight?: string | number): Promise<IMediaItem | undefined> {
     const items = await db.mediaPool
         .filter(item => item.name === fontFamily || item.name.startsWith(fontFamily))
         .toArray();
@@ -152,7 +122,7 @@ export async function collectMediaRefs(
 ): Promise<Map<string, { role: string; originalName: string; fontFamily?: string; fontWeight?: string | number }>> {
     const mediaMap = new Map<string, { role: string; originalName: string; fontFamily?: string; fontWeight?: string | number }>();
 
-    const addRef = (id: string | undefined, role: string, originalName: string = id || '', extra: Record<string, any> = {}) => {
+    const addRef = (id: string | undefined, role: string, originalName: string = id || '', extra: Record<string, unknown> = {}) => {
         if (id && !mediaMap.has(id)) {
             mediaMap.set(id, { role, originalName, ...extra });
         }
@@ -248,7 +218,7 @@ export async function collectMediaRefs(
             const s = slide as ISlide & { backgroundOverride?: IStyleLayer[] }; // Verses use canvas layout background override
             if (s.backgroundOverride) collectFromLayers(s.backgroundOverride, 'background');
         } else if (type === 'video') {
-            const s = slide as any; // Legacy video slides are loosely typed
+            const s = slide as ISlide & { videoSettings?: { mediaId?: string }; name?: string; backgroundOverride?: IStyleLayer[] }; // Legacy video slides are loosely typed
             if (s.backgroundOverride) collectFromLayers(s.backgroundOverride, 'background');
             if (s.videoSettings?.mediaId) {
                 const id = extractPathFromLocalResource(s.videoSettings.mediaId) || s.videoSettings.mediaId;
@@ -259,7 +229,7 @@ export async function collectMediaRefs(
 
     // 4. Batch load fonts
     const fontNames = Array.from(fontFamilies);
-    const fontItems = new Map<string, any>();
+    const fontItems = new Map<string, IMediaItem>();
     
     if (fontNames.length > 0) {
         await db.mediaPool.each(item => {
@@ -326,7 +296,7 @@ export async function getMediaBlob(localId: string): Promise<{ blob: Blob; name:
 /**
  * Recursively replaces IDs in an object using a provided map.
  */
-export function patchMediaIds(target: unknown, map: Map<string, string>) {
+export function patchMediaIds(target: unknown, map: Map<string, string>): void {
     if (!target || typeof target !== 'object') return;
 
     if (Array.isArray(target)) {

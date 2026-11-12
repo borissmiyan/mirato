@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import ContextMenu, { ContextMenuItem } from './ContextMenu';
 import { cn } from '@/core/utils/cn';
+import { sizeTokens, SizeToken, radiusTokens, colorTokens } from '@/shared/tokens';
 
 export interface DropdownOption {
     value: string;
@@ -10,20 +11,21 @@ export interface DropdownOption {
     icon?: React.ReactNode;
 }
 
-interface DropdownSelectorProps {
+export interface DropdownSelectorProps {
     value: string;
     options: DropdownOption[];
     onChange: (value: string) => void;
     placeholder?: string;
     className?: string;
     icon?: React.ReactNode;
+    size?: SizeToken;
     /** Optional custom rendering for the selected label */
     renderSelected?: (selected: DropdownOption | undefined) => React.ReactNode;
 }
 
 /**
  * A premium, high-fidelity replacement for the native <select> element.
- * Uses the portal-based ContextMenu for a consistent, modern UI experience.
+ * Standardized via design tokens to match Button and Input heights and 4/8 grid.
  */
 export const DropdownSelector: React.FC<DropdownSelectorProps> = ({
     value,
@@ -32,6 +34,7 @@ export const DropdownSelector: React.FC<DropdownSelectorProps> = ({
     placeholder,
     className,
     icon,
+    size = 'sm',
     renderSelected
 }) => {
     const { t } = useTranslation();
@@ -41,6 +44,9 @@ export const DropdownSelector: React.FC<DropdownSelectorProps> = ({
     const activeOption = options.find(o => o.value === value);
     const displayPlaceholder = placeholder || t('select', 'Select...');
 
+    const token = sizeTokens[size] || sizeTokens.sm;
+    const radiusClass = (size === 'xs' || size === 'sm') ? radiusTokens.md : radiusTokens.lg;
+
     const handleToggle = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -49,7 +55,6 @@ export const DropdownSelector: React.FC<DropdownSelectorProps> = ({
         } else {
             const rect = triggerRef.current?.getBoundingClientRect();
             if (rect) {
-                // Ensure the menu doesn't go off context
                 setMenuPos({ x: rect.left, y: rect.bottom + 4 });
             }
         }
@@ -62,19 +67,25 @@ export const DropdownSelector: React.FC<DropdownSelectorProps> = ({
                 type="button"
                 onClick={handleToggle}
                 className={cn(
-                    "w-full bg-black/40 border border-white/5 rounded-xl px-4 py-3 text-sm text-white flex items-center justify-between transition-all hover:bg-black/60 hover:border-white/10 group cursor-pointer outline-hidden focus-visible:ring-1 focus-visible:ring-accent/40",
+                    "w-full bg-black/40 border text-white flex items-center justify-between transition-all",
+                    colorTokens.border,
+                    token.height,
+                    token.px,
+                    token.text,
+                    radiusClass,
+                    "hover:bg-black/60 hover:border-white/20 group cursor-pointer outline-hidden focus-visible:ring-1 focus-visible:ring-accent/40",
                     menuPos && "border-accent/40 bg-accent/5 ring-1 ring-accent/20 shadow-[0_0_20px_rgba(234,179,8,0.05)]",
                     className
                 )}
             >
-                <div className="flex items-center gap-2.5 min-w-0">
-                    {icon && <span className="text-stone-500 group-hover:text-accent transition-colors shrink-0">{icon}</span>}
-                    <div className="truncate font-bold tracking-tight">
+                <div className="flex items-center gap-3 min-w-0">
+                    {icon && <span className={cn(colorTokens.textSubtle, "group-hover:text-accent transition-colors shrink-0")}>{icon}</span>}
+                    <div className="truncate font-semibold tracking-tight">
                         {renderSelected ? renderSelected(activeOption) : (activeOption?.label || displayPlaceholder)}
                     </div>
                 </div>
                 <ChevronDown className={cn(
-                    "w-4 h-4 text-stone-600 transition-transform duration-300 shrink-0",
+                    "w-4 h-4 text-stone-500 transition-transform duration-300 shrink-0",
                     menuPos ? "rotate-180 text-accent" : "group-hover:text-stone-300"
                 )} />
             </button>
@@ -85,9 +96,9 @@ export const DropdownSelector: React.FC<DropdownSelectorProps> = ({
                     y={menuPos.y}
                     onClose={() => setMenuPos(null)}
                 >
-                    <div className="max-h-[300px] overflow-y-auto no-scrollbar py-1 min-w-[180px]">
+                    <div className="max-h-[300px] overflow-y-auto no-scrollbar py-2 min-w-[180px]">
                         {options.length === 0 ? (
-                            <div className="px-4 py-3 text-[10px] font-bold text-stone-600 uppercase tracking-widest text-center">
+                            <div className="px-4 py-3 text-xs font-bold text-stone-500 uppercase tracking-wider text-center">
                                 {t('no_options', 'No options available')}
                             </div>
                         ) : (
@@ -112,4 +123,3 @@ export const DropdownSelector: React.FC<DropdownSelectorProps> = ({
 };
 
 export default DropdownSelector;
-

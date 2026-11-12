@@ -191,6 +191,19 @@ Since a global state manager is available, React Context should be kept to an ab
 
 If a `<Provider value={{...}}>` uses an inline object instead of a `useMemo` reference → **CRITICAL: Provider Re-render Cascade**.
 
+### Self-Correction Rule (Consumer Side)
+
+A separate, more common failure: a Context whose value object bundles many
+unrelated fields (e.g. `useAppData()` returning `{ user, transactions,
+settings, notifications, ... }`) forces every consumer to re-render on ANY
+field change, since Context has no built-in per-field selector like
+Zustand's `useStore(s => s.field)`.
+
+If a component calls a Context hook and destructures only 1-2 fields from a
+value object that has 4+ fields → **WARNING: Missing Context Selector
+Split** (recommend splitting into multiple Contexts by update-frequency, or
+migrating high-frequency fields to the existing Zustand/Jotai store).
+
 ---
 
 ## 9. Local State for Global Modals

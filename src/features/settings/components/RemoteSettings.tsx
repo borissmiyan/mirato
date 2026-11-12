@@ -1,17 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useTranslation } from 'react-i18next';
-import { Smartphone, ServerCrash, Check, Copy, Wifi, ShieldCheck, QrCode, RefreshCw } from 'lucide-react';
+import { Smartphone, ServerCrash, Check, Copy, Wifi, ShieldCheck, QrCode, RefreshCw, Network, Info } from 'lucide-react';
 import { toast } from 'sonner';
+import { Card, Button, Badge } from '@/shared/ui';
+import { cn } from '@/core/utils/cn';
 
 const RemoteSettings: React.FC = () => {
     const { t } = useTranslation();
 
-    const [serverInfo, setServerInfo] = useState<{ ip: string, port: number, pin: string } | null>(null);
+    const [serverInfo, setServerInfo] = useState<{ ip: string; port: number; pin: string; availableIps?: Array<{ name: string; ip: string }> } | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
+    const [airDeckHost, setAirDeckHost] = useState(() => {
+        try {
+            return localStorage.getItem('deck_ce_relay_host') || '127.0.0.1';
+        } catch {
+            return '127.0.0.1';
+        }
+    });
+
+    const handleAirDeckHostChange = (val: string) => {
+        setAirDeckHost(val);
+        try {
+            localStorage.setItem('deck_ce_relay_host', val.trim());
+        } catch {}
+    };
 
     const cleanupRemoteState = () => {
         setServerInfo(null);
@@ -19,48 +35,14 @@ const RemoteSettings: React.FC = () => {
         setLoading(true);
     };
 
-    /**
-     * Refreshes the server network info.
-     * Tries getInfo() first — if the server is already running and Wi-Fi hasn't
-     * changed, the PIN and URL remain stable (no reconnect needed).
-     * Falls back to a full start() only when the server is unreachable.
-     */
-    const handleRefresh = async () => {
-        if (refreshing) return;
-        setRefreshing(true);
-        try {
-            if (window.electron?.ipcRenderer?.remote) {
-                const info = await window.electron.ipcRenderer.remote.getInfo();
-                if (info?.success) {
-                    setServerInfo({ ip: info.ip, port: info.port, pin: info.pin });
-                    setError(null);
-                } else {
-                    // Server not running — do a full restart
-                    await startServer();
-                }
-            }
-        } catch {
-            await startServer();
-        } finally {
-            setRefreshing(false);
-        }
-    };
-
-    useEffect(() => {
-        startServer();
-        return () => {
-            cleanupRemoteState();
-        };
-    }, []);
-
-    const startServer = async () => {
+    const startServer = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
             if (window.electron?.ipcRenderer?.remote) {
                 const info = await window.electron.ipcRenderer.remote.start();
                 if (info.success) {
-                    setServerInfo({ ip: info.ip, port: info.port, pin: info.pin });
+                    setServerInfo({ ip: info.ip, port: info.port, pin: info.pin, availableIps: info.availableIps });
                 } else {
                     setError(info.error || 'Failed to start server.');
                 }
@@ -72,7 +54,51 @@ const RemoteSettings: React.FC = () => {
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    const handleRefresh = async () => {
+        if (refreshing) return;
+        setRefreshing(true);
+        try {
+            if (window.electron?.ipcRenderer?.remote) {
+                const remoteBridge = window.electron.ipcRenderer.remote;
+                const info = typeof remoteBridge.refresh === 'function'
+                    ? await remoteBridge.refresh()
+                    : await remoteBridge.getInfo();
+                if (info?.success) {
+                    setServerInfo({ ip: info.ip, port: info.port, pin: info.pin, availableIps: info.availableIps });
+                    setError(null);
+                    toast.success(t('remote_link_refreshed'));
+                } else {
+                    await startServer();
+                }
+            }
+        } catch {
+            await startServer();
+        } finally {
+            setRefreshing(false);
+        }
     };
+
+    const handleSelectIp = async (ip: string) => {
+        if (!window.electron?.ipcRenderer?.remote?.selectIp) return;
+        try {
+            const info = await window.electron.ipcRenderer.remote.selectIp(ip);
+            if (info?.success) {
+                setServerInfo({ ip: info.ip, port: info.port, pin: info.pin, availableIps: info.availableIps });
+                toast.success(t('remote_link_refreshed'));
+            }
+        } catch (err) {
+            console.error('Failed to select IP', err);
+        }
+    };
+
+    useEffect(() => {
+        startServer();
+        return () => {
+            cleanupRemoteState();
+        };
+    }, [startServer]);
 
     const handleCopyUrl = () => {
         if (serverInfo) {
@@ -88,7 +114,7 @@ const RemoteSettings: React.FC = () => {
         <div className="flex flex-col gap-6 animate-in fade-in duration-300">
             {/* Header Info */}
             <div className="flex items-center gap-4 mb-2">
-                <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-accent/20 to-accent/5 border border-accent/20 flex items-center justify-center text-accent shadow-inner">
+                <div className="w-12 h-12 rounded-2xl bg-linear-to-br from-accent/20 to-accent/5 border border-accent/20 flex items-center justify-center text-accent shadow-inner shrink-0">
                     <Smartphone size={24} strokeWidth={1.5} />
                 </div>
                 <div>
@@ -102,7 +128,7 @@ const RemoteSettings: React.FC = () => {
             </div>
 
             {loading ? (
-                <div className="flex flex-col items-center justify-center py-20 space-y-6 bg-stone-900/40 border border-white/5 rounded-3xl">
+                <Card padding="lg" rounded="xl" className="flex flex-col items-center justify-center py-20 space-y-6">
                     <div className="relative w-16 h-16">
                         <div className="absolute inset-0 border-[3px] border-accent/10 rounded-full" />
                         <div className="absolute inset-0 border-[3px] border-accent border-t-transparent rounded-full animate-spin" />
@@ -114,9 +140,9 @@ const RemoteSettings: React.FC = () => {
                         <p className="text-white font-medium text-lg leading-none">{t('remote_starting_server')}</p>
                         <p className="text-stone-500 text-sm font-medium">{t('remote_initializing_bridge')}</p>
                     </div>
-                </div>
+                </Card>
             ) : error ? (
-                <div className="flex flex-col items-center justify-center py-16 space-y-5 text-center px-4 bg-stone-900/40 border border-white/5 rounded-3xl">
+                <Card padding="lg" rounded="xl" className="flex flex-col items-center justify-center py-16 space-y-5 text-center px-4">
                     <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 mb-2 border border-red-500/20">
                         <ServerCrash size={36} strokeWidth={1.5} />
                     </div>
@@ -124,22 +150,24 @@ const RemoteSettings: React.FC = () => {
                         <h3 className="text-xl font-bold text-white tracking-tight">{t('remote_connection_failed')}</h3>
                         <p className="text-red-400/80 font-medium text-sm">{error}</p>
                     </div>
-                    <button 
+                    <Button 
                         onClick={startServer} 
-                        className="mt-6 px-8 py-3.5 bg-white hover:bg-stone-200 text-black rounded-2xl text-sm font-bold transition-all active:scale-95 shadow-xl cursor-pointer"
+                        variant="primary"
+                        size="md"
+                        className="mt-6"
                     >
                         {t('remote_try_again')}
-                    </button>
-                </div>
+                    </Button>
+                </Card>
             ) : serverInfo ? (
                 <div className="flex flex-col gap-6">
                     {/* Bento Grid Layout */}
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_1.3fr] gap-6 items-stretch">
                         
                         {/* Left Side: QR Code Panel */}
-                        <div className="bg-stone-900/40 border border-white/5 rounded-3xl p-6 sm:p-8 flex flex-col items-center justify-center relative overflow-hidden group transition-colors">
+                        <Card padding="lg" rounded="xl" className="flex flex-col items-center justify-center relative overflow-hidden group">
                             <div className="relative z-10 flex flex-col items-center gap-6 w-full">
-                                <div className="p-4 sm:p-5 bg-white rounded-3xl shadow-xl relative transform group-hover:scale-105 transition-transform duration-500 ease-out">
+                                <div className="p-4 sm:p-5 bg-white rounded-2xl shadow-xl relative transform group-hover:scale-105 transition-transform duration-300 ease-out">
                                     <QRCodeSVG 
                                         value={`http://${serverInfo.ip}:${serverInfo.port}/remote.html`}
                                         size={180}
@@ -149,22 +177,18 @@ const RemoteSettings: React.FC = () => {
                                     />
                                 </div>
                                 
-                                <div className="flex items-center gap-2.5 bg-accent/10 border border-accent/20 px-4 py-2 rounded-full backdrop-blur-md">
-                                    <div className="flex h-2 w-2 relative">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                                        <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
-                                    </div>
-                                    <span className="text-accent text-xs font-bold uppercase tracking-wider">{t('remote_scan_to_connect')}</span>
-                                </div>
+                                <Badge variant="accent" size="sm" dot className="px-4 py-2">
+                                    {t('remote_scan_to_connect')}
+                                </Badge>
                             </div>
-                        </div>
+                        </Card>
 
                         {/* Right Side: Info Panel */}
                         <div className="flex flex-col gap-6">
                             
                             {/* Passcode Box */}
-                            <div className="bg-stone-900/60 border border-white/5 rounded-3xl p-6 sm:p-8 flex-1 flex flex-col justify-center relative group overflow-hidden">
-                                <div className="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity">
+                            <Card padding="lg" rounded="xl" className="flex-1 flex flex-col justify-center relative group overflow-hidden">
+                                <div className="absolute top-0 right-0 p-3 opacity-20 group-hover:opacity-40 transition-opacity pointer-events-none">
                                     <ShieldCheck size={120} strokeWidth={0.5} className="text-accent -mt-10 -mr-10" />
                                 </div>
                                 
@@ -184,18 +208,55 @@ const RemoteSettings: React.FC = () => {
                                         {t('remote_auth_pin_desc')}
                                     </p>
                                 </div>
-                            </div>
+                            </Card>
+
+                            {/* Interface Selector (when multiple LAN/Wi-Fi adapters exist) */}
+                            {serverInfo.availableIps && serverInfo.availableIps.length > 1 && (
+                                <div className="flex flex-col gap-2 p-3.5 rounded-2xl bg-stone-900/40 border border-white/5">
+                                    <div className="flex items-center gap-2 text-stone-400 text-xs font-semibold">
+                                        <Network size={14} className="text-accent" />
+                                        <span>{t('remote_select_network_interface')}</span>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {serverInfo.availableIps.map((adapter) => {
+                                            const isSelected = adapter.ip === serverInfo.ip;
+                                            return (
+                                                <button
+                                                    key={adapter.ip}
+                                                    type="button"
+                                                    onClick={() => handleSelectIp(adapter.ip)}
+                                                    className={cn(
+                                                        "px-3 py-1.5 rounded-xl text-xs font-mono transition-all flex items-center gap-2 border",
+                                                        isSelected
+                                                            ? "bg-accent/20 border-accent/40 text-accent font-semibold"
+                                                            : "bg-stone-800/60 border-white/5 text-stone-400 hover:text-white hover:bg-stone-800"
+                                                    )}
+                                                >
+                                                    <span className="text-[10px] uppercase font-sans text-stone-400">{adapter.name}:</span>
+                                                    <span>{adapter.ip}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Network Status / Tip */}
-                            <div className="bg-emerald-500/5 mt-auto border border-emerald-500/10 rounded-2xl p-4 sm:p-5 flex items-start gap-4">
-                                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 border border-emerald-500/20">
-                                    <Wifi size={14} className="text-emerald-400" />
+                            <div className="bg-emerald-500/5 mt-auto border border-emerald-500/10 rounded-2xl p-4 sm:p-5 flex flex-col gap-3">
+                                <div className="flex items-start gap-4">
+                                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                                        <Wifi size={14} className="text-emerald-400" />
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-sm font-bold text-emerald-400">{t('remote_same_network')}</span>
+                                        <span className="text-sm text-emerald-300/70 leading-snug">
+                                            {t('remote_same_network_desc')}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div className="flex flex-col gap-1">
-                                    <span className="text-sm font-bold text-emerald-400">{t('remote_same_network')}</span>
-                                    <span className="text-sm text-emerald-300/70 leading-snug">
-                                        {t('remote_same_network_desc')}
-                                    </span>
+                                <div className="pt-2 border-t border-emerald-500/10 flex items-start gap-2 text-xs text-emerald-300/70 leading-relaxed">
+                                    <Info size={14} className="shrink-0 mt-0.5 text-emerald-400" />
+                                    <span>{t('remote_ap_isolation_tip')}</span>
                                 </div>
                             </div>
                             
@@ -206,30 +267,50 @@ const RemoteSettings: React.FC = () => {
                     <div className="mt-2 group">
                         <div className="flex items-center justify-between mb-2 px-1">
                             <label className="text-[10px] text-stone-500 font-bold uppercase tracking-widest">{t('remote_enter_url_manually')}</label>
-                            <button
+                            <Button
+                                variant="ghost"
+                                size="xs"
                                 onClick={handleRefresh}
                                 disabled={refreshing}
-                                className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-stone-500 hover:text-accent transition-colors disabled:opacity-40 cursor-pointer"
-                                title={t('remote_refresh_network')}
+                                leftIcon={<RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />}
                             >
-                                <RefreshCw size={11} className={refreshing ? 'animate-spin' : ''} />
-                                <span>{t('remote_refresh_network')}</span>
-                            </button>
+                                {t('remote_refresh_network')}
+                            </Button>
                         </div>
-                        <div className="flex items-center pl-4 pr-1.5 py-1.5 bg-stone-900/40 border border-white/5 hover:border-white/10 hover:bg-stone-900/60 rounded-2xl transition-all duration-300 focus-within:border-white/10 focus-within:bg-stone-900/60">
+                        <div className="flex items-center pl-4 pr-1.5 py-1.5 bg-stone-900/60 border border-white/10 hover:border-white/20 rounded-2xl transition-all duration-200">
                             <div className="flex-1 text-[13px] font-mono text-stone-400 select-all overflow-hidden text-ellipsis whitespace-nowrap md:min-w-0 min-w-0 pr-4 my-2">
                                 <span className="text-stone-600">http://</span>
                                 <span className="text-white">{serverInfo.ip}:{serverInfo.port}</span>
                                 <span className="text-stone-500">/remote.html</span>
                             </div>
                             
-                            <button
+                            <Button
+                                size="xs"
+                                variant={copied ? "primary" : "secondary"}
                                 onClick={handleCopyUrl}
-                                className="shrink-0 h-10 px-5 bg-white/10 hover:bg-white text-stone-300 hover:text-black rounded-xl transition-all duration-300 flex items-center gap-2 font-bold text-xs cursor-pointer shadow-sm disabled:opacity-50"
+                                leftIcon={copied ? <Check size={14} /> : <Copy size={14} />}
                             >
-                                {copied ? <Check size={14} className="text-black" /> : <Copy size={14} />}
                                 <span className="hidden sm:inline">{copied ? t('remote_copied_url') : t('remote_copy_url')}</span>
-                            </button>
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* AirDeck IP Setting */}
+                    <div className="mt-4 p-4 rounded-2xl bg-stone-900/40 border border-white/5 space-y-2.5">
+                        <div>
+                            <h4 className="text-xs font-bold text-white">{t('airdeck_host_title', 'IP проектора для AirDeck')}</h4>
+                            <p className="text-[11px] text-stone-400">
+                                {t('airdeck_host_desc', 'Сетевой адрес компьютера у проектора для беспроводной трансляции слайдов и экрана спикера')}
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2 max-w-sm">
+                            <input
+                                type="text"
+                                value={airDeckHost}
+                                onChange={(e) => handleAirDeckHostChange(e.target.value)}
+                                placeholder="127.0.0.1"
+                                className="w-full px-3.5 py-2 rounded-xl bg-stone-950/80 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-accent transition-colors"
+                            />
                         </div>
                     </div>
                 </div>

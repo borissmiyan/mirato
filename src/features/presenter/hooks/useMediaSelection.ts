@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { db } from '@/core/db';
 import { IMediaItem } from '@/core/types';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { useShallow } from 'zustand/react/shallow';
+import { MediaPersistenceService } from '../services/MediaPersistenceService';
 
 export interface UseMediaSelectionReturn {
   selectedIds: Set<string>;
@@ -15,13 +15,16 @@ export interface UseMediaSelectionReturn {
 /**
  * Hook to manage media selection, bulk actions, and keyboard shortcuts.
  */
-export function useMediaSelection(visibleItems: IMediaItem[]): UseMediaSelectionReturn {
+export function useMediaSelection(
+  visibleItems: IMediaItem[],
+  isActive: boolean = true
+): UseMediaSelectionReturn {
   const { t } = useTranslation();
   const { openModal } = useModalStore(useShallow(s => ({ openModal: s.openModal })));
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
-  const handleItemClick = (itemId: string, e: React.MouseEvent) => {
+  const handleItemClick = useCallback((itemId: string, e: React.MouseEvent) => {
     const newSelection = new Set(selectedIds);
     
     if (e.shiftKey && lastSelectedId) {
@@ -50,9 +53,9 @@ export function useMediaSelection(visibleItems: IMediaItem[]): UseMediaSelection
     }
     
     setSelectedIds(newSelection);
-  };
+  }, [selectedIds, lastSelectedId, visibleItems]);
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = useCallback(() => {
     if (selectedIds.size === 0) return;
     
     const count = selectedIds.size;
@@ -63,15 +66,16 @@ export function useMediaSelection(visibleItems: IMediaItem[]): UseMediaSelection
         : t('media_pool.confirm_delete_multiple', 'Delete {{count}} assets?', { count }),
       onSelection: (confirmed: boolean) => {
         if (confirmed) {
-          db.mediaPool.bulkDelete(Array.from(selectedIds));
+          MediaPersistenceService.bulkDeleteMedia(Array.from(selectedIds));
           setSelectedIds(new Set());
         }
       }
     });
-  };
+  }, [selectedIds, openModal, t]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isActive) return;
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
       
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -90,7 +94,7 @@ export function useMediaSelection(visibleItems: IMediaItem[]): UseMediaSelection
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedIds, visibleItems]);
+  }, [isActive, selectedIds, visibleItems, handleBulkDelete]);
 
   return {
     selectedIds,

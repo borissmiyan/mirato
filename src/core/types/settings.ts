@@ -66,6 +66,7 @@ export interface StageCardConfig {
 }
 
 export interface StageSettings {
+  enabled?: boolean;
   layout: StageCardConfig[];
   gap: number; // px
   cornerRadius: number; // px

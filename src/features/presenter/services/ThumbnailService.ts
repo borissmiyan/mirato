@@ -29,7 +29,7 @@ export class ThumbnailService {
                 ensureLayers(firstSlide.type === 'normal' ? (firstSlide as ICanvasSlide).backgroundOverride : undefined)
             );
             for (const layer of layers) {
-                if (!layer.visible) continue;
+                if (layer.visible === false) continue;
                 await this.renderLayer(ctx, layer, canvas.width, canvas.height);
             }
 
@@ -40,7 +40,15 @@ export class ThumbnailService {
                 this.renderTextOverlay(ctx, String(canvasSlide.content.variables.title), canvas.width, canvas.height);
             }
 
-            return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.8));
+            return new Promise((resolve) => {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        canvas.toBlob(resolve, 'image/jpeg', 0.8);
+                    }
+                }, 'image/webp', 0.75);
+            });
         } catch (error) {
             console.error('Failed to generate thumbnail:', error);
             return null;
@@ -48,9 +56,9 @@ export class ThumbnailService {
     }
 
     /**
-     * Generates a PNG thumbnail for a template.
+     * Generates a WebP thumbnail for a template.
      * @param templateId The ID of the template.
-     * @returns A Promise resolving to a PNG Blob or null.
+     * @returns A Promise resolving to a WebP Blob or null.
      */
     static async generateFromTemplate(templateId: string): Promise<Blob | null> {
         try {
@@ -66,16 +74,96 @@ export class ThumbnailService {
             // Render Template Background (with occlusion optimization)
             const layers = this.getVisibleLayers(ensureLayers(template.background));
             for (const layer of layers) {
-                if (!layer.visible) continue;
+                if (layer.visible === false) continue;
                 await this.renderLayer(ctx, layer, canvas.width, canvas.height);
             }
 
             // Add template name as overlay
             this.renderTextOverlay(ctx, template.name, canvas.width, canvas.height);
 
-            return new Promise((resolve) => canvas.toBlob(resolve, 'image/png', 0.8));
+            return new Promise((resolve) => {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        canvas.toBlob(resolve, 'image/jpeg', 0.8);
+                    }
+                }, 'image/webp', 0.75);
+            });
         } catch (error) {
             console.error('Failed to generate template thumbnail:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Generates a lightweight WebP thumbnail for a single slide.
+     * @param slide The slide data to render.
+     * @param width Width of the generated thumbnail (default 256).
+     * @param height Height of the generated thumbnail (default 144).
+     * @returns A Promise resolving to a WebP Blob or null.
+     */
+    static async generateForSlide(slide: ISlide, width = 256, height = 144): Promise<Blob | null> {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+
+            // Fill default dark background
+            ctx.fillStyle = '#1c1917';
+            ctx.fillRect(0, 0, width, height);
+
+            if (slide.type === 'video') {
+                const videoSlide = slide as import('@/core/types').IVideoSlide;
+                if (videoSlide.videoSettings?.posterFrame) {
+                    const poster = await this.loadImage(videoSlide.videoSettings.posterFrame);
+                    if (poster) {
+                        this.drawCover(ctx, poster, width, height);
+                    }
+                } else if (videoSlide.backgroundOverride) {
+                    const layers = this.getVisibleLayers(ensureLayers(videoSlide.backgroundOverride));
+                    for (const layer of layers) {
+                        if (layer.visible === false) continue;
+                        await this.renderLayer(ctx, layer, width, height);
+                    }
+                }
+            } else if (slide.type === 'normal') {
+                const canvasSlide = slide as ICanvasSlide;
+                if (canvasSlide.backgroundOverride) {
+                    const layers = this.getVisibleLayers(ensureLayers(canvasSlide.backgroundOverride));
+                    for (const layer of layers) {
+                        if (layer.visible === false) continue;
+                        await this.renderLayer(ctx, layer, width, height);
+                    }
+                }
+                const title = canvasSlide.content?.variables?.title || canvasSlide.label || canvasSlide.name;
+                if (title) {
+                    this.renderTextOverlay(ctx, String(title), width, height);
+                }
+            } else if (slide.type === 'verse') {
+                const verseSlide = slide as import('@/core/types').IVerseSlide;
+                const text = verseSlide.verseRef || verseSlide.label || 'Verse';
+                this.renderTextOverlay(ctx, text, width, height);
+            } else {
+                const title = slide.label || slide.name || slide.type;
+                if (title) {
+                    this.renderTextOverlay(ctx, String(title), width, height);
+                }
+            }
+
+            return new Promise((resolve) => {
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        canvas.toBlob(resolve, 'image/jpeg', 0.8);
+                    }
+                }, 'image/webp', 0.75);
+            });
+        } catch (error) {
+            console.error('[ThumbnailService] Failed to generate slide thumbnail:', error);
             return null;
         }
     }
@@ -198,16 +286,17 @@ export class ThumbnailService {
         ctx.restore();
     }
 
-    private static loadImage(blob: Blob): Promise<HTMLImageElement | null> {
+    private static loadImage(source: Blob | string): Promise<HTMLImageElement | null> {
         return new Promise((resolve) => {
             const img = new Image();
-            const url = URL.createObjectURL(blob);
+            const isBlob = source instanceof Blob;
+            const url = isBlob ? URL.createObjectURL(source) : source;
             img.onload = () => {
-                URL.revokeObjectURL(url);
+                if (isBlob) URL.revokeObjectURL(url);
                 resolve(img);
             };
             img.onerror = () => {
-                URL.revokeObjectURL(url);
+                if (isBlob) URL.revokeObjectURL(url);
                 resolve(null);
             };
             img.src = url;
@@ -243,9 +332,21 @@ export class ThumbnailService {
         return new Promise(async (resolve) => {
             try {
                 const entry = await db.backgrounds.get(mediaId) || await db.mediaPool.get(mediaId);
-                if (!entry || !entry.data) return resolve([]);
+                if (!entry) return resolve([]);
 
-                const url = URL.createObjectURL(entry.data);
+                let url = '';
+                let isObjectUrl = false;
+
+                if (entry.data) {
+                    url = URL.createObjectURL(entry.data);
+                    isObjectUrl = true;
+                } else if ('path' in entry && entry.path) {
+                    const { getLocalResourceUrl } = await import('@/core/hooks/useMediaUrl');
+                    url = getLocalResourceUrl(entry.path);
+                }
+
+                if (!url) return resolve([]);
+
                 const video = document.createElement('video');
                 video.muted = true;
                 video.src = url;
@@ -257,7 +358,10 @@ export class ThumbnailService {
                     canvas.width = 160; // Lightweight thumbs for history
                     canvas.height = 90;
                     const ctx = canvas.getContext('2d');
-                    if (!ctx) return resolve([]);
+                    if (!ctx) {
+                        if (isObjectUrl) URL.revokeObjectURL(url);
+                        return resolve([]);
+                    }
 
                     const intervals = frames > 1 ? duration / (frames - 1) : 0;
 
@@ -276,12 +380,12 @@ export class ThumbnailService {
                         sequence.push(canvas.toDataURL('image/jpeg', 0.6));
                     }
 
-                    URL.revokeObjectURL(url);
+                    if (isObjectUrl) URL.revokeObjectURL(url);
                     resolve(sequence);
                 };
 
                 video.onerror = () => {
-                    URL.revokeObjectURL(url);
+                    if (isObjectUrl) URL.revokeObjectURL(url);
                     resolve([]);
                 };
             } catch (error) {

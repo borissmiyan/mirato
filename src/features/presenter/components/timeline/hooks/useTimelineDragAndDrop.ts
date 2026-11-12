@@ -11,6 +11,7 @@ import {
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { ISlide } from '@/core/types';
 import { TrackContainerHandle } from '../TrackContainer';
+import { useTimelineAutoScroll } from './useTimelineAutoScroll';
 
 interface UseTimelineDragAndDropProps {
     activePresentationId: string | null;
@@ -18,15 +19,16 @@ interface UseTimelineDragAndDropProps {
     localSlides: ISlide[];
     setLocalSlides: (slides: ISlide[] | ((prev: ISlide[]) => ISlide[])) => void;
     selectedSlideIds: string[];
-    trackRef: React.RefObject<TrackContainerHandle>;
+    trackRef: React.RefObject<TrackContainerHandle | null>;
     dragActiveRef: React.MutableRefObject<boolean>;
     updatePresentationSlides: (id: string, slides: ISlide[]) => Promise<void>;
     addPresentationToTimeline: (pid: string, idx?: number) => Promise<void>;
     takeSnapshot: (presentationId: string) => Promise<void>;
+    disabled?: boolean;
 }
 
 /**
- * Hook to handle all drag-and-drop logic for the timeline, including auto-scroll.
+ * Hook to handle all drag-and-drop logic for the timeline, integrating with auto-scroll.
  * Uses PointerSensor for reliability in Electron/Mac environments.
  */
 export const useTimelineDragAndDrop = ({
@@ -39,23 +41,41 @@ export const useTimelineDragAndDrop = ({
     dragActiveRef,
     updatePresentationSlides,
     addPresentationToTimeline,
-    takeSnapshot
+    takeSnapshot,
+    disabled = false
 }: UseTimelineDragAndDropProps) => {
     const [activeId, setActiveId] = useState<string | null>(null);
+    const [droppingId, setDroppingId] = useState<string | null>(null);
+    const dropTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const handleDropComplete = useCallback(() => {
+        if (dropTimeoutRef.current) {
+            clearTimeout(dropTimeoutRef.current);
+            dropTimeoutRef.current = null;
+        }
+        setDroppingId(null);
+    }, []);
+
+    // Cleanup pending drop timers on unmount
+    useEffect(() => {
+        return () => {
+            if (dropTimeoutRef.current) {
+                clearTimeout(dropTimeoutRef.current);
+            }
+        };
+    }, []);
     
-    // Safety: track current localSlides in a ref to bypass stale closure issues and React 18 async setState pitfalls during handles
+    // Safety: track current localSlides in a ref to bypass stale closure issues during handles
     const localSlidesRef = useRef(localSlides);
     useEffect(() => {
         localSlidesRef.current = localSlides;
     }, [localSlides]);
 
-    
-    // Auto-scroll state
-    const autoScrollRafRef = useRef<number | null>(null);
-    const pointerXRef = useRef<number | null>(null);
-
-    /** Tracks the last over-id to skip redundant setLocalSlides when collision hasn't changed */
-    const lastOverIdRef = useRef<string | null>(null);
+    const { startAutoScroll, stopAutoScroll } = useTimelineAutoScroll({
+        trackRef,
+        dragActiveRef,
+        disabled
+    });
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -68,86 +88,24 @@ export const useTimelineDragAndDrop = ({
         })
     );
 
-    // Track real physical pointer position regardless of scroll or dnd-kit delta
-    useEffect(() => {
-        const handlePointerMove = (e: PointerEvent) => {
-            pointerXRef.current = e.clientX;
-        };
-        window.addEventListener('pointermove', handlePointerMove);
-        return () => window.removeEventListener('pointermove', handlePointerMove);
-    }, []);
-
-    const stopAutoScroll = useCallback(() => {
-        if (autoScrollRafRef.current !== null) {
-            cancelAnimationFrame(autoScrollRafRef.current);
-            autoScrollRafRef.current = null;
-        }
-    }, []);
-
     const handleDragStart = useCallback((event: DragStartEvent) => {
+        if (disabled) return;
+        if (dropTimeoutRef.current) {
+            clearTimeout(dropTimeoutRef.current);
+            dropTimeoutRef.current = null;
+        }
+        setDroppingId(null);
         dragActiveRef.current = true;
-        lastOverIdRef.current = null;
         setActiveId(event.active.id as string);
 
-        // Start continuous auto-scroll loop
-        if (autoScrollRafRef.current === null) {
-            let lastTickTime = performance.now();
-            const tick = () => {
-                if (!dragActiveRef.current) {
-                    autoScrollRafRef.current = null;
-                    return;
-                }
-
-                const scrollEl = trackRef.current?.getScrollElement();
-                const pointerX = pointerXRef.current;
-                
-                if (scrollEl && pointerX !== null) {
-                    const rect = scrollEl.getBoundingClientRect();
-                    const EDGE_ZONE = 80;
-                    const MAX_SPEED = 14;
-
-                    const leftEdge = rect.left + EDGE_ZONE;
-                    const rightEdge = rect.right - EDGE_ZONE;
-
-                    let scrollSpeed = 0;
-
-                    if (pointerX < leftEdge && scrollEl.scrollLeft > 0) {
-                        const rawDepth = Math.min((leftEdge - pointerX) / EDGE_ZONE, 1);
-                        const depth = Math.pow(rawDepth, 2); // Quadratic curve for smooth start
-                        scrollSpeed = -MAX_SPEED * depth;
-                    } else if (pointerX > rightEdge && scrollEl.scrollLeft < scrollEl.scrollWidth - scrollEl.clientWidth) {
-                        const rawDepth = Math.min((pointerX - rightEdge) / EDGE_ZONE, 1);
-                        const depth = Math.pow(rawDepth, 2); // Quadratic curve for smooth start
-                        scrollSpeed = MAX_SPEED * depth;
-                    }
-
-                    if (scrollSpeed !== 0) {
-                        const now = performance.now();
-                        const delta = (now - lastTickTime) / 16.67; // Scale by frame time relative to 60fps
-                        lastTickTime = now;
-
-                        const maxScroll = scrollEl.scrollWidth - scrollEl.clientWidth;
-                        scrollEl.scrollLeft = Math.max(0, Math.min(maxScroll, scrollEl.scrollLeft + Math.round(scrollSpeed * delta)));
-                    } else {
-                        lastTickTime = performance.now(); // Reset baseline when not scrolling
-                    }
-                } else {
-                    lastTickTime = performance.now();
-                }
-                
-                // Keep ticking until drag ends
-                autoScrollRafRef.current = requestAnimationFrame(tick);
-            };
-            autoScrollRafRef.current = requestAnimationFrame(tick);
-        }
-    }, [dragActiveRef, trackRef]);
+        startAutoScroll();
+    }, [disabled, dragActiveRef, startAutoScroll]);
 
     /**
      * Reorder slides when dragging over a different item.
-     * Uses lastOverIdRef to skip redundant state updates when the collision target
-     * hasn't changed, preventing unnecessary React re-render cascades.
      */
     const handleDragOver = useCallback((event: DragOverEvent) => {
+        if (disabled) return;
         const { active, over } = event;
         if (!over || active.id === over.id) return;
 
@@ -155,10 +113,6 @@ export const useTimelineDragAndDrop = ({
         const overIdStr = over.id as string;
 
         if (overIdStr === 'presentation-item-drag' || overIdStr === 'timeline-droppable') return;
-
-        // Skip if we already processed this collision pair
-        if (lastOverIdRef.current === overIdStr) return;
-        lastOverIdRef.current = overIdStr;
 
         setLocalSlides((currentSlides) => {
             const oldIndex = currentSlides.findIndex(s => s.id === activeIdStr);
@@ -193,13 +147,27 @@ export const useTimelineDragAndDrop = ({
                 ...remaining.slice(insertionIdx)
             ];
         });
-    }, [selectedSlideIds, setLocalSlides]);
+    }, [disabled, selectedSlideIds, setLocalSlides]);
 
     const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+        if (disabled) return;
         stopAutoScroll();
         dragActiveRef.current = false;
-        lastOverIdRef.current = null;
+
+        const activeIdStr = event.active.id as string;
+        // Keep droppingId active during the 220ms drop flight so the slot stays in placeholder mode
+        setDroppingId(activeIdStr);
         setActiveId(null);
+
+        if (dropTimeoutRef.current) {
+            clearTimeout(dropTimeoutRef.current);
+        }
+        // Safety timeout in case drop animation is skipped or sideEffects fails to run
+        dropTimeoutRef.current = setTimeout(() => {
+            setDroppingId(null);
+            dropTimeoutRef.current = null;
+        }, 240);
+
         const { active, over } = event;
 
         if (over && active.id === 'presentation-item-drag') {
@@ -225,18 +193,24 @@ export const useTimelineDragAndDrop = ({
                 await updatePresentationSlides(activePresentationId, finalSlidesOrdered);
             }
         }
-    }, [activePresentationId, addPresentationToTimeline, dragActiveRef, setLocalSlides, stopAutoScroll, updatePresentationSlides]);
+    }, [activePresentationId, addPresentationToTimeline, disabled, dragActiveRef, setLocalSlides, stopAutoScroll, updatePresentationSlides, takeSnapshot]);
 
     const handleDragCancel = useCallback(() => {
         stopAutoScroll();
+        if (dropTimeoutRef.current) {
+            clearTimeout(dropTimeoutRef.current);
+            dropTimeoutRef.current = null;
+        }
+        setDroppingId(null);
         dragActiveRef.current = false;
-        lastOverIdRef.current = null;
         setActiveId(null);
         setLocalSlides([...slides]);
     }, [dragActiveRef, setLocalSlides, slides, stopAutoScroll]);
 
     return {
         activeId,
+        droppingId,
+        handleDropComplete,
         sensors,
         handleDragStart,
         handleDragOver,

@@ -48,11 +48,14 @@ export function useBibleSelection(presentation: IPresentationFile | null | undef
   const [carouselIndex, setCarouselIndex] = useState(0);
 
   // 2. Data Queries
-  const translations = useLiveQuery(() => db.translations.toArray()) || [];
-  const books = useLiveQuery(
+  const liveTranslations = useLiveQuery(() => db.translations.toArray());
+  const translations = useMemo(() => liveTranslations || [], [liveTranslations]);
+
+  const liveBooks = useLiveQuery(
     () => db.books.where('translationId').equals(selectedTranslationId || '').toArray(),
     [selectedTranslationId]
-  ) || [];
+  );
+  const books = useMemo(() => liveBooks || [], [liveBooks]);
 
   const sortedBooks = useMemo(() => {
     return [...books].sort((a, b) => {
@@ -62,13 +65,14 @@ export function useBibleSelection(presentation: IPresentationFile | null | undef
     });
   }, [books]);
 
-  const versesInChapter = useLiveQuery(async () => {
+  const liveVersesInChapter = useLiveQuery(async () => {
     if (!selectedTranslationId || !selectedBookId) return [];
     return await db.verses
       .where('[translationId+bookId+chapter]')
       .equals([selectedTranslationId, selectedBookId, selectedChapter])
       .toArray();
-  }, [selectedTranslationId, selectedBookId, selectedChapter]) || [];
+  }, [selectedTranslationId, selectedBookId, selectedChapter]);
+  const versesInChapter = useMemo(() => liveVersesInChapter || [], [liveVersesInChapter]);
 
   const chaptersCount = useMemo(() => {
     const book = sortedBooks.find(b => b.bookId === selectedBookId);

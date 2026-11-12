@@ -1,14 +1,14 @@
 import './core/utils/blobDebugger';
-import React from 'react';
-import { Suspense } from 'react';
+import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './app/App';
 import './core/styles/globals.css';
 import './core/i18n';
 import './core/styles/fonts';
 import { PerformanceMonitor } from './core/components/PerformanceMonitor';
 import { LoadingScreen } from './core/components/LoadingScreen';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
+
+const App = lazy(() => import('./app/App'));
 
 if (import.meta.env.DEV) {
   window.addEventListener('unhandledrejection', (event) => {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { IMediaItem } from '../types';
-import { db } from '../db';
+import { mediaCache } from '../utils/mediaCache';
 
 /**
  * Robustly constructs a local-resource URL for a given path.
@@ -20,55 +20,60 @@ export const getLocalResourceUrl = (path: string | null | undefined) => {
     return `local-resource://localhost${encodedPath}`;
 };
 
+function computeInstantUrl(itemThumbnail?: string | null, itemPath?: string | null): string | null {
+    if (itemThumbnail && (itemThumbnail.startsWith('http') || itemThumbnail.startsWith('data:') || itemThumbnail.startsWith('blob:') || itemThumbnail.startsWith('local-resource:'))) {
+        return itemThumbnail;
+    }
+    if (itemPath && (itemPath.startsWith('/') || itemPath.includes(':\\') || itemPath.startsWith('local-resource:') || itemPath.startsWith('http'))) {
+        return getLocalResourceUrl(itemPath);
+    }
+    return null;
+}
+
 /**
- * Hook to resolve a display URL for an IMediaItem.
- * Priority:
- * 1. Data Blob from IndexedDB (if available)
- * 2. Static path (wrapped in local-resource:// if it's a file path)
+ * Hook to resolve a display URL for an IMediaItem with zero-copy priority:
+ * 1. Pre-generated thumbnailUrl (instant)
+ * 2. Static path on disk (wrapped in local-resource:// - streaming directly from disk without copying into RAM)
+ * 3. LRU-cached ObjectURL from mediaCache (only if data blob exists exclusively in IndexedDB)
  */
 export function useMediaUrl(item: IMediaItem | null | undefined) {
-    const [url, setUrl] = useState<string | null>(null);
+    const itemId = item?.id;
+    const itemPath = item?.path;
+    const itemThumbnail = item?.thumbnailUrl;
+
+    const [url, setUrl] = useState<string | null>(() => computeInstantUrl(itemThumbnail, itemPath));
 
     useEffect(() => {
-        let currentUrl: string | null = null;
+        let isCancelled = false;
 
-        const resolve = async () => {
-            if (!item) {
-                setUrl(null);
-                return;
+        const instantUrl = computeInstantUrl(itemThumbnail, itemPath);
+        if (instantUrl) {
+            setUrl(instantUrl);
+            return;
+        }
+
+        if (!itemId) {
+            setUrl(null);
+            return;
+        }
+
+        // Fallback: Resolve via mediaCache LRU pool
+        mediaCache.getBackgroundUrl(itemId).then((resolved) => {
+            if (!isCancelled) {
+                setUrl(resolved);
             }
-
-            // 1. Check if the item has a Blob in the mediaPool table
-            // Sometimes it's passed as a partial item or just ID from another place
-            // so we try to fetch the full item if data is missing but it's supposed to be in DB
-            try {
-                const dbItem = await db.mediaPool.get(item.id);
-                if (dbItem?.data) {
-                    const blobUrl = URL.createObjectURL(dbItem.data);
-                    currentUrl = blobUrl;
-                    setUrl(blobUrl);
-                    return;
-                }
-            } catch (err) {
-                console.warn('useMediaUrl: Failed to fetch from mediaPool:', err);
-            }
-
-            // 2. Fallback to path
-            if (item.path) {
-                setUrl(getLocalResourceUrl(item.path));
-            } else {
-                setUrl(null);
-            }
-        };
-
-        resolve();
+        }).catch((err) => {
+            console.warn('useMediaUrl: Failed to resolve from cache:', err);
+            if (!isCancelled) setUrl(null);
+        });
 
         return () => {
-            if (currentUrl) {
-                URL.revokeObjectURL(currentUrl);
+            isCancelled = true;
+            if (itemId) {
+                mediaCache.release(itemId);
             }
         };
-    }, [item?.id, item?.path]);
+    }, [itemId, itemPath, itemThumbnail]);
 
     return url;
 }

@@ -2,6 +2,9 @@ import React, { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
+import { fontInstallerService } from '@/core/services/fontInstallerService';
+import { resolveFontFamily } from '@/core/utils/fontResolver';
+import { ICanvasSlide, INestedSlide, ICanvasItem } from '@/core/types';
 
 /**
  * Ensures that fonts used in the current presentation (and others) are "active" in the browser.
@@ -25,7 +28,10 @@ export const FontPrewarmer: React.FC = () => {
 
         const expandedIds = rootPres.slides
             .filter(s => s.isExpanded)
-            .map(s => (s as any).presentationId || (s as any).masterPresentationId)
+            .map(s => {
+                const ns = s as { presentationId?: string; masterPresentationId?: string };
+                return ns.presentationId || ns.masterPresentationId;
+            })
             .filter(Boolean) as string[];
 
         if (expandedIds.length === 0) return [rootPres];
@@ -43,7 +49,7 @@ export const FontPrewarmer: React.FC = () => {
             presentations.forEach(pres => {
                 pres.slides.forEach(slide => {
                     if (slide.type === 'normal') {
-                        (slide as any).content.canvasItems?.forEach((item: any) => {
+                        (slide as ICanvasSlide).content.canvasItems?.forEach((item: ICanvasItem) => {
                             if (item.text?.fontFamily) {
                                 fonts.add(item.text.fontFamily);
                             }
@@ -54,6 +60,17 @@ export const FontPrewarmer: React.FC = () => {
         }
 
         return Array.from(fonts);
+    }, [presentations]);
+
+    // Ensure all presentation fonts are registered in document.fonts and loaded
+    React.useEffect(() => {
+        if (presentations && presentations.length > 0) {
+            presentations.forEach(pres => {
+                fontInstallerService.ensurePresentationFonts(pres).catch(err => {
+                    console.warn('[FontPrewarmer] Error ensuring fonts:', err);
+                });
+            });
+        }
     }, [presentations]);
 
     if (uniqueFonts.length === 0) return null;
@@ -70,11 +87,14 @@ export const FontPrewarmer: React.FC = () => {
                 overflow: 'hidden'
             }}
         >
-            {uniqueFonts.map(font => (
-                <span key={font} style={{ fontFamily: font }}>
-                    Font Prewarm {font}
-                </span>
-            ))}
+            {uniqueFonts.map(font => {
+                const stack = resolveFontFamily(font).cssFontStack;
+                return (
+                    <span key={font} style={{ fontFamily: stack }}>
+                        Font Prewarm {font}
+                    </span>
+                );
+            })}
         </div>
     );
 };

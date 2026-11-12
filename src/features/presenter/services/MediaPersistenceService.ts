@@ -2,11 +2,13 @@ import { db } from '@/core/db';
 import { IMediaItem, MediaType } from '@/core/types';
 import { readLocalFileSafe, sha256 } from './mediaPackingUtils';
 import { mediaCache } from '@/core/utils/mediaCache';
+import { compressImageToWebP } from '@/core/utils/imageCompressor';
+import { IpcService } from '@/core/services/ipcService';
+import { fontInstallerService } from '@/core/services/fontInstallerService';
 
 /**
  * Service to handle Importing and Persisting media (images, videos, audio) 
- * into IndexedDB as Blobs. This ensures that media is portable and
- * doesn't depend on fragile local filesystem paths.
+ * into IndexedDB as Blobs or local files on disk.
  */
 export class MediaPersistenceService {
     /**
@@ -31,6 +33,8 @@ export class MediaPersistenceService {
 
     /**
      * Imports a Blob/File object directly into the database.
+     * Automatically compresses images to WebP (2K max resolution).
+     * For videos in Electron, persists to local disk to keep IndexedDB light.
      */
     static async importMediaBlob(
         blob: Blob,
@@ -38,45 +42,113 @@ export class MediaPersistenceService {
         type: MediaType,
         options: { forceBackground?: boolean; binId?: string } = {}
     ): Promise<string | null> {
-        // 1. Hash the blob
-        const hash = await sha256(blob);
+        let processedBlob = blob;
 
+        // Auto-compress images to 2K WebP with alpha transparency preservation
+        if (type === 'image' && blob.type !== 'image/svg+xml') {
+            try {
+                processedBlob = await compressImageToWebP(blob, {
+                    maxWidth: 3840,
+                    maxHeight: 2160,
+                    quality: 0.94
+                });
+            } catch (err) {
+                console.warn('[MediaPersistenceService] Image compression fallback to original:', err);
+            }
+        }
+
+        // 1. Hash the blob
+        const hash = await sha256(processedBlob);
         const name = sourcePath ? (sourcePath.split(/[/\\]/).pop() || 'media') : 'Imported Media';
 
+        let resolvedPath = sourcePath || hash;
+        let blobToStore: Blob | undefined = processedBlob;
+
+        // If it is a video and we are running in Electron, persist to disk instead of IndexedDB Blob
+        if (type === 'video' && IpcService.isElectron()) {
+            try {
+                const ext = sourcePath ? (sourcePath.split('.').pop() || 'mp4') : 'mp4';
+                const savedPath = await IpcService.invoke<string>('media:save-video-blob', {
+                    hash,
+                    ext,
+                    buffer: await processedBlob.arrayBuffer()
+                });
+                if (savedPath) {
+                    resolvedPath = savedPath;
+                    blobToStore = undefined; // Keep IndexedDB free of large video Blobs
+                }
+            } catch (err) {
+                console.warn('[MediaPersistenceService] Failed to persist video to disk, keeping blob in DB:', err);
+            }
+        }
+
+        // If it is audio and we are running in Electron, compress/persist to disk instead of IndexedDB Blob
+        if (type === 'audio' && IpcService.isElectron()) {
+            try {
+                const audioBuffer = await processedBlob.arrayBuffer();
+                const cleanExt = sourcePath ? (sourcePath.split('.').pop() || 'mp3').toLowerCase() : 'mp3';
+
+                let savedPath = await IpcService.invoke<string>('media:save-audio-blob', {
+                    hash,
+                    ext: cleanExt,
+                    buffer: audioBuffer
+                });
+
+                // Attempt hardware AAC compression on macOS if original is heavy (wav, flac, aiff, etc.)
+                if (savedPath && ['wav', 'aiff', 'flac', 'ogg'].includes(cleanExt)) {
+                    try {
+                        const compressResult = await IpcService.invoke<{ success: boolean; outputPath: string }>('media:compress-audio', {
+                            inputPath: savedPath,
+                            bitrate: '160000'
+                        });
+                        if (compressResult?.success && compressResult.outputPath) {
+                            await IpcService.invoke('media:delete-audio-file', savedPath);
+                            savedPath = compressResult.outputPath;
+                        }
+                    } catch (compErr) {
+                        console.warn('[MediaPersistenceService] Audio compression fallback to original:', compErr);
+                    }
+                }
+
+                if (savedPath) {
+                    resolvedPath = savedPath;
+                    blobToStore = undefined; // Keep IndexedDB free of large audio Blobs
+                }
+            } catch (err) {
+                console.warn('[MediaPersistenceService] Failed to persist audio to disk, keeping blob in DB:', err);
+            }
+        }
+
         // 2. Check for existing item with this hash in mediaPool
-        // Using hash as a stable ID for deduplication in mediaPool
         const existing = await db.mediaPool.get(hash);
         
-        // If it exists but was in a different bin, or we want to ensure it's in the current bin
         if (existing) {
             if (options.binId !== undefined && existing.binId !== options.binId) {
                 await db.mediaPool.update(hash, { binId: options.binId });
             }
-            if (existing.data) {
-                mediaCache.put(hash, blob); // Ensure it's in cache for immediate UI use
+            if (existing.data || existing.path) {
+                if (blobToStore) mediaCache.put(hash, blobToStore);
                 return existing.id;
             }
         }
 
-        const id = hash; // Use hash as primary key for deduplication and portability
+        const id = hash;
 
-        // 3. Save to appropriate table
+        // 3. Save to backgrounds table if requested (images only)
         if (options.forceBackground && type === 'image') {
             const existingBg = await db.backgrounds.get(id);
             if (!existingBg) {
                 await db.backgrounds.add({
                     id,
                     name,
-                    data: blob,
-                    mimeType: blob.type
+                    data: processedBlob,
+                    mimeType: processedBlob.type
                 });
             }
         }
 
-        // Always add to mediaPool for general reference
+        // 4. Save to mediaPool
         if (!existing) {
-            // Check for legacy placeholders with the same path but different ID (UUID)
-            // This prevents duplication when re-importing something that was previously a placeholder
             if (sourcePath) {
                 const legacyPlaceholders = await db.mediaPool
                     .where('path')
@@ -92,25 +164,92 @@ export class MediaPersistenceService {
             await db.mediaPool.add({
                 id,
                 name,
-                path: sourcePath || hash,
+                path: resolvedPath,
                 type,
-                data: blob,
+                data: blobToStore,
                 binId: options.binId,
                 createdAt: Date.now()
             });
-        } else if (!existing.data) {
-            // Upgrade placeholder to real entry
+        } else if (!existing.data && blobToStore) {
             await db.mediaPool.update(hash, {
-                data: blob,
-                path: sourcePath || existing.path,
+                data: blobToStore,
+                path: resolvedPath || existing.path,
                 binId: options.binId ?? existing.binId
             });
         }
 
-        // 4. Pre-populate MediaCache to ensure immediate UI update across the app
-        mediaCache.put(id, blob);
+        if (blobToStore) {
+            mediaCache.put(id, blobToStore);
+        }
+
+        if (type === 'font' && processedBlob) {
+            const fontFam = name.replace(/\.[^/.]+$/, '');
+            fontInstallerService.registerFontFace(fontFam, processedBlob).catch(() => {});
+            fontInstallerService.installFontToSystem(name, processedBlob, fontFam).catch(() => {});
+        }
 
         return id;
+    }
+
+    /**
+     * Synchronously deletes an asset from both mediaPool and backgrounds tables.
+     */
+    static async deleteMedia(id: string): Promise<void> {
+        const item = await db.mediaPool.get(id);
+        await db.transaction('rw', [db.mediaPool, db.backgrounds], async () => {
+            await db.mediaPool.delete(id);
+            await db.backgrounds.delete(id);
+        });
+        mediaCache.delete(id);
+
+        // If it was a video or audio stored on disk in userData/media/*, delete file
+        if (item?.path && IpcService.isElectron()) {
+            if (item.type === 'video') {
+                try {
+                    await IpcService.invoke('media:delete-video-file', item.path);
+                } catch (err) {
+                    console.warn('[MediaPersistenceService] Failed to remove video file from disk:', err);
+                }
+            } else if (item.type === 'audio') {
+                try {
+                    await IpcService.invoke('media:delete-audio-file', item.path);
+                } catch (err) {
+                    console.warn('[MediaPersistenceService] Failed to remove audio file from disk:', err);
+                }
+            }
+        }
+    }
+
+    /**
+     * Synchronously bulk-deletes assets from both mediaPool and backgrounds tables.
+     */
+    static async bulkDeleteMedia(ids: string[]): Promise<void> {
+        const items = await db.mediaPool.bulkGet(ids);
+        await db.transaction('rw', [db.mediaPool, db.backgrounds], async () => {
+            await db.mediaPool.bulkDelete(ids);
+            await db.backgrounds.bulkDelete(ids);
+        });
+        ids.forEach(id => mediaCache.delete(id));
+
+        if (IpcService.isElectron()) {
+            for (const item of items) {
+                if (item?.path) {
+                    if (item.type === 'video') {
+                        try {
+                            await IpcService.invoke('media:delete-video-file', item.path);
+                        } catch (err) {
+                            console.warn('[MediaPersistenceService] Failed to remove video file from disk:', err);
+                        }
+                    } else if (item.type === 'audio') {
+                        try {
+                            await IpcService.invoke('media:delete-audio-file', item.path);
+                        } catch (err) {
+                            console.warn('[MediaPersistenceService] Failed to remove audio file from disk:', err);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /**

@@ -94,24 +94,32 @@ export const useTimelineLayout = ({
                         }
                     });
 
-                    // Gap before Edit button + Edit button
-                    items.push({
-                        id: `spacer-mid-${slide.id}`,
-                        width: NESTED_TILE_GAP,
-                        x: nestedTrackX,
-                        type: 'spacer',
-                        parentSlideId: slide.id
-                    });
-                    nestedTrackX += NESTED_TILE_GAP;
+                    const isHymn = Boolean(
+                        nested.hymnalId || 
+                        nested.metadata?.isHymn || 
+                        nested.metadata?.hymnOrder
+                    );
 
-                    items.push({
-                        id: `edit-${slide.id}`,
-                        width: EDIT_BUTTON_WIDTH,
-                        x: nestedTrackX,
-                        type: 'edit-button',
-                        parentSlideId: slide.id
-                    });
-                    nestedTrackX += EDIT_BUTTON_WIDTH;
+                    if (!isHymn) {
+                        // Gap before Edit button + Edit button
+                        items.push({
+                            id: `spacer-mid-${slide.id}`,
+                            width: NESTED_TILE_GAP,
+                            x: nestedTrackX,
+                            type: 'spacer',
+                            parentSlideId: slide.id
+                        });
+                        nestedTrackX += NESTED_TILE_GAP;
+
+                        items.push({
+                            id: `edit-${slide.id}`,
+                            width: EDIT_BUTTON_WIDTH,
+                            x: nestedTrackX,
+                            type: 'edit-button',
+                            parentSlideId: slide.id
+                        });
+                        nestedTrackX += EDIT_BUTTON_WIDTH;
+                    }
 
                     // End accent/padding
                     items.push({

@@ -3,8 +3,10 @@ import { Folder, FolderPlus, MoreVertical, Presentation, Trash2, Edit2, Download
 import { cn } from '@/core/utils/cn';
 import { IPresentationFile, IPresentationBin } from '@/core/types';
 import PresentationSelector from './PresentationSelector';
+import { EmptyState } from '@/shared/ui';
 
 import { TFunction } from 'i18next';
+import { LibraryContextMenuData } from './types';
 
 interface ILibraryPresentationsSectionProps {
     filteredPresentations: IPresentationFile[];
@@ -17,7 +19,7 @@ interface ILibraryPresentationsSectionProps {
     handlePresentationClick: (pres: { id: string }) => void;
     pushPresentationBinNav: (id: string) => void;
     handleCreateBin: () => void;
-    setContextMenu: (menu: { x: number; y: number; item: any; type: 'template' | 'media-bin' | 'template-slide' | 'presentation-bin' | 'presentation' } | null) => void;
+    setContextMenu: (menu: LibraryContextMenuData | null) => void;
     handleDragOver: (e: React.DragEvent) => void;
     handleDragLeave: () => void;
     handleDrop: (e: React.DragEvent) => void;
@@ -55,7 +57,7 @@ export const LibraryPresentationsSection: React.FC<ILibraryPresentationsSectionP
                 </div>
                 <button
                     onClick={handleCreateBin}
-                    className="p-1 hover:bg-white/5 rounded-lg text-stone-500 hover:text-accent transition-all"
+                    className="p-1 hover:bg-white/5 rounded-xl text-stone-500 hover:text-accent transition-all"
                     title={t('new_bin', 'New Bin')}
                 >
                     <FolderPlus className="w-4 h-4" />
@@ -79,7 +81,7 @@ export const LibraryPresentationsSection: React.FC<ILibraryPresentationsSectionP
                         className="group flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/5 transition-all text-left"
                     >
                         <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-stone-800/50 text-stone-400 group-hover:text-accent transition-colors">
+                            <div className="p-2 rounded-xl bg-stone-800/50 text-stone-400 group-hover:text-accent transition-colors">
                                 <Folder className="w-4 h-4" />
                             </div>
                             <div className="flex flex-col">
@@ -141,13 +143,12 @@ export const LibraryPresentationsSection: React.FC<ILibraryPresentationsSectionP
                         </button>
                     ))
                 ) : (
-                    <div className="p-8 border border-white/5 border-dashed rounded-2xl flex flex-col items-center justify-center text-center gap-3 bg-stone-900/20">
-                        <Presentation className="w-8 h-8 text-stone-700" />
-                        <div className="flex flex-col gap-1">
-                            <span className="text-sm text-stone-500 font-medium">{t('no_presentations', 'No presentations')}</span>
-                            <span className="text-xs text-stone-600 max-w-[200px]">{t('no_presentations_desc', 'Import files or drag them from the service selector to build your library')}</span>
-                        </div>
-                    </div>
+                    <EmptyState
+                        icon={Presentation}
+                        title={t('no_presentations', 'No presentations')}
+                        description={t('no_presentations_desc', 'Import files or drag them from the service selector to build your library')}
+                        size="sm"
+                    />
                 )}
             </div>
         </div>

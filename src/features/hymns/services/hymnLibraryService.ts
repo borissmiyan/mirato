@@ -1,16 +1,13 @@
 import { db } from '@/core/db';
 import { IHymnSlide, ICanvasSlide, ICanvasItem, SlideType, ISlide, IPresentationFile } from '@/core/types';
-import { IHymnTheme, SOURCE_THEME_ID, IHymnal } from '@/core/types/hymn';
-import { hymnThemeService, DEFAULT_HYMN_THEME } from './hymnThemeService';
+import { IHymnTheme, SOURCE_THEME_ID, IHymnal, IHymnalManifest, IHymnalManifestEntry } from '@/core/types/hymn';
+import { DEFAULT_HYMN_THEME } from './hymnThemeConstants';
+import { materializeTheme } from './hymnThemeMaterializer';
 import { CanvasService } from '@/features/presenter/services/CanvasService';
 import { buildSlidePositionMap, getOrderedHymnSlides } from './hymnMigrationUtils';
+import { hymnCustomManagement, OrphanedSlidesResult } from './hymnCustomManagement';
 
-/** Returned by hymnLibraryService.checkOrphanedSlides(). */
-export type OrphanedSlidesResult = {
-    serviceCount: number;
-    slideCount: number;
-    affectedServices: IPresentationFile[];
-};
+export type { OrphanedSlidesResult };
 
 /**
  * Service for managing hymnals, synchronizing with the file system,
@@ -62,48 +59,12 @@ export const hymnLibraryService = {
      * Materializes an IHymnTheme onto a source ICanvasSlide to produce
      * a fully styled array of ICanvasItems.
      * This is used dynamically by HymnSlideRenderer.
+     * 
+     * Rule: First slide of a hymn is ALWAYS bold ('700'), while subsequent
+     * slides are regular ('400') across all custom and default themes.
      */
-    materializeTheme(sourceSlide: ICanvasSlide, theme: IHymnTheme): {
-        background: any[],
-        canvasItems: ICanvasItem[]
-    } {
-        // If the theme is "Source", we do not override anything.
-        if (theme.id === SOURCE_THEME_ID) {
-            return {
-                background: sourceSlide.backgroundOverride || [],
-                canvasItems: sourceSlide.content.canvasItems || []
-            };
-        }
-
-        const bg = theme.background || DEFAULT_HYMN_THEME.background;
-
-        const items = (sourceSlide.content.canvasItems || []).map(item => {
-            if (item.type === 'text') {
-                let updatedItem: ICanvasItem = {
-                    ...item,
-                    text: {
-                        ...item.text,
-                        fontFamily: theme.textStyle.fontFamily,
-                        fontSize: theme.textStyle.fontSize,
-                        color: theme.textStyle.color,
-                        alignHorizontal: theme.textStyle.alignHorizontal,
-                        alignVertical: theme.textStyle.alignVertical,
-                        lineHeight: theme.textStyle.lineHeight,
-                        fontWeight: theme.textStyle.fontWeight
-                    }
-                };
-
-                if (theme.textAnchor) {
-                    const anchorUpdates = CanvasService.getAnchorPositionUpdates(updatedItem, theme.textAnchor);
-                    updatedItem = { ...updatedItem, ...anchorUpdates };
-                }
-
-                return updatedItem;
-            }
-            return item;
-        });
-
-        return { background: bg, canvasItems: items };
+    materializeTheme(sourceSlide: ICanvasSlide, theme: IHymnTheme, slideOrder?: number) {
+        return materializeTheme(sourceSlide, theme, slideOrder);
     },
 
     /**
@@ -239,7 +200,7 @@ export const hymnLibraryService = {
      * When a stableHymnId is renamed (via previousStableIds), runs full link migration.
      */
     async syncFileSystemHymnals(): Promise<{ orphanScopeIds: string[] }> {
-        const electron = (window as any).electron;
+        const electron = window.electron;
         const hymnsApi = electron?.ipcRenderer?.hymns;
         if (!hymnsApi) return { orphanScopeIds: [] }; // Not in Electron context
 
@@ -279,9 +240,9 @@ export const hymnLibraryService = {
 
         // Pre-upsert deduplication: Group directories by manifest ID before writing to Dexie.
         // Guarantees isBundled = true entries take precedence over seeded userData duplicates.
-        const hymnalMap = new Map<string, { dir: typeof hymnalDirs[number]; manifest: any; coverImageUrl: string | null }>();
+        const hymnalMap = new Map<string, { dir: typeof hymnalDirs[number]; manifest: IHymnalManifest; coverImageUrl: string | null }>();
         for (const dir of hymnalDirs) {
-            const manifest = await hymnsApi.readManifest(dir.path);
+            const manifest = (await hymnsApi.readManifest(dir.path)) as IHymnalManifest | null;
             if (!manifest || !manifest.id || !manifest.hymns) continue;
 
             const coverImageUrl: string | null = await hymnsApi.readCover(dir.path);
@@ -339,7 +300,7 @@ export const hymnLibraryService = {
             const stableIdMapByStableId = new Map(existingMaps.map((m) => [m.stableId, m]));
 
             // Import each hymn's .ektp file into presentationFiles.
-            for (const h of manifest.hymns as any[]) {
+            for (const h of manifest.hymns) {
                 const filename: string = h.file;
                 if (!filename) continue;
 
@@ -378,7 +339,7 @@ export const hymnLibraryService = {
                 if (!needsReimport) continue;
 
                 // Read raw binary from disk via IPC
-                const buffer: Buffer | null = await hymnsApi.readEktp(dir.path, filename);
+                const buffer = await hymnsApi.readEktp(dir.path, filename);
                 if (!buffer) continue;
 
                 // Convert Node.js Buffer → Uint8Array → Blob
@@ -449,123 +410,24 @@ export const hymnLibraryService = {
      * Imports a custom hymnal from the file system.
      */
     async importCustomHymnal(): Promise<{ status: 'success' | 'collision' | 'error' | 'canceled'; existingId?: string; newDirName?: string; error?: string }> {
-        const electron = (window as any).electron;
-        const hymnsApi = electron?.ipcRenderer?.hymns;
-        if (!hymnsApi) return { status: 'error', error: 'not_electron' };
-
-        const result = await hymnsApi.importCustom();
-        if (result.canceled) return { status: 'canceled' };
-        if (!result.success) return { status: 'error', error: result.error };
-
-        const { manifest, dirName } = result;
-
-        // Check for ID collision
-        const existingHymnal = await db.hymnals.get(manifest.id);
-        if (existingHymnal) {
-            if (existingHymnal.isBuiltIn) {
-                await hymnsApi.removeCustom(dirName);
-                return { status: 'error', error: 'id_occupied_by_builtin' };
-            } else {
-                return { status: 'collision', existingId: manifest.id, newDirName: dirName };
-            }
-        }
-
-        await this.syncFileSystemHymnals();
-        return { status: 'success' };
+        return hymnCustomManagement.importCustomHymnal(() => this.syncFileSystemHymnals());
     },
 
     /**
      * Checks how many services and slides use the given hymnal.
-     * Called once when opening RemoveHymnalModal; the result can be passed to
-     * removeCustomHymnal() as `precomputedOrphans` to avoid a second DB scan.
      */
     async checkOrphanedSlides(hymnalId: string): Promise<OrphanedSlidesResult> {
-        const allPresentations = await db.presentationFiles.toArray();
-        const affectedServices: IPresentationFile[] = [];
-        let slideCount = 0;
-
-        for (const pres of allPresentations) {
-            if (pres.metadata?.isHymnLibraryItem) continue;
-
-            let confirmedOrphaned = 0;
-            for (const slide of pres.slides || []) {
-                if (slide.type === 'hymn' && slide.hymnPresentationId) {
-                    const sourcePres = await db.presentationFiles.get(slide.hymnPresentationId);
-                    if (sourcePres && sourcePres.hymnalId === hymnalId) {
-                        confirmedOrphaned++;
-                    }
-                }
-            }
-            if (confirmedOrphaned > 0) {
-                affectedServices.push(pres);
-                slideCount += confirmedOrphaned;
-            }
-        }
-
-        return { serviceCount: affectedServices.length, slideCount, affectedServices };
+        return hymnCustomManagement.checkOrphanedSlides(hymnalId);
     },
 
     /**
      * Removes a custom hymnal, detaching any orphaned slides in user services.
-     * @param precomputedOrphans — pass the result from checkOrphanedSlides() to
-     *   avoid a second DB scan (the modal already computed it). If omitted the
-     *   method computes it internally.
      */
     async removeCustomHymnal(
         hymnal: IHymnal,
         skipAudioConfirmation = false,
         precomputedOrphans?: OrphanedSlidesResult,
     ): Promise<boolean> {
-        if (hymnal.isBuiltIn) throw new Error('Cannot remove a built-in hymnal');
-
-        const electron = (window as any).electron;
-        const hymnsApi = electron?.ipcRenderer?.hymns;
-        if (!hymnsApi) return false;
-
-        const { affectedServices } = precomputedOrphans ?? await this.checkOrphanedSlides(hymnal.id);
-
-        if (affectedServices.length > 0) {
-            const { usePresentationStore } = await import('@/features/presenter/store/presentationStore');
-            const detachHymnSlide = usePresentationStore.getState().detachHymnSlide;
-
-            for (const service of affectedServices) {
-                for (const slide of service.slides || []) {
-                    if (slide.type === 'hymn' && slide.hymnPresentationId) {
-                        const sourcePres = await db.presentationFiles.get(slide.hymnPresentationId);
-                        if (sourcePres && sourcePres.hymnalId === hymnal.id) {
-                            await detachHymnSlide(service.id, slide.id, skipAudioConfirmation);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Clean up database
-        const presentationsToDelete = await db.presentationFiles.where('hymnalId').equals(hymnal.id).primaryKeys();
-        await db.presentationFiles.bulkDelete(presentationsToDelete);
-        
-        const mapEntriesToDelete = await db.hymnStableIdMap.where('hymnalId').equals(hymnal.id).primaryKeys();
-        await db.hymnStableIdMap.bulkDelete(mapEntriesToDelete);
-
-        await db.hymnals.delete(hymnal.id);
-
-        // Remove from file system
-        // The hymnal object needs `customDirName`. We can find it by looking up listHymnals and matching the manifest id, or we save it.
-        // Let's retrieve listHymnals and find the matching path.
-        const setting = await db.settings.get('hymnalLibraryDir');
-        if (setting?.value) {
-            const hymnalDirs = await hymnsApi.listHymnals(setting.value as string);
-            for (const dir of hymnalDirs) {
-                if (dir.isBundled) continue;
-                const manifest = await hymnsApi.readManifest(dir.path);
-                if (manifest && manifest.id === hymnal.id) {
-                    const dirName = dir.path.split(/[\\/]/).pop();
-                    if (dirName) await hymnsApi.removeCustom(dirName);
-                    break;
-                }
-            }
-        }
-
-        return true;
+        return hymnCustomManagement.removeCustomHymnal(hymnal, skipAudioConfirmation, precomputedOrphans);
     }
 };

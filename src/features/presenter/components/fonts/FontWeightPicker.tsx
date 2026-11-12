@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSetAtom } from 'jotai';
 import { Check, Search, X } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
+import { SearchInput } from '@/shared/ui';
 import { fontPreviewWeightAtom } from '@/core/store/uiAtoms';
 import { getSystemFontData, normalizeFontStyle, getWeightName } from '@/core/services/fontService';
 import { AVAILABLE_FONTS } from '@/core/data/fonts';
@@ -14,7 +15,7 @@ interface FontWeightPickerProps {
     className?: string;
 }
 
-const getBundledWeights = (t: any) => [
+const getBundledWeights = (t: (key: string, fallback?: string) => string) => [
     { name: t('weight_thin'), value: '100' },
     { name: t('weight_extra_light'), value: '200' },
     { name: t('weight_light'), value: '300' },
@@ -47,14 +48,15 @@ export const FontWeightPicker: React.FC<FontWeightPickerProps> = ({
     React.useEffect(() => {
         const fetchStyles = async () => {
             setLoading(true);
+            const translate = (key: string, fallback?: string): string => String(t(key, fallback || ''));
             const isBundled = AVAILABLE_FONTS.some(f => f.name === family);
 
             if (isBundled) {
                 const def = AVAILABLE_FONTS.find(f => f.name === family);
                 // Map weights to localized names
-                const mappedWeights = (def?.weights || getBundledWeights(t)).map(w => ({
+                const mappedWeights = (def?.weights || getBundledWeights(translate)).map(w => ({
                     ...w,
-                    name: getWeightName(w.value, t)
+                    name: getWeightName(w.value, translate)
                 }));
                 setAvailableStyles(mappedWeights);
             } else {
@@ -63,7 +65,7 @@ export const FontWeightPicker: React.FC<FontWeightPickerProps> = ({
 
                 if (familyData.length > 0) {
                     const styles = familyData.map(f => ({
-                        name: getWeightName(f.style, t),
+                        name: getWeightName(f.style, translate),
                         value: f.style
                     }));
                     // De-duplicate if necessary and sort
@@ -75,13 +77,13 @@ export const FontWeightPicker: React.FC<FontWeightPickerProps> = ({
                     });
                     setAvailableStyles(uniqueStyles);
                 } else {
-                    setAvailableStyles(getBundledWeights(t)); // Fallback
+                    setAvailableStyles(getBundledWeights(translate)); // Fallback
                 }
             }
             setLoading(false);
         };
         fetchStyles();
-    }, [family]);
+    }, [family, t]);
 
     const filteredStyles = React.useMemo(() => {
         if (!searchQuery.trim()) return availableStyles;
@@ -92,23 +94,15 @@ export const FontWeightPicker: React.FC<FontWeightPickerProps> = ({
     return (
         <div className={cn("flex flex-col gap-2 min-w-[200px] max-h-[400px]", className)}>
             {/* Search */}
-            <div className="relative group px-1 mb-1">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3 h-3 text-stone-500 group-focus-within:text-accent transition-colors" />
-                <input
-                    type="text"
+            <div className="px-1 mb-1">
+                <SearchInput
+                    size="xs"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onClear={() => setSearchQuery('')}
                     placeholder={t('search_styles_placeholder')}
-                    className="w-full bg-black/40 border border-white/5 rounded-lg py-1.5 pl-9 pr-8 text-[11px] text-stone-200 placeholder:text-stone-600 focus:outline-hidden focus:border-accent/40 transition-all font-sans"
+                    className="w-full bg-black/40 border-white/5 font-sans"
                 />
-                {searchQuery && (
-                    <button
-                        onClick={() => setSearchQuery('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-white/10 text-stone-500 hover:text-white transition-all"
-                    >
-                        <X className="w-2.5 h-2.5" />
-                    </button>
-                )}
             </div>
 
             <div className="overflow-y-auto custom-scrollbar flex-1 pr-1">
@@ -120,14 +114,15 @@ export const FontWeightPicker: React.FC<FontWeightPickerProps> = ({
                     <div className="flex flex-col gap-0.5">
                         {filteredStyles.map((style) => (
                             <button
+                                type="button"
                                 key={style.value}
                                 onClick={() => onSelect(style.value)}
                                 onMouseEnter={() => setWeightPreview(style.value)}
                                 onMouseLeave={() => setWeightPreview(null)}
                                 className={cn(
-                                    "flex items-center justify-between px-3 py-2 rounded-lg transition-all duration-200 group text-left",
+                                    "flex items-center justify-between px-3 py-2 rounded-xl transition-all duration-200 group text-left apple-press cursor-pointer",
                                     value === style.value
-                                        ? "bg-accent/10 text-accent"
+                                        ? "bg-accent/10 text-accent font-bold"
                                         : "text-stone-400 hover:bg-white/5 hover:text-stone-200"
                                 )}
                             >

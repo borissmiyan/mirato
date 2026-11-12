@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRightLeft, Compass } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
@@ -18,7 +18,7 @@ export const GradientPicker: React.FC<GradientPickerProps> = ({ from, to, angle,
     const dialRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
 
-    const handleAngleChange = (e: MouseEvent | TouchEvent) => {
+    const handleAngleChange = useCallback((e: MouseEvent | TouchEvent) => {
         if (!dialRef.current) return;
         const rect = dialRef.current.getBoundingClientRect();
         const centerX = rect.left + rect.width / 2;
@@ -33,7 +33,7 @@ export const GradientPicker: React.FC<GradientPickerProps> = ({ from, to, angle,
         if (deg < 0) deg += 360;
 
         onChange(from, to, Math.round(deg));
-    };
+    }, [from, to, onChange]);
 
     useEffect(() => {
         if (!isDragging) return;
@@ -55,7 +55,7 @@ export const GradientPicker: React.FC<GradientPickerProps> = ({ from, to, angle,
             window.removeEventListener('touchmove', onMove);
             window.removeEventListener('touchend', onUp);
         };
-    }, [isDragging, from, to]);
+    }, [isDragging, handleAngleChange]);
 
     const swapColors = () => onChange(to, from, angle);
 
@@ -97,7 +97,7 @@ export const GradientPicker: React.FC<GradientPickerProps> = ({ from, to, angle,
                         <div className="w-2 h-2 rounded-full bg-stone-700 border border-white/20 z-10" />
 
                         {/* Angle Text Badge */}
-                        <div className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-accent text-accent-foreground text-[8px] font-bold rounded-md shadow-lg border border-white/10">
+                        <div className="absolute -top-1 -right-1 px-1.5 py-0.5 bg-accent text-accent-foreground text-[8px] font-bold rounded-xl shadow-lg border border-white/10">
                             {angle}°
                         </div>
                     </div>
@@ -112,8 +112,9 @@ export const GradientPicker: React.FC<GradientPickerProps> = ({ from, to, angle,
                     >
                         {/* Swap Button */}
                         <button
+                            type="button"
                             onClick={swapColors}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-2 bg-black/40 backdrop-blur-md rounded-full border border-white/10 text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90"
+                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-2 bg-black/40 backdrop-blur-md rounded-full border border-white/10 text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90 apple-press cursor-pointer"
                             title={t('swap_colors')}
                         >
                             <ArrowRightLeft className="w-4 h-4" />
@@ -127,9 +128,10 @@ export const GradientPicker: React.FC<GradientPickerProps> = ({ from, to, angle,
                 {QUICK_ANGLES.map(a => (
                     <button
                         key={a}
+                        type="button"
                         onClick={() => onChange(from, to, a)}
                         className={cn(
-                            "px-2 py-1 rounded-lg text-[9px] font-bold transition-all border",
+                            "px-2 py-1 rounded-xl text-[9px] font-bold transition-all border apple-press cursor-pointer",
                             angle === a
                                 ? "bg-accent/20 border-accent/40 text-accent"
                                 : "bg-white/5 border-white/5 text-stone-500 hover:text-stone-300"

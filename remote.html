@@ -7,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>Ekklesienter Remote Control</title>
+    <title>Mirato Remote</title>
   </head>
   <body class="bg-gray-950 text-white min-h-screen overscroll-none overflow-hidden select-none">
     <div id="remote-root" class="min-h-screen"></div>
@@ -17,8 +17,11 @@
         let wakeLock = null;
         const requestWakeLock = async () => {
           try {
-            if ('wakeLock' in navigator) {
+            if ('wakeLock' in navigator && (!wakeLock || wakeLock.released)) {
                 wakeLock = await navigator.wakeLock.request('screen');
+                wakeLock.addEventListener('release', () => {
+                    wakeLock = null;
+                });
                 console.log('Wake lock is active');
             }
           } catch (err) {
@@ -26,12 +29,13 @@
           }
         };
 
-        // Re-request wake lock when visibility changes
+        // Re-request wake lock when visibility changes or on user touch
         document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible' && wakeLock !== null) {
+          if (document.visibilityState === 'visible') {
             requestWakeLock();
           }
         });
+        document.addEventListener('touchstart', () => requestWakeLock(), { passive: true });
         
         requestWakeLock();
     </script>

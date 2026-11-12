@@ -32,8 +32,10 @@ export const LayerStack: React.FC<LayerStackProps> = ({
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-white">{t('layer_stack', 'Layer Stack')}</h3>
                 </div>
                 <button 
+                    type="button"
                     onClick={onAddLayer} 
-                    className="p-1.5 hover:bg-white/10 rounded-lg text-accent transition-all active:scale-90"
+                    className="p-1.5 hover:bg-white/10 rounded-xl text-accent transition-all cursor-pointer apple-press"
+                    aria-label={t('add_layer', 'Add Layer')}
                 >
                     <Plus className="w-3.5 h-3.5" />
                 </button>
@@ -45,13 +47,13 @@ export const LayerStack: React.FC<LayerStackProps> = ({
                         key={layer.id}
                         onClick={() => onSelectLayer(layer.id)}
                         className={cn(
-                            "group flex items-center gap-3 p-2 rounded-xl border transition-all cursor-pointer",
+                            "group flex items-center gap-3 p-2 rounded-xl border transition-all cursor-pointer apple-press",
                             activeLayerId === layer.id
-                                ? "bg-accent/10 border-accent/20"
+                                ? "bg-accent/10 border-accent/20 font-bold"
                                 : "bg-black/40 border-transparent hover:border-white/10"
                         )}
                     >
-                        <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 shrink-0 bg-stone-800">
+                        <div className="w-8 h-8 rounded-xl overflow-hidden border border-white/10 shrink-0 bg-stone-800">
                             {layer.type === 'color' && <div className="w-full h-full" style={{ backgroundColor: layer.color }} />}
                             {layer.type === 'gradient' && <div className="w-full h-full" style={{ background: `linear-gradient(${layer.gradient?.angle}deg, ${layer.gradient?.from}, ${layer.gradient?.to})` }} />}
                             {layer.type === 'image' && (layer.image?.url || layer.image?.id) && (
@@ -74,14 +76,18 @@ export const LayerStack: React.FC<LayerStackProps> = ({
 
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
+                                type="button"
                                 onClick={(e) => { e.stopPropagation(); onUpdateLayer(layer.id, { visible: !layer.visible }); }}
-                                className="p-1.5 hover:bg-white/10 rounded-lg text-stone-400 hover:text-white"
+                                className="p-1.5 hover:bg-white/10 rounded-xl text-stone-400 hover:text-white cursor-pointer apple-press"
+                                aria-label={layer.visible ? t('hide') : t('show')}
                             >
                                 {layer.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5 text-stone-600" />}
                             </button>
                             <button
+                                type="button"
                                 onClick={(e) => { e.stopPropagation(); onRemoveLayer(layer.id); }}
-                                className="p-1.5 hover:bg-red-500/20 rounded-lg text-stone-400 hover:text-red-400"
+                                className="p-1.5 hover:bg-red-500/20 rounded-xl text-stone-400 hover:text-red-400 cursor-pointer apple-press"
+                                aria-label={t('delete')}
                             >
                                 <Trash2 className="w-3.5 h-3.5" />
                             </button>

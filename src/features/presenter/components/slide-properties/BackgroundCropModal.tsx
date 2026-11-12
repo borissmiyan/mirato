@@ -4,6 +4,7 @@ import { X, Check, RotateCcw, ZoomIn, Maximize } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/core/utils/cn';
 import { CustomSlider } from '@/components/CustomSlider';
+import { Button, IconButton } from '@/shared/ui';
 import { CanvasService } from '@/features/presenter/services/CanvasService';
 
 import { useModalStore, ModalType } from '@/core/store/modalStore';
@@ -17,9 +18,13 @@ interface CropData {
 
 export const BackgroundCropModal: React.FC = () => {
   const { t } = useTranslation();
-  const { closeModal, stack } = useModalStore();
-
-  const modalData = [...stack].reverse().find(m => m.id === ModalType.IMAGE_CROP);
+  const closeModal = useModalStore(s => s.closeModal);
+  const modalData = useModalStore(s => {
+    for (let i = s.stack.length - 1; i >= 0; i--) {
+      if (s.stack[i].id === ModalType.IMAGE_CROP) return s.stack[i];
+    }
+    return undefined;
+  });
   const isOpen = !!modalData;
   const imageUrl = modalData?.props?.imageUrl as string || '';
   const initialCrop = modalData?.props?.initialCrop as CropData | undefined;
@@ -47,7 +52,7 @@ export const BackgroundCropModal: React.FC = () => {
         setOffset({ x: 0, y: 0 });
       }
     }
-  }, [isOpen, imageUrl]);
+  }, [isOpen, imageUrl, initialCrop]);
 
   const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget;
@@ -161,7 +166,7 @@ export const BackgroundCropModal: React.FC = () => {
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/90 backdrop-blur-xl animate-in fade-in duration-300">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center apple-backdrop bg-stone-950/85 backdrop-blur-xl">
       <div className="relative w-full h-full flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-white/5">
@@ -174,9 +179,13 @@ export const BackgroundCropModal: React.FC = () => {
               <p className="text-xs font-bold text-stone-500">{t('lock_aspect_ratio_tooltip')}: 16:9</p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="p-3 bg-white/5 hover:bg-white/10 rounded-full transition-colors text-stone-400">
-            <X className="w-6 h-6" />
-          </button>
+          <IconButton
+            icon={<X className="w-5 h-5" />}
+            label={t('close', 'Close')}
+            variant="surface"
+            size="sm"
+            onClick={onClose}
+          />
         </div>
 
         {/* Workspace */}
@@ -192,12 +201,14 @@ export const BackgroundCropModal: React.FC = () => {
 
           {/* Active Image Layer */}
           <div
-            className="relative shrink-0"
+            className={cn(
+              "relative shrink-0",
+              !isDragging && "transition-transform duration-200 ease-out"
+            )}
             style={{
               width: imgSize.width * zoom,
               height: imgSize.height * zoom,
               transform: `translate(${offset.x}px, ${offset.y}px)`,
-              transition: isDragging ? 'none' : 'transform 0.2s ease-out'
             }}
           >
             <img
@@ -237,17 +248,16 @@ export const BackgroundCropModal: React.FC = () => {
         {/* Controls */}
         <div className="p-8 bg-stone-900/50 border-t border-white/5 flex flex-col items-center gap-6">
           <div className="flex items-center gap-6 w-full max-w-3xl">
-            <button
-              type="button"
+            <IconButton
+              size="md"
+              variant="secondary"
+              icon={RotateCcw}
+              label={t('reset_crop')}
               onClick={() => {
                 setZoom(1);
                 setOffset({ x: 0, y: 0 });
               }}
-              className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-stone-400 transition-all hover:scale-105 active:scale-95"
-              title={t('reset_crop')}
-            >
-              <RotateCcw className="w-5 h-5" />
-            </button>
+            />
 
             <div className="flex-1 flex items-center gap-6">
               <ZoomIn className="w-5 h-5 text-stone-500 shrink-0" />
@@ -264,14 +274,15 @@ export const BackgroundCropModal: React.FC = () => {
               />
             </div>
 
-            <button
-              type="button"
+            <Button
+              variant="primary"
+              size="md"
               onClick={handleApply}
-              className="px-8 py-3 bg-accent text-white rounded-xl font-black uppercase tracking-widest flex items-center gap-2 hover:brightness-110 active:scale-95 transition-all shadow-lg shadow-accent/20"
+              className="px-8 font-black uppercase tracking-widest gap-2 shadow-lg shadow-accent/20"
             >
-              <Check className="w-5 h-5" />
+              <Check className="w-4 h-4" />
               {t('apply_crop', 'Apply')}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

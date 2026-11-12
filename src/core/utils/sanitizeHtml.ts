@@ -11,7 +11,7 @@ export const sanitizeHtml = (html: string): string => {
   const root = doc.getElementById('root');
   if (!root) return '';
 
-  const allowedTags = new Set(['SPAN', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'A', 'BR', 'UL', 'OL', 'LI', 'P', 'DIV']);
+  const allowedTags = new Set(['SPAN', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'A', 'BR', 'UL', 'OL', 'LI', 'P', 'DIV', 'MARK']);
   const allowedStyles = new Set([
      'color', 'background-color', 'font-size', 'font-family', 'font-weight', 'font-style', 
      'text-decoration', 'text-align', 'line-height', 'letter-spacing', 'text-transform',
@@ -73,6 +73,11 @@ export const sanitizeHtml = (html: string): string => {
           const href = attr.value.toLowerCase();
           if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:')) {
             el.removeAttribute('href');
+          }
+        } else if (attrName === 'class') {
+          // Allow safe alphanumeric and standard CSS/utility class characters
+          if (!/^[a-zA-Z0-9_\-\s:\/\[\].#]+$/.test(attr.value)) {
+            el.removeAttribute('class');
           }
         } else if (el.id !== 'root') {
           el.removeAttribute(attr.name);

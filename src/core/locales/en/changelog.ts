@@ -2,6 +2,39 @@ export default {
     "changelog": "Changelog",
     "changelog_entries": [
         {
+            "version": "v2.2.6",
+            "title": "Major Speed-Up, Storage Optimization & Smart Fonts",
+            "date": "September 18, 2026",
+            "description": "A major performance and reliability update: the app opens faster, eliminates freezes when opening presentations, and automatically handles and installs custom fonts on Windows and macOS.",
+            "features": [
+                "Smart fonts: custom fonts from presentations are now instantly applied across all screens (including projector) and automatically installed to the OS without admin rights",
+                "Instant presentation opening: zero-lag transition to presentation mode with smooth local media playback",
+                "Hardware audio compression: background audio tracks are automatically saved in compact format with zero loss in sound quality, saving space",
+                "Lightning-fast media trimming: video and audio trimming now executes in 0.1s natively and completely offline",
+                "Smooth Bible search: high-frequency search results are now rendered progressively without freezing the UI",
+                "Reduced RAM usage: optimized slide history snapshot memory and LRU image cache for rock-solid stability during long worship sessions",
+                "Quick cache cleaner: convenient 1-click button in Data Settings to clean temporary app files and cache"
+            ]
+        },
+        {
+            "version": "v2.2.5",
+            "title": "Remote Controller Bible Support",
+            "date": "July 10, 2026",
+            "description": "Added Bible support for the remote controller.",
+            "features": [
+                "Remote controller now supports Bible presentation"
+            ]
+        },
+        {
+            "version": "v2.2.4",
+            "title": "German Language Support",
+            "date": "June 15, 2026",
+            "description": "Maintenance update adding German language support.",
+            "features": [
+                "Added support of german language"
+            ]
+        },
+        {
             "version": "v2.2.3",
             "title": "Remote Controller & Canvas Shortcuts",
             "date": "June 12, 2026",

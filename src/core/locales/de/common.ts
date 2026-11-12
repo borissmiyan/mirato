@@ -26,7 +26,7 @@ export default {
     "history": "Verlauf",
     "no_history": "Noch kein Verlauf",
     "clear_history": "Verlauf löschen",
-    "app_title": "Ekklesienter",
+    "app_title": "Deck.CE",
     "scripture": "Schrift",
     "presentation": "Präsentation",
     "books": "Bücher",
@@ -57,6 +57,7 @@ export default {
 
     "confirm": "Bestätigen",
     "delete": "Löschen",
+    "remove": "Entfernen",
     "save": "Speichern",
     "edit": "Bearbeiten",
     "move": "Verschieben",
@@ -121,10 +122,10 @@ export default {
 
     "no_templates_found": "Keine Vorlagen gefunden",
     "try_different_search": "Versuche, deine Suchanfrage anzupassen.",
-    "click_save_as_template": "Klicke auf „Als Vorlage speichern", um eine zu erstellen.",
+    "click_save_as_template": "Klicke auf „Als Vorlage speichern“, um eine zu erstellen.",
 
     "add_category_prompt_title": "Kategorie hinzufügen?",
-    "add_category_prompt_desc": "Diese Vorlage hat keine Layouts für die Kategorie „{{block}}". Möchtest du sie stattdessen als „{{block}}"-Layout hinzufügen?",
+    "add_category_prompt_desc": "Diese Vorlage hat keine Layouts für die Kategorie „{{block}}“. Möchtest du sie stattdessen als „{{block}}“-Layout hinzufügen?",
 
     "export_success": "Vorlage exportiert",
     "export_error": "Vorlage konnte nicht exportiert werden",
@@ -163,9 +164,9 @@ export default {
             "title": "Smarte Bibel-Intelligenz"
         },
         "tips": {
-            "shorthand": "Tippe „J316" für Johannes 3:16 oder „1 J 3 1"",
-            "ranges": "Tippe „Röm 8:28-39" für einen Textabschnitt",
-            "batch": "Kommas verwenden: „Ps 23, Ps 91" für mehrere Ergebnisse",
+            "shorthand": "Tippe „J316“ für Johannes 3:16 oder „1 J 3 1“",
+            "ranges": "Tippe „Röm 8:28-39“ für einen Textabschnitt",
+            "batch": "Kommas verwenden: „Ps 23, Ps 91“ für mehrere Ergebnisse",
             "discovery": "Wörter in anderen Übersetzungen finden funktioniert automatisch!"
         }
     },

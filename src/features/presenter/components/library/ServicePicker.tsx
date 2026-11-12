@@ -1,27 +1,20 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { db } from '@/core/db';
-import {
-    Search,
-    X,
-    Plus,
-    Check,
-    Edit3,
-    Trash2,
-    Upload,
-    Download,
-    Layers,
-    Copy
-} from 'lucide-react';
+import { X, Plus, Check, Edit3, Trash2, Upload, Download, Layers } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { cn } from '@/core/utils/cn';
 import { IServiceFile, IPresentationFile } from '@/core/types';
 import { EktService } from '../../services/ektService';
 import { toast } from '@/core/utils/toast';
-import ContextMenu, { ContextMenuItem } from '@/shared/ui/ContextMenu';
-import { getUniqueServiceName, getUniquePresentationName } from '@/core/utils/nameUtils';
+import { getUniqueServiceName } from '@/core/utils/nameUtils';
+import { Button } from '@/shared/ui/Button';
+import { Input } from '@/shared/ui/Input';
+import { SearchInput } from '@/shared/ui/SearchInput';
+import { ServiceContextMenu } from './ServiceContextMenu';
 
 interface ServicePickerProps {
     currentServiceId: string | null;
@@ -39,7 +32,7 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
     onServiceCreated
 }) => {
     const { t, i18n } = useTranslation();
-    const { openModal } = useModalStore();
+    const openModal = useModalStore(s => s.openModal);
     const [search, setSearch] = useState('');
     const [addingNew, setAddingNew] = useState(false);
     const [newName, setNewName] = useState('');
@@ -52,7 +45,9 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
     } | null>(null);
     const isRu = i18n.language?.substring(0, 2) === 'ru';
 
-    const services = useLiveQuery(() => db.serviceFiles.orderBy('updatedAt').reverse().toArray()) || [];
+    const liveServices = useLiveQuery(() => db.serviceFiles.orderBy('updatedAt').reverse().toArray());
+    const services = useMemo(() => liveServices || [], [liveServices]);
+    const listRef = useRef<HTMLDivElement>(null);
 
     const filteredServices = useMemo(() => {
         if (!search) return services;
@@ -65,19 +60,33 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
 
     // Position above trigger button (like TranslationPicker)
     const position = useMemo(() => {
-        if (!triggerRect) return { bottom: '1rem', left: '1rem', width: '280px' };
-        const spacing = 4;
+        if (!triggerRect) return { bottom: '16px', left: '16px', width: '340px' };
+        const spacing = 8;
         const windowHeight = window.innerHeight;
-        const menuHeight = 420;
+        const windowWidth = window.innerWidth;
+        const menuHeight = 520;
         const bottom = windowHeight - triggerRect.top + spacing;
-        const left = triggerRect.left;
-        const width = Math.max(triggerRect.width, 280);
+
+        // Dynamic width based on service titles
+        const maxNameLen = filteredServices.reduce((max, s) => {
+            const title = isRu ? (s.nameRu || s.name) : s.name;
+            return Math.max(max, title?.length || 0);
+        }, 0);
+        const contentWidth = Math.round(150 + maxNameLen * 8.5);
+        const minWidth = Math.max(triggerRect.width, 320);
+        const maxWidth = Math.min(Math.max(triggerRect.width * 2, 540), windowWidth - 32);
+        const width = Math.min(Math.max(contentWidth, minWidth), maxWidth);
+
+        let left = Math.max(16, triggerRect.left);
+        if (left + width > windowWidth - 16) {
+            left = Math.max(16, windowWidth - width - 16);
+        }
 
         if (triggerRect.top < menuHeight + spacing) {
             return { top: triggerRect.bottom + spacing, left, width };
         }
         return { bottom, left, width };
-    }, [triggerRect]);
+    }, [triggerRect, filteredServices, isRu]);
 
     const handleCreateService = async () => {
         if (!newName.trim()) {
@@ -92,7 +101,7 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
         const masterPres: IPresentationFile = {
             id: masterId,
             name: `${newName} (Master)`,
-            serviceId: serviceId,
+            serviceId,
             isMaster: true,
             createdAt: now,
             updatedAt: now,
@@ -121,6 +130,11 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
         }
     };
 
+    const handleCancelAddNew = () => {
+        setAddingNew(false);
+        setNewName('');
+    };
+
     const handleRenameService = async (id: string) => {
         if (!renameValue.trim()) {
             setRenamingId(null);
@@ -129,6 +143,10 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
         await db.serviceFiles.update(id, { name: renameValue, nameRu: renameValue });
         setRenamingId(null);
         setRenameValue('');
+    };
+
+    const handleSaveCurrentRename = () => {
+        if (renamingId) handleRenameService(renamingId);
     };
 
     const handleDeleteService = async (id: string) => {
@@ -164,7 +182,7 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
                         suggestedName: `${service.name}.ekt`,
                         types: [{ description: 'Service File', accept: { 'application/zip': ['.ekt'] } }]
                     });
-                    const writable = await (handle as any).createWritable();
+                    const writable = await handle.createWritable();
                     await writable.write(blob);
                     await writable.close();
                     await db.serviceFiles.update(id, { fileHandle: handle });
@@ -180,7 +198,7 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
             toast.error(t('export_error', 'Export failed'));
         }
     };
- 
+
     const handleImportService = async () => {
         try {
             if (!window.showOpenFilePicker) throw new Error('File System Access API not supported');
@@ -219,6 +237,13 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
         }
     };
 
+    const rowVirtualizer = useVirtualizer({
+        count: filteredServices.length,
+        getScrollElement: () => listRef.current,
+        estimateSize: () => 48,
+        overscan: 5,
+    });
+
     return createPortal(
         <div className="fixed inset-0 z-9999 pointer-events-none">
             <button
@@ -229,7 +254,7 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
             />
 
             <div
-                className="absolute bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[420px] overflow-hidden animate-in fade-in zoom-in-95 duration-200 pointer-events-auto"
+                className="absolute bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl flex flex-col max-h-[520px] overflow-hidden animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
                 style={position}
             >
                 {/* Header */}
@@ -239,41 +264,46 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
                     </h3>
                     <div className="flex items-center gap-1">
                         {!addingNew && (
-                            <button
+                            <Button
+                                size="xs"
+                                square
+                                variant="ghost"
                                 onClick={() => setAddingNew(true)}
-                                className="p-1 hover:bg-accent/10 rounded-lg text-stone-500 hover:text-accent transition-all"
                                 title={t('new_service', 'New Service')}
                             >
                                 <Plus className="w-3.5 h-3.5" />
-                            </button>
+                            </Button>
                         )}
-                        <button onClick={onClose} className="p-1 hover:bg-white/5 rounded-lg text-stone-600 hover:text-white transition-all">
+                        <Button
+                            size="xs"
+                            square
+                            variant="ghost"
+                            onClick={onClose}
+                            title={t('close_menu', 'Close menu')}
+                        >
                             <X className="w-3.5 h-3.5" />
-                        </button>
+                        </Button>
                     </div>
                 </div>
 
                 {/* Search */}
                 <div className="p-2 border-b border-white/5 bg-stone-950/20">
-                    <div className="relative group">
-                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-stone-600 group-focus-within:text-accent" />
-                        <input
-                            type="text"
-                            autoFocus
-                            placeholder={t('search_services', 'Search services...')}
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            className="w-full bg-white/5 border border-white/5 rounded-lg py-1.5 pl-8 pr-3 text-[11px] text-stone-200 focus:outline-none focus:border-accent/40 transition-all placeholder:text-stone-700"
-                        />
-                    </div>
+                    <SearchInput
+                        size="xs"
+                        autoFocus
+                        placeholder={t('search_services', 'Search services...')}
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        onClear={() => setSearch('')}
+                    />
                 </div>
 
                 {/* New Service Inline Input */}
                 {addingNew && (
                     <div className="p-2 border-b border-white/5 bg-stone-950/10">
-                        <div className="flex gap-1 animate-in slide-in-from-top-2 duration-200">
-                            <input
-                                type="text"
+                        <div className="flex items-center gap-2 animate-in slide-in-from-top-2 duration-200">
+                            <Input
+                                size="xs"
                                 autoFocus
                                 value={newName}
                                 onChange={(e) => setNewName(e.target.value)}
@@ -282,111 +312,122 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
                                     if (e.key === 'Escape') { setAddingNew(false); setNewName(''); }
                                 }}
                                 placeholder={t('service_name', 'Service Name...')}
-                                className="flex-1 min-w-0 bg-white/5 border border-accent/30 rounded-lg py-1.5 px-3 text-[11px] text-stone-200 focus:outline-none transition-all placeholder:text-stone-700 font-medium"
+                                className="flex-1"
                             />
-                            <button
-                                onClick={handleCreateService}
-                                className="w-8 flex items-center justify-center bg-accent/20 hover:bg-accent/30 text-accent rounded-lg transition-all border border-accent/10 shrink-0"
-                            >
+                            <Button size="xs" square variant="primary" onClick={handleCreateService} title={t('create', 'Create')}>
                                 <Check className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                                onClick={() => { setAddingNew(false); setNewName(''); }}
-                                className="w-8 flex items-center justify-center bg-white/5 hover:bg-white/10 text-stone-500 rounded-lg transition-all border border-white/5 shrink-0"
-                            >
+                            </Button>
+                            <Button size="xs" square variant="ghost" onClick={handleCancelAddNew} title={t('cancel', 'Cancel')}>
                                 <X className="w-3.5 h-3.5" />
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 )}
 
                 {/* Services List */}
-                <div className="flex-1 overflow-y-auto p-1.5 space-y-0.5 no-scrollbar min-h-0">
-                    {filteredServices.map(service => (
+                <div ref={listRef} className="flex-1 overflow-y-auto p-1.5 no-scrollbar min-h-0">
+                    {filteredServices.length > 0 ? (
                         <div
-                            key={service.id}
-                            className={cn(
-                                "group w-full flex items-center justify-between p-2 rounded-lg transition-all text-left border cursor-pointer",
-                                currentServiceId === service.id
-                                    ? "bg-accent/10 border-accent/20"
-                                    : "hover:bg-white/5 border-transparent hover:border-white/5"
-                            )}
-                            onClick={() => { if (renamingId !== service.id) { onSelect(service.id); onClose(); } }}
-                            onContextMenu={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                setContextMenu({ x: e.clientX, y: e.clientY, service });
+                            style={{
+                                height: `${rowVirtualizer.getTotalSize()}px`,
+                                width: '100%',
+                                position: 'relative',
                             }}
                         >
-                            {renamingId === service.id ? (
-                                <div className="flex-1 flex gap-1 min-w-0">
-                                    <input
-                                        type="text"
-                                        autoFocus
-                                        value={renameValue}
-                                        onChange={(e) => setRenameValue(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleRenameService(service.id);
-                                            if (e.key === 'Escape') setRenamingId(null);
+                            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                                const service = filteredServices[virtualRow.index];
+                                if (!service) return null;
+                                const isCurrent = currentServiceId === service.id;
+                                const serviceTitle = isRu ? (service.nameRu || service.name) : service.name;
+
+                                return (
+                                    <div
+                                        key={service.id}
+                                        data-index={virtualRow.index}
+                                        ref={rowVirtualizer.measureElement}
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            transform: `translateY(${virtualRow.start}px)`,
+                                            paddingBottom: '2px',
                                         }}
-                                        className="flex-1 min-w-0 bg-white/5 border border-accent/30 rounded py-0.5 px-2 text-[11px] text-stone-200 focus:outline-none"
-                                    />
-                                    <button onClick={() => handleRenameService(service.id)} className="p-1 text-accent hover:bg-accent/10 rounded shrink-0">
-                                        <Check className="w-3 h-3" />
-                                    </button>
-                                </div>
-                            ) : (
-                                <>
-                                    <div className="flex-1 flex items-center gap-2.5 min-w-0">
-                                        <div className={cn(
-                                            "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                                            currentServiceId === service.id ? "bg-accent/20 text-accent" : "bg-stone-800/50 text-stone-600 group-hover:text-stone-400"
-                                        )}>
-                                            <Layers className="w-3.5 h-3.5" />
-                                        </div>
-                                        <div className="flex flex-col min-w-0">
-                                            <span className={cn("text-[11px] font-bold truncate", currentServiceId === service.id ? "text-accent" : "text-stone-300")}>
-                                                {isRu ? service.nameRu : service.name}
-                                            </span>
-                                            <span className="text-[8px] font-bold text-stone-600 uppercase tracking-widest leading-none mt-0.5">
-                                                {t('presentations_count', { count: service.presentationIds.length, defaultValue: '{{count}} presentations' })}
-                                            </span>
+                                    >
+                                        <div
+                                            className={cn(
+                                                "group w-full flex items-center justify-between p-2 rounded-xl transition-all text-left border cursor-pointer apple-press",
+                                                isCurrent ? "bg-accent/10 border-accent/20" : "hover:bg-white/5 border-transparent hover:border-white/5"
+                                            )}
+                                            onClick={() => { if (renamingId !== service.id) { onSelect(service.id); onClose(); } }}
+                                            onContextMenu={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setContextMenu({ x: e.clientX, y: e.clientY, service });
+                                            }}
+                                        >
+                                            {renamingId === service.id ? (
+                                                <div className="flex-1 flex items-center gap-1.5 min-w-0" onClick={(e) => e.stopPropagation()}>
+                                                    <Input
+                                                        size="xs"
+                                                        autoFocus
+                                                        value={renameValue}
+                                                        onChange={(e) => setRenameValue(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') handleRenameService(service.id);
+                                                            if (e.key === 'Escape') setRenamingId(null);
+                                                        }}
+                                                        className="flex-1"
+                                                    />
+                                                    <Button size="xs" square variant="ghost" onClick={handleSaveCurrentRename} title={t('save', 'Save')}>
+                                                        <Check className="w-3.5 h-3.5 text-accent" />
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="flex-1 flex items-center gap-3 min-w-0">
+                                                        <div className={cn(
+                                                            "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors",
+                                                            isCurrent ? "bg-accent/20 text-accent" : "bg-stone-800/50 text-stone-600 group-hover:text-stone-400"
+                                                        )}>
+                                                            <Layers className="w-4 h-4" />
+                                                        </div>
+                                                        <div className="flex flex-col min-w-0 flex-1">
+                                                            <span
+                                                                title={serviceTitle}
+                                                                className={cn("text-xs font-bold truncate", isCurrent ? "text-accent" : "text-stone-300")}
+                                                            >
+                                                                {serviceTitle}
+                                                            </span>
+                                                            <span className="text-[9px] font-bold text-stone-500 uppercase tracking-widest leading-none mt-1">
+                                                                {t('presentations_count', { count: service.presentationIds.length, defaultValue: '{{count}} presentations' })}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
+                                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleExportService(service.id); }} title={t('export_service', 'Export (.ekt)')}>
+                                                            <Upload className="w-3.5 h-3.5 text-stone-400 hover:text-accent" />
+                                                        </Button>
+                                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); setRenamingId(service.id); setRenameValue(service.name); }} title={t('rename', 'Rename')}>
+                                                            <Edit3 className="w-3.5 h-3.5 text-stone-400" />
+                                                        </Button>
+                                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id); }} title={t('delete', 'Delete')}>
+                                                            <Trash2 className="w-3.5 h-3.5 text-stone-400 hover:text-red-400" />
+                                                        </Button>
+                                                    </div>
+
+                                                    {isCurrent && (
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)] ml-2 shrink-0" />
+                                                    )}
+                                                </>
+                                            )}
                                         </div>
                                     </div>
-
-                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleExportService(service.id); }}
-                                            className="p-1 hover:bg-white/10 rounded text-stone-500 hover:text-accent transition-all"
-                                            title={t('export_service', 'Export (.ekt)')}
-                                        >
-                                            <Upload className="w-3 h-3" />
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setRenamingId(service.id); setRenameValue(service.name); }}
-                                            className="p-1 hover:bg-white/10 rounded text-stone-500 hover:text-stone-300 transition-all"
-                                            title={t('rename', 'Rename')}
-                                        >
-                                            <Edit3 className="w-3 h-3" />
-                                        </button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id); }}
-                                            className="p-1 hover:bg-red-500/20 rounded text-stone-500 hover:text-red-400 transition-all"
-                                            title={t('delete', 'Delete')}
-                                        >
-                                            <Trash2 className="w-3 h-3" />
-                                        </button>
-                                    </div>
-
-                                    {currentServiceId === service.id && (
-                                        <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)] ml-1 shrink-0" />
-                                    )}
-                                </>
-                            )}
+                                );
+                            })}
                         </div>
-                    ))}
-
-                    {filteredServices.length === 0 && (
+                    ) : (
                         <div className="py-8 flex flex-col items-center justify-center gap-2 opacity-30">
                             <Layers className="w-8 h-8 text-stone-500" />
                             <p className="text-[10px] font-bold uppercase tracking-widest">
@@ -398,98 +439,26 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
 
                 {/* Footer: Import */}
                 <div className="p-2 border-t border-white/5 bg-stone-950/40 shrink-0">
-                    <button
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        className="w-full text-xs font-bold uppercase tracking-wider"
+                        leftIcon={<Download className="w-4 h-4" />}
                         onClick={handleImportService}
-                        className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg text-[10px] font-black text-stone-500 hover:text-accent uppercase tracking-widest hover:bg-accent/10 transition-all cursor-pointer"
                     >
-                        <Download className="w-3.5 h-3.5" />
                         {t('import_service', 'Import Service (.ekt)')}
-                    </button>
+                    </Button>
                 </div>
 
                 {contextMenu && (
-                    <ContextMenu
-                        x={contextMenu.x}
-                        y={contextMenu.y}
+                    <ServiceContextMenu
+                        contextMenu={contextMenu}
                         onClose={() => setContextMenu(null)}
-                    >
-                        <ContextMenuItem
-                            icon={<Copy className="w-3 h-3" />}
-                            label={t('duplicate', 'Duplicate')}
-                            onClick={async () => {
-                                const serviceId = crypto.randomUUID();
-                                const now = new Date();
-                                const newName = await getUniqueServiceName(contextMenu.service.name);
-
-                                const duplicatedPresIds: string[] = [];
-                                let newMasterPresId = '';
-
-                                for (const presId of contextMenu.service.presentationIds) {
-                                    const originalPres = await db.presentationFiles.get(presId);
-                                    if (originalPres) {
-                                        const clonePres = structuredClone(originalPres);
-                                        clonePres.id = crypto.randomUUID();
-                                        clonePres.serviceId = serviceId;
-                                        clonePres.createdAt = now;
-                                        clonePres.updatedAt = now;
-                                        clonePres.lastOpened = now;
-                                        
-                                        if (originalPres.id === contextMenu.service.masterPresentationId) {
-                                            clonePres.name = `${newName} (Master)`;
-                                            clonePres.isMaster = true;
-                                            newMasterPresId = clonePres.id;
-                                        } else {
-                                            clonePres.name = await getUniquePresentationName(originalPres.name);
-                                        }
-                                        await db.presentationFiles.add(clonePres);
-                                        duplicatedPresIds.push(clonePres.id);
-                                    }
-                                }
-
-                                await db.serviceFiles.add({
-                                    id: serviceId,
-                                    name: newName,
-                                    nameRu: newName,
-                                    description: contextMenu.service.description || '',
-                                    presentationIds: duplicatedPresIds,
-                                    masterPresentationId: newMasterPresId,
-                                    createdAt: now,
-                                    updatedAt: now,
-                                    lastOpened: now
-                                });
-
-                                toast.success(t('service_duplicated', 'Service duplicated'));
-                                setContextMenu(null);
-                            }}
-                        />
-                        <ContextMenuItem
-                            icon={<Edit3 className="w-3 h-3" />}
-                            label={t('rename', 'Rename')}
-                            onClick={() => {
-                                setRenamingId(contextMenu.service.id);
-                                setRenameValue(contextMenu.service.name);
-                                setContextMenu(null);
-                            }}
-                        />
-                        <ContextMenuItem
-                            icon={<Upload className="w-3 h-3" />}
-                            label={t('export', 'Export')}
-                            onClick={() => {
-                                handleExportService(contextMenu.service.id);
-                                setContextMenu(null);
-                            }}
-                        />
-                        <div className="h-px bg-white/5 my-1 mx-2" />
-                        <ContextMenuItem
-                            icon={<Trash2 className="w-3 h-3" />}
-                            label={t('delete', 'Delete')}
-                            danger
-                            onClick={() => {
-                                handleDeleteService(contextMenu.service.id);
-                                setContextMenu(null);
-                            }}
-                        />
-                    </ContextMenu>
+                        setRenamingId={setRenamingId}
+                        setRenameValue={setRenameValue}
+                        handleExportService={handleExportService}
+                        handleDeleteService={handleDeleteService}
+                    />
                 )}
             </div>
         </div>,

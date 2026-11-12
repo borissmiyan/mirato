@@ -1,18 +1,22 @@
 import { db } from '@/core/db';
+import { useHistoryStore } from '@/core/store/historyStore';
 import { PresentationSliceCreator } from '../types';
 import { ICanvasItem, ICanvasSlide, ISlide, IStyleLayer, ITimerSettings, IMediaItem, IVideoSlide } from '@/core/types';
 
 export const createCanvasSlice: PresentationSliceCreator = (set, get) => ({
     addCanvasItem: async (slideId, item) => {
-        const { selectedPresentationId, selectedPresentation } = get();
-        if (!selectedPresentationId) return;
-        await get().takeSnapshot(selectedPresentationId);
+        const targetPresId = get().selectedPresentationId || get().activePresentationId;
+        if (!targetPresId) return;
 
-        let pres = selectedPresentation;
-        if (!pres || pres.id !== selectedPresentationId) {
-            const active = get().activePresentation;
-            if (active && active.id === selectedPresentationId) pres = active;
-            else pres = await db.presentationFiles.get(selectedPresentationId) || null;
+        // Background snapshot (undo/redo) without blocking UI rendering
+        get().takeSnapshot(targetPresId).catch(console.error);
+
+        let pres = get().selectedPresentation?.id === targetPresId
+            ? get().selectedPresentation
+            : (get().activePresentation?.id === targetPresId ? get().activePresentation : null);
+
+        if (!pres) {
+            pres = await db.presentationFiles.get(targetPresId) || null;
         }
         if (!pres) return;
 
@@ -28,18 +32,20 @@ export const createCanvasSlice: PresentationSliceCreator = (set, get) => ({
             }
             return s;
         });
-        await get().updatePresentationSlides(selectedPresentationId, newSlides);
+
+        // Fire synchronous in-memory store update immediately (0ms lag)
+        get().updatePresentationSlides(targetPresId, newSlides).catch(console.error);
     },
 
     updateCanvasItem: async (slideId, itemId, updates) => {
-        const { selectedPresentationId, selectedPresentation } = get();
-        if (!selectedPresentationId) return;
+        const targetPresId = get().selectedPresentationId || get().activePresentationId;
+        if (!targetPresId) return;
 
-        let pres = selectedPresentation;
-        if (!pres || pres.id !== selectedPresentationId) {
-            const active = get().activePresentation;
-            if (active && active.id === selectedPresentationId) pres = active;
-            else pres = await db.presentationFiles.get(selectedPresentationId) || null;
+        let pres = get().selectedPresentation?.id === targetPresId
+            ? get().selectedPresentation
+            : (get().activePresentation?.id === targetPresId ? get().activePresentation : null);
+        if (!pres) {
+            pres = await db.presentationFiles.get(targetPresId) || null;
         }
         if (!pres) return;
 
@@ -57,19 +63,19 @@ export const createCanvasSlice: PresentationSliceCreator = (set, get) => ({
             }
             return s;
         });
-        await get().updatePresentationSlides(selectedPresentationId, newSlides);
+        await get().updatePresentationSlides(targetPresId, newSlides);
     },
 
     updateCanvasItems: async (slideId, updates) => {
-        const { selectedPresentationId, selectedPresentation } = get();
-        if (!selectedPresentationId) return;
-        await get().takeSnapshot(selectedPresentationId);
+        const targetPresId = get().selectedPresentationId || get().activePresentationId;
+        if (!targetPresId) return;
+        get().takeSnapshot(targetPresId).catch(console.error);
 
-        let pres = selectedPresentation;
-        if (!pres || pres.id !== selectedPresentationId) {
-            const active = get().activePresentation;
-            if (active && active.id === selectedPresentationId) pres = active;
-            else pres = await db.presentationFiles.get(selectedPresentationId) || null;
+        let pres = get().selectedPresentation?.id === targetPresId
+            ? get().selectedPresentation
+            : (get().activePresentation?.id === targetPresId ? get().activePresentation : null);
+        if (!pres) {
+            pres = await db.presentationFiles.get(targetPresId) || null;
         }
         if (!pres) return;
 
@@ -88,19 +94,19 @@ export const createCanvasSlice: PresentationSliceCreator = (set, get) => ({
             }
             return s;
         });
-        await get().updatePresentationSlides(selectedPresentationId, newSlides);
+        get().updatePresentationSlides(targetPresId, newSlides).catch(console.error);
     },
 
     updateCanvasItemsOrder: async (slideId, items) => {
-        const { selectedPresentationId, selectedPresentation } = get();
-        if (!selectedPresentationId) return;
-        await get().takeSnapshot(selectedPresentationId);
+        const targetPresId = get().selectedPresentationId || get().activePresentationId;
+        if (!targetPresId) return;
+        get().takeSnapshot(targetPresId).catch(console.error);
 
-        let pres = selectedPresentation;
-        if (!pres || pres.id !== selectedPresentationId) {
-            const active = get().activePresentation;
-            if (active && active.id === selectedPresentationId) pres = active;
-            else pres = await db.presentationFiles.get(selectedPresentationId) || null;
+        let pres = get().selectedPresentation?.id === targetPresId
+            ? get().selectedPresentation
+            : (get().activePresentation?.id === targetPresId ? get().activePresentation : null);
+        if (!pres) {
+            pres = await db.presentationFiles.get(targetPresId) || null;
         }
         if (!pres) return;
 
@@ -111,33 +117,35 @@ export const createCanvasSlice: PresentationSliceCreator = (set, get) => ({
             }
             return s;
         });
-        await get().updatePresentationSlides(selectedPresentationId, newSlides);
+        get().updatePresentationSlides(targetPresId, newSlides).catch(console.error);
     },
 
     removeCanvasItem: async (slideId, itemId) => {
-        const { selectedPresentationId, selectedPresentation } = get();
-        if (!selectedPresentationId) return;
-        await get().takeSnapshot(selectedPresentationId);
+        const targetPresId = get().selectedPresentationId || get().activePresentationId;
+        if (!targetPresId) return;
+        get().takeSnapshot(targetPresId).catch(console.error);
 
-        let pres = selectedPresentation;
-        if (!pres || pres.id !== selectedPresentationId) {
-            const active = get().activePresentation;
-            if (active && active.id === selectedPresentationId) pres = active;
-            else pres = await db.presentationFiles.get(selectedPresentationId) || null;
+        let pres = get().selectedPresentation?.id === targetPresId
+            ? get().selectedPresentation
+            : (get().activePresentation?.id === targetPresId ? get().activePresentation : null);
+
+        if (!pres) {
+            pres = await db.presentationFiles.get(targetPresId) || null;
         }
         if (!pres) return;
 
+        const idSet = new Set(Array.isArray(itemId) ? itemId : [itemId]);
         const newSlides = pres.slides.map(s => {
             if (s.id === slideId && s.type === 'normal') {
                 const normalSlide = s as ICanvasSlide;
                 const items = (normalSlide.content.canvasItems || [])
-                    .filter(ci => ci.id !== itemId)
+                    .filter(ci => !idSet.has(ci.id))
                     .map((ci, idx) => ({ ...ci, zIndex: idx }));
                 return { ...normalSlide, content: { ...normalSlide.content, canvasItems: items } };
             }
             return s;
         });
-        await get().updatePresentationSlides(selectedPresentationId, newSlides);
+        get().updatePresentationSlides(targetPresId, newSlides).catch(console.error);
     },
 
     reorderCanvasItem: async (slideId, itemId, direction) => {
@@ -172,7 +180,7 @@ export const createCanvasSlice: PresentationSliceCreator = (set, get) => ({
         await get().updatePresentationSlides(selectedPresentationId, newSlides);
     },
 
-    duplicateCanvasItems: async (slideId: string, itemIds: string[]) => {
+    duplicateCanvasItems: async (slideId: string, itemIds: string[], offset?: { dx: number; dy: number }) => {
         if (itemIds.length === 0) return [];
         const { selectedPresentationId, selectedPresentation } = get();
         if (!selectedPresentationId) return [];
@@ -186,18 +194,28 @@ export const createCanvasSlice: PresentationSliceCreator = (set, get) => ({
         }
         if (!pres) return [];
 
+        const dx = offset ? offset.dx : 2;
+        const dy = offset ? offset.dy : 2;
+
         const newItems: ICanvasItem[] = [];
         const newSlides = pres.slides.map(s => {
             if (s.id === slideId && s.type === 'normal') {
                 const normalSlide = s as ICanvasSlide;
                 const items = [...(normalSlide.content.canvasItems || [])];
                 
+                const groupMap = new Map<string, string>();
                 const clonedItems = items.filter(i => itemIds.includes(i.id)).map(item => {
                     const clone = structuredClone(item);
                     clone.id = crypto.randomUUID();
-                    clone.x += 2; // Slight offset (2%)
-                    clone.y += 2;
+                    clone.x += dx;
+                    clone.y += dy;
                     clone.zIndex = items.length + newItems.length;
+                    if (clone.groupId) {
+                        if (!groupMap.has(clone.groupId)) {
+                            groupMap.set(clone.groupId, crypto.randomUUID());
+                        }
+                        clone.groupId = groupMap.get(clone.groupId);
+                    }
                     newItems.push(clone);
                     return clone;
                 });
@@ -391,24 +409,22 @@ export const createCanvasSlice: PresentationSliceCreator = (set, get) => ({
     },
 
     undo: async () => {
-        const { useHistoryStore } = await import('@/core/store/historyStore');
         const snapshot = useHistoryStore.getState().undo();
         if (!snapshot) return;
 
-        const { selectedPresentationId } = get();
-        if (!selectedPresentationId || snapshot.presentationId !== selectedPresentationId) return;
+        const currentPresId = get().selectedPresentationId || get().activePresentationId;
+        if (!currentPresId || snapshot.presentationId !== currentPresId) return;
 
         // Restore the full slides array from the snapshot
         await get().updatePresentationSlides(snapshot.presentationId, snapshot.slides);
     },
 
     redo: async () => {
-        const { useHistoryStore } = await import('@/core/store/historyStore');
         const snapshot = useHistoryStore.getState().redo();
         if (!snapshot) return;
 
-        const { selectedPresentationId } = get();
-        if (!selectedPresentationId || snapshot.presentationId !== selectedPresentationId) return;
+        const currentPresId = get().selectedPresentationId || get().activePresentationId;
+        if (!currentPresId || snapshot.presentationId !== currentPresId) return;
 
         // Restore the full slides array from the snapshot
         await get().updatePresentationSlides(snapshot.presentationId, snapshot.slides);
@@ -417,28 +433,45 @@ export const createCanvasSlice: PresentationSliceCreator = (set, get) => ({
     /**
      * Push a "before" snapshot of the given presentation's slides array.
      * Must be called BEFORE any mutating action that should be undoable.
-     * @param presentationId - the presentation to snapshot
+     * Accepts either a presentationId or a slideId.
      */
-    takeSnapshot: async (presentationId: string) => {
-        const { useHistoryStore } = await import('@/core/store/historyStore');
+    takeSnapshot: async (presentationOrSlideId: string) => {
         const { activePresentationId, activePresentation, selectedPresentationId, selectedPresentation } = get();
 
+        let resolvedPresId = presentationOrSlideId;
         let slides: ISlide[] | undefined;
 
-        // Prefer in-memory presentation to avoid a DB round-trip on hot path
-        if (activePresentationId === presentationId && activePresentation) {
+        // 1. Direct presentation ID match
+        if (activePresentationId === presentationOrSlideId && activePresentation) {
             slides = activePresentation.slides;
-        } else if (selectedPresentationId === presentationId && selectedPresentation) {
+        } else if (selectedPresentationId === presentationOrSlideId && selectedPresentation) {
             slides = selectedPresentation.slides;
+        // 2. Slide ID match in active/selected presentations
+        } else if (activePresentation?.slides?.some(s => s.id === presentationOrSlideId)) {
+            resolvedPresId = activePresentationId!;
+            slides = activePresentation.slides;
+        } else if (selectedPresentation?.slides?.some(s => s.id === presentationOrSlideId)) {
+            resolvedPresId = selectedPresentationId!;
+            slides = selectedPresentation.slides;
+        // 3. Fallback: query DB or use currently open presentation
         } else {
-            const pres = await db.presentationFiles.get(presentationId);
-            slides = pres?.slides;
+            const pres = await db.presentationFiles.get(presentationOrSlideId);
+            if (pres) {
+                slides = pres.slides;
+            } else {
+                const fallbackId = selectedPresentationId || activePresentationId;
+                if (fallbackId) {
+                    resolvedPresId = fallbackId;
+                    const fallbackPres = (selectedPresentationId && selectedPresentation) || activePresentation;
+                    slides = fallbackPres?.slides;
+                }
+            }
         }
 
-        if (!slides) return;
+        if (!slides || !resolvedPresId) return;
 
         useHistoryStore.getState().pushSnapshot({
-            presentationId,
+            presentationId: resolvedPresId,
             slides: structuredClone(slides),
         });
     },

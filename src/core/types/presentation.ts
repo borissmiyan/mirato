@@ -5,7 +5,9 @@ import { IStyleLayer } from './style';
 import { Verse } from './bible';
 import { PresenterSettings } from './settings';
 import { IVideoSettings } from './video';
+import { SlideType } from './slide';
 
+export type { SlideType } from './slide';
 export type TransitionDirection = 'top' | 'right' | 'bottom' | 'left' | 'in' | 'out';
 
 export interface ISlideTransition {
@@ -19,16 +21,17 @@ export interface ISlideContent {
   canvasItems?: ICanvasItem[];
 }
 
-export type SlideType = 'normal' | 'nested' | 'timer' | 'verse' | 'group' | 'video' | 'hymn';
-
 export interface IBaseSlide {
   id: string;
   type: SlideType;
   order: number;
   blockId: string;
   templateId: string;
+  label?: string;
+  name?: string;
   notes?: string;
   isExpanded?: boolean; // UI state for timeline
+  thumbnailUrl?: string; // Pre-baked lightweight WebP thumbnail
 }
 
 export interface ICanvasSlide extends IBaseSlide {
@@ -52,7 +55,7 @@ export interface IVerseSlide extends IBaseSlide {
   translation: string;
   highlightWords?: string[];
   showReference?: boolean;
-  textStyle?: Record<string, any>;
+  textStyle?: Record<string, unknown>;
 }
 
 export interface ITimerSlide extends IBaseSlide, Partial<ITimerSettings> {
@@ -68,6 +71,7 @@ export interface INestedSlide extends IBaseSlide {
   type: 'nested';
   ektpHash?: string; // before import
   presentationId?: string; // after import
+  masterPresentationId?: string; // legacy after import
   entrySlideId?: string; // optional start slide
   previewHash?: string; // optional thumbnail
 }
@@ -147,7 +151,7 @@ export interface IServiceFile {
   createdAt: Date;
   updatedAt: Date;
   lastOpened?: Date;
-  fileHandle?: any; // Persistent handle for incremental saves
+  fileHandle?: FileSystemFileHandle | FileSystemHandle | { createWritable?: () => Promise<unknown> } | null; // Persistent handle for incremental saves
   metadata?: {
     church?: string;
     date?: Date;
@@ -168,7 +172,7 @@ export interface IPresentationFile {
   createdAt: Date;
   updatedAt: Date;
   lastOpened?: Date;
-  fileHandle?: any; // Persistent handle for incremental saves
+  fileHandle?: FileSystemFileHandle | FileSystemHandle | { createWritable?: () => Promise<unknown> } | null; // Persistent handle for incremental saves
   thumbnailUrl?: string; // Local blob URL or base64 for the first slide preview
   hasPreview?: boolean; // Flag to indicate if a preview.png exists in the ZIP
   isStarred?: boolean;
@@ -186,20 +190,16 @@ export interface IPresentationFile {
     date?: Date;
     speaker?: string;
     // Hymn library extensions
+    isHymn?: boolean;
     isHymnLibraryItem?: boolean;
+    hymnalId?: string;
+    themeId?: string;
     hymnTitle?: string;
     hymnAuthor?: string;
     hymnYear?: number;
     hymnOrder?: number;
   };
 }
-
-export interface IEktmpFile extends ITemplate {
-  // Same as ITemplate for now, but designated as a file format
-}
-
-// Circular dependency avoidance: Import ITemplate just for the extension
-import { ITemplate } from './template';
 
 export interface IPresentationSummary {
   id: string;
@@ -219,4 +219,5 @@ export interface SlideDisplayProps {
   isMultiVerseMode?: boolean;
   appMode?: 'scripture' | 'presentation' | 'hymns';
   settings?: PresenterSettings;
+  isMuted?: boolean;
 }

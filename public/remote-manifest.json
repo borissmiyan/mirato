@@ -1,7 +1,7 @@
 {
-  "name": "Ekklesienter Remote",
-  "short_name": "E-Remote",
-  "description": "Remote controller for Ekklesienter Presentation Software",
+  "name": "Mirato Remote",
+  "short_name": "Mirato",
+  "description": "Wireless Remote Controller for Mirato Presentation Platform",
   "start_url": "/remote.html",
   "display": "standalone",
   "background_color": "#000000",

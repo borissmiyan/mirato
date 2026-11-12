@@ -4,9 +4,8 @@ import { db } from '@/core/db';
 import { useBibleStore } from '@/features/bible-browser/store/bibleStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getBookName, getBookSection, BOOK_ORDER } from '@/core/data/bookData';
-import { Book } from '@/core/types';
+import { Book, Verse } from '@/core/types';
 import { useTranslation } from 'react-i18next';
-import { Music } from 'lucide-react';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { MediaPoolPanel } from '@/features/presenter/components/media/MediaPoolPanel';
 
@@ -20,6 +19,10 @@ import { NavigationFooter } from './navigation/NavigationFooter';
 import ModePicker from './navigation/ModePicker';
 import ServicePicker from '@/features/presenter/components/library/ServicePicker';
 import TranslationPicker from '@/shared/ui/TranslationPicker';
+import { HymnsBrowser } from '@/features/hymns/components/HymnsBrowser';
+import HymnalPickerModal from '@/features/hymns/components/HymnalPicker';
+import { activeHymnalIdAtom, hymnModalReturnStateAtom } from '@/core/store/uiAtoms';
+import { useAtom } from 'jotai';
 
 // Hooks
 import { useNavigationSearch } from '../hooks/useNavigationSearch';
@@ -55,13 +58,18 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
     activeService,
     activeServiceId,
     graceLibSection,
-    setGraceLibSection
+    setGraceLibSection,
+    setActivePresentation
   } = usePresentationStore(useShallow(s => ({
     activeService: s.activeService,
     activeServiceId: s.activeServiceId,
     graceLibSection: s.graceLibSection,
-    setGraceLibSection: s.setGraceLibSection
+    setGraceLibSection: s.setGraceLibSection,
+    setActivePresentation: s.setActivePresentation
   })));
+
+  const [activeHymnalId, setActiveHymnalId] = useAtom(activeHymnalIdAtom);
+  const [hymnReturnState, setHymnReturnState] = useAtom(hymnModalReturnStateAtom);
 
   // 1. Logic Hooks
   const { 
@@ -86,11 +94,26 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
 
   const resizer = useVerticalResize('books-chapters-split', 55, 20, 80);
 
-  // 2. Data Fetching (Books)
-  const books = useLiveQuery(
-    async () => await db.books.where('translationId').equals(currentTranslationId).toArray(),
+  // 2. Data Fetching
+  const rawBooks = useLiveQuery(
+    () => db.books.where('translationId').equals(currentTranslationId).toArray(),
     [currentTranslationId]
-  ) || [];
+  );
+  const books = useMemo(() => rawBooks ?? [], [rawBooks]);
+
+  const rawHymnals = useLiveQuery(() => db.hymnals.toArray());
+  const hymnals = useMemo(() => rawHymnals ?? [], [rawHymnals]);
+  const currentHymnal = useMemo(
+    () => hymnals.find((h) => h.id === activeHymnalId) ?? null,
+    [hymnals, activeHymnalId]
+  );
+
+  // Auto-select first hymnal
+  React.useEffect(() => {
+    if (!activeHymnalId && hymnals.length > 0) {
+      setActiveHymnalId(hymnals[0].id);
+    }
+  }, [hymnals, activeHymnalId, setActiveHymnalId]);
 
   const sortedBooks = useMemo(() => {
     const booksMap = new Map();
@@ -146,7 +169,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
     }
   }, [setBook, parseResult, setChapter, currentTranslationId, setActiveVerse]);
 
-  const handleSearchResultClick = useCallback((res: any) => {
+  const handleSearchResultClick = useCallback((res: { verse: Verse }) => {
     setBook(res.verse.bookId);
     setChapter(res.verse.chapter);
     setActiveVerse(res.verse);
@@ -190,7 +213,10 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
         )}
 
         {/* Top Area: Book List or GraceLib Panel */}
-        <div style={{ height: `${resizer.percent}%` }} className="flex flex-col shrink-0 min-h-0">
+        <div 
+          style={appMode === 'hymns' ? undefined : { height: `${resizer.percent}%` }} 
+          className={`flex flex-col shrink-0 min-h-0 ${appMode === 'hymns' ? 'flex-1' : ''}`}
+        >
           {appMode === 'scripture' ? (
             <BookList
               books={filteredBooks}
@@ -199,41 +225,46 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
               searchQuery={searchQuery}
               lang={lang}
             />
-          ) : (
+          ) : appMode === 'presentation' ? (
             <GraceLibPanel
-              graceLibSection={graceLibSection}
-              onSetGraceLibSection={setGraceLibSection}
+              graceLibSection={graceLibSection as 'templates' | 'presentations' | 'media'}
+              onSetGraceLibSection={setGraceLibSection as (s: 'templates' | 'presentations' | 'media') => void}
+            />
+          ) : (
+            <HymnsBrowser 
+                searchQuery={searchQuery} 
+                onAddHymn={(hymnPresentationId, themeId) => {
+                  usePresentationStore.getState().addHymnToActivePresentation(hymnPresentationId, themeId);
+                }} 
             />
           )}
         </div>
 
         {/* Vertical Resizer */}
-        <div
-          onMouseDown={resizer.handleMouseDown}
-          className="h-1 bg-white/5 hover:bg-accent/40 active:bg-accent transition-all cursor-row-resize shrink-0 flex items-center justify-center relative z-10"
-        >
-          <div className="absolute inset-0 -top-2 -bottom-2" />
-        </div>
-
-        <div className="flex-1 flex flex-col min-h-0 bg-stone-950/20">
-          {appMode === 'scripture' ? (
-            <ChapterGrid
-              currentBook={currentBook || null}
-              currentChapter={currentChapter}
-              onChapterSelect={setChapter}
-            />
-          ) : (
-            <div className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar px-3 py-4">
-              <div className="px-1 mb-3 flex items-center justify-between shrink-0">
-                <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest flex items-center gap-1.5">
-                  <Music className="w-3 h-3" />
-                  {t('media_pool.title', 'Media Pool')}
-                </span>
-              </div>
-              <MediaPoolPanel />
+        {appMode !== 'hymns' && (
+          <>
+            <div
+              onMouseDown={resizer.handleMouseDown}
+              className="h-1 bg-white/5 hover:bg-accent/40 active:bg-accent transition-all cursor-row-resize shrink-0 flex items-center justify-center relative z-10"
+            >
+              <div className="absolute inset-0 -top-2 -bottom-2" />
             </div>
-          )}
-        </div>
+
+            <div className="flex-1 flex flex-col min-h-0 bg-stone-950/20">
+              {appMode === 'scripture' ? (
+                <ChapterGrid
+                  currentBook={currentBook || null}
+                  currentChapter={currentChapter}
+                  onChapterSelect={setChapter}
+                />
+              ) : (
+                <div className="flex-1 flex flex-col min-h-0 overflow-y-auto no-scrollbar px-3 py-4">
+                  <MediaPoolPanel />
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <NavigationFooter
@@ -242,9 +273,11 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
         currentBookId={currentBookId}
         currentChapter={currentChapter}
         activeService={activeService}
+        activeHymnal={currentHymnal}
         onBadgeClick={handleTranslationBadgeClick}
         lang={lang}
         isRu={isRu}
+        isPickerOpen={isPickerOpen}
       />
 
       {isPickerOpen && appMode === 'presentation' && (
@@ -253,6 +286,24 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
           onSelect={handleServiceSelect}
           onClose={handleClosePicker}
           triggerRect={triggerRect}
+        />
+      )}
+
+      {isPickerOpen && appMode === 'hymns' && triggerRect && (
+        <HymnalPickerModal
+          hymnals={hymnals}
+          currentHymnalId={activeHymnalId}
+          onSelect={setActiveHymnalId}
+          onClose={handleClosePicker}
+          triggerRect={triggerRect}
+          onOpenInfo={(hymnal) => {
+            setHymnReturnState({ isOpen: true, activeHymnalId: hymnal.id, view: 'info' });
+            handleClosePicker();
+          }}
+          onOpenThematic={(hymnal) => {
+            setHymnReturnState({ isOpen: true, activeHymnalId: hymnal.id, view: 'thematic' });
+            handleClosePicker();
+          }}
         />
       )}
 

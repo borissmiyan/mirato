@@ -8,6 +8,7 @@ export interface PresentationState {
     previewSlideId: string | null;
     liveSlideId: string | null;
     rootPresentationId: string | null;
+    liveRootPresentationId: string | null;
     activeBlockId: string | null;
     selectedAudioScopeId: string | null;
     graceLibSection: 'templates' | 'presentations' | 'media' | null;
@@ -27,6 +28,9 @@ export interface PresentationState {
     nestedPresentationsCache: Record<string, IPresentationFile>;
     recents: IPresentationSummary[];
     navigationParentSlideId: string | null;
+    navigationParentPresentationId: string | null;
+    liveNavigationParentSlideId: string | null;
+    liveNavigationParentPresentationId: string | null;
     navigationDirection: 'forward' | 'backward';
 
     // UI Actions
@@ -34,8 +38,8 @@ export interface PresentationState {
     setActivePresentation: (id: string | null) => Promise<void>;
 
     // Blind Mode Actions
-    setPreviewSlide: (id: string | null, presentationId?: string, rootPresentationId?: string, navigationParentSlideId?: string | null) => Promise<void>;
-    setLiveSlide: (id: string | null, presentationId?: string, rootPresentationId?: string, navigationParentSlideId?: string | null) => void;
+    setPreviewSlide: (id: string | null, presentationId?: string, rootPresentationId?: string, navigationParentSlideId?: string | null, navigationParentPresentationId?: string | null, preventAutoEnter?: boolean) => Promise<void>;
+    setLiveSlide: (id: string | null, presentationId?: string, rootPresentationId?: string, navigationParentSlideId?: string | null, navigationParentPresentationId?: string | null) => void;
     syncPreviewToLive: () => void;
 
     setActiveBlockId: (id: string | null) => void;
@@ -80,7 +84,7 @@ export interface PresentationState {
     // Data Actions
     loadRecents: () => Promise<void>;
     createService: (name: string) => Promise<string>;
-    createPresentation: (name: string, options?: { serviceId?: string, isMaster?: boolean }) => Promise<string>;
+    createPresentation: (name: string, options?: { serviceId?: string, isMaster?: boolean, metadata?: IPresentationFile['metadata'], hymnalId?: string }) => Promise<string>;
     renamePresentation: (presentationId: string, newName: string) => Promise<void>;
     removePresentation: (presentationId: string) => Promise<void>;
     updatePresentationSlides: (presentationId: string, slides: ISlide[]) => Promise<void>;
@@ -94,6 +98,7 @@ export interface PresentationState {
     saveActiveService: () => Promise<void>;
     duplicateSlide: (presentationId: string, slideId: string) => Promise<void>;
     duplicateSlides: (presentationId: string, slideIds: string[]) => Promise<void>;
+    addHymnToActivePresentation: (hymnPresentationId: string, themeId?: string, index?: number) => Promise<void>;
     moveSlide: (presentationId: string, slideId: string, direction: 'back' | 'forth' | 'start' | 'end') => Promise<void>;
     moveSlides: (presentationId: string, slideIds: string[], direction: 'back' | 'forth' | 'start' | 'end') => Promise<void>;
     removeSlide: (presentationId: string, slideId: string) => Promise<void>;
@@ -101,7 +106,7 @@ export interface PresentationState {
 
     // Selection Actions
     setSelectedSlideIds: (ids: string[]) => void;
-    toggleSlideSelection: (id: string, multi?: boolean, range?: boolean) => void;
+    toggleSlideSelection: (id: string, multi?: boolean, range?: boolean, deselect?: boolean, slides?: ISlide[]) => void;
     clearSelection: () => void;
 
     // Clipboard Actions
@@ -113,9 +118,9 @@ export interface PresentationState {
     updateCanvasItem: (slideId: string, itemId: string, updates: Partial<ICanvasItem>) => Promise<void>;
     updateCanvasItems: (slideId: string, updates: Array<{ id: string, updates: Partial<ICanvasItem> }>) => Promise<void>;
     updateCanvasItemsOrder: (slideId: string, items: ICanvasItem[]) => Promise<void>;
-    removeCanvasItem: (slideId: string, itemId: string) => Promise<void>;
+    removeCanvasItem: (slideId: string, itemId: string | string[]) => Promise<void>;
     reorderCanvasItem: (slideId: string, itemId: string, direction: 'up' | 'down') => Promise<void>;
-    duplicateCanvasItems: (slideId: string, itemIds: string[]) => Promise<string[]>;
+    duplicateCanvasItems: (slideId: string, itemIds: string[], offset?: { dx: number; dy: number }) => Promise<string[]>;
     setMediaBackground: (slideId: string, mediaItem: IMediaItem) => Promise<void>;
     addMediaLayer: (slideId: string, mediaItem: IMediaItem, position?: { x: number, y: number }) => Promise<void>;
 
@@ -146,6 +151,10 @@ export interface PresentationState {
     importSlidesToService: (presentationName: string, slides: ISlide[]) => Promise<void>;
     syncNestedPresentation: (parentSlideId: string) => Promise<void>;
     setCachedNestedPresentation: (id: string, presentation: IPresentationFile) => void;
+
+    // Hymn Operations
+    detachHymnSlide: (presentationId: string, slideId: string, skipAudioConfirmation?: boolean) => Promise<{ requiresAudioConfirmation?: boolean }>;
+    updateHymnSlideTheme: (presentationId: string, slideId: string, newThemeId: string) => Promise<void>;
 }
 
 export type PresentationSliceCreator = StateCreator<

@@ -3,6 +3,7 @@ import { Type, Check, Monitor, Laptop, Search, X } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { useTranslation } from 'react-i18next';
 import { useSetAtom } from 'jotai';
+import { SearchInput } from '@/shared/ui';
 import { fontPreviewFamilyAtom } from '@/core/store/uiAtoms';
 import { getSystemFonts } from '@/core/services/fontService';
 import { AVAILABLE_FONTS, FontDefinition } from '@/core/data/fonts';
@@ -74,7 +75,7 @@ export const FontLibrary: React.FC<FontLibraryProps> = ({
         <div className={cn("space-y-4", className)}>
             {showTitle && (
                 <div className="flex items-center gap-3 px-1">
-                    <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center border border-accent/30">
+                    <div className="w-8 h-8 rounded-xl bg-accent/20 flex items-center justify-center border border-accent/30">
                         <Type className="w-4 h-4 text-accent" />
                     </div>
                     <label className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em]">{t('typography_library')}</label>
@@ -82,34 +83,27 @@ export const FontLibrary: React.FC<FontLibraryProps> = ({
             )}
 
             {/* Search Bar */}
-            <div className="relative group px-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-500 group-focus-within:text-accent transition-colors" />
-                <input
-                    type="text"
+            <div className="px-1">
+                <SearchInput
+                    size="xs"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onClear={() => setSearchQuery('')}
                     placeholder={t('search_fonts_placeholder') || "Search fonts..."}
-                    className="w-full bg-black/40 border border-white/5 rounded-xl py-2.5 pl-10 pr-10 text-xs text-stone-200 placeholder:text-stone-600 focus:outline-hidden focus:border-accent/40 focus:ring-1 focus:ring-accent/20 transition-all font-sans"
+                    className="w-full bg-black/40 border-white/5 font-sans"
                 />
-                {searchQuery && (
-                    <button
-                        onClick={() => setSearchQuery('')}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-white/10 text-stone-500 hover:text-white transition-all"
-                    >
-                        <X className="w-3 h-3" />
-                    </button>
-                )}
             </div>
 
             <div className="grid grid-cols-1 gap-2 max-h-[320px] overflow-y-auto pr-2 custom-scrollbar">
                 {filteredFonts.map((f) => (
                     <button
+                        type="button"
                         key={f.name}
                         onClick={() => onSelect(f.name)}
                         onMouseEnter={() => setFontPreview(f.name)}
                         onMouseLeave={() => setFontPreview(null)}
                         className={cn(
-                            "flex items-center justify-between px-5 py-4 rounded-2xl border transition-all duration-300 group relative overflow-hidden",
+                            "flex items-center justify-between px-5 py-4 rounded-2xl border transition-all duration-300 group relative overflow-hidden apple-press cursor-pointer",
                             value === f.name
                                 ? "bg-accent/15 border-accent/40 text-accent shadow-md ring-1 ring-accent/20"
                                 : "bg-black/20 border-white/5 text-stone-400 hover:border-white/20 hover:bg-white/5"

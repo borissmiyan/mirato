@@ -1,0 +1,43 @@
+const hymns = {
+    title: 'Hymns',
+    search_placeholder: 'Search hymns...',
+    select_hymnal: 'Select Hymnal',
+    select_hymnal_prompt: 'Select a hymnal to browse',
+    no_results: 'No results found',
+    library_empty_desc: 'This hymnal has no hymns',
+    add_to_timeline: 'Add',
+    about_hymnal: 'About Hymnal',
+    thematic_index: 'Thematic Index',
+    no_thematic_index: 'No thematic index available',
+    publisher: 'Publisher',
+    year: 'Year',
+    description: 'Description',
+    count: 'Hymn count',
+    preview_btn: 'Preview',
+    live_btn: 'Live',
+    edit_hymn_theme: 'Edit Hymn Theme',
+    hymn_not_available: 'Hymn Not Available',
+    hymn_missing_desc: 'This hymn is part of a library that is not currently installed on this device. Please install the required hymnal.',
+    sync: {
+        orphan_scopes_warning: '{{count}} audio scope(s) require manual review',
+        orphan_scopes_description: 'After updating the hymnal, the boundaries of some audio clips could not be mapped automatically. Please find them in the timeline and delete or reconfigure them manually.',
+        orphan_badge: 'Audio errors',
+        view_orphans_btn: 'View'
+    },
+    delete_modal_title: 'Delete Hymnal',
+    delete_confirm_text: 'Are you sure you want to delete hymnal {{name}}?',
+    removed_title: 'Hymnal deleted',
+    removed_desc: 'Hymnal {{name}} was successfully deleted.',
+    remove_error_title: 'Error deleting hymnal',
+    remove_error_desc: 'Failed to complete operation. See console for details.',
+    checking_usage: 'Checking usage...',
+    check_error_title: 'Check failed',
+    check_error_desc: 'Failed to verify whether this hymnal is used in services.',
+    warning_title: 'Warning',
+    remove_warning_count: 'This hymnal is used in {{services}} services ({{slides}} slides).',
+    remove_warning_unlinked: 'Upon deletion, these hymns will be unlinked from services automatically.',
+    retry_check: 'Retry check',
+    delete_hymnal_btn: 'Delete Hymnal'
+};
+
+export default hymns;

@@ -11,6 +11,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ITimerAction } from '@/core/types/timer';
 import DropdownSelector from '@/shared/ui/DropdownSelector';
+import { IconButton } from '@/shared/ui';
 
 interface ITimerActionStepProps {
     action: ITimerAction;
@@ -70,9 +71,14 @@ export const TimerActionStep: React.FC<ITimerActionStepProps> = ({ action, index
                             {action.type === 'volume_fade' && <Volume2 className="w-3.5 h-3.5 text-blue-400" />}
                             <span className="text-[10px] font-black uppercase tracking-widest text-white/50">{t(`timer_action_${action.type}`)}</span>
                         </div>
-                        <button onClick={onRemove} className="opacity-0 group-hover/step:opacity-100 p-1 hover:bg-red-500/20 text-stone-600 hover:text-red-400 rounded-lg transition-all">
-                            <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <IconButton
+                            icon={Trash2}
+                            label={t('delete', 'Delete')}
+                            variant="danger"
+                            size="xs"
+                            onClick={onRemove}
+                            className="opacity-0 group-hover/step:opacity-100"
+                        />
                     </div>
 
                     {/* Editor Content */}
@@ -100,10 +106,11 @@ export const TimerActionStep: React.FC<ITimerActionStepProps> = ({ action, index
                     {action.type === 'key_halt' && (
                         <div className="flex items-center gap-3">
                              <button
+                                type="button"
                                 onClick={() => setIsRecordingKey(true)}
                                 className={cn(
-                                    "flex-1 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all",
-                                    isRecordingKey ? "bg-purple-500/20 border-purple-500 animate-pulse text-purple-300" : "bg-black/20 border-white/5 text-stone-400"
+                                    "flex-1 px-3 py-2 rounded-xl border text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer apple-press",
+                                    isRecordingKey ? "bg-purple-500/20 border-purple-500 animate-pulse text-purple-300" : "bg-black/20 border-white/5 text-stone-400 hover:text-white"
                                 )}
                             >
                                 {isRecordingKey ? t('recording_key', 'Press any key...') : (action.payload?.key || t('none', 'No key'))}
@@ -114,7 +121,7 @@ export const TimerActionStep: React.FC<ITimerActionStepProps> = ({ action, index
                     {action.type === 'play_sound' && (
                         <div className="space-y-3">
                             <DropdownSelector
-                                value={(action as any).payload?.soundId || 'ring_default'}
+                                value={action.payload?.soundId || 'ring_default'}
                                 onChange={(val) => onUpdate({ soundId: val as string, mediaId: undefined })}
                                 options={[
                                     { value: 'ring_default', label: t('ring_default', 'Clean Ping') },
@@ -128,6 +135,7 @@ export const TimerActionStep: React.FC<ITimerActionStepProps> = ({ action, index
                                 ]}
                             />
                             <button
+                                type="button"
                                 onClick={() => {
                                     openModal(ModalType.AUDIO_PICKER, {
                                         type: 'audio',
@@ -139,7 +147,7 @@ export const TimerActionStep: React.FC<ITimerActionStepProps> = ({ action, index
                                         }
                                     });
                                 }}
-                                className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent/10 border border-accent/20 rounded-xl text-[9px] font-black uppercase tracking-widest text-accent hover:bg-accent/20 transition-all active:scale-[0.98] cursor-pointer"
+                                className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent/10 border border-accent/20 rounded-xl text-[9px] font-black uppercase tracking-widest text-accent hover:bg-accent/20 transition-all cursor-pointer apple-press"
                             >
                                 <Import className="w-3.5 h-3.5" />
                                 {t('custom_media_sound', 'Import File')}
@@ -149,7 +157,7 @@ export const TimerActionStep: React.FC<ITimerActionStepProps> = ({ action, index
 
                     {action.type === 'navigate_to' && (
                         <DropdownSelector
-                            value={(action as any).payload?.slideId || ''}
+                            value={action.payload?.slideId || ''}
                             onChange={(val) => onUpdate({ slideId: val as string })}
                             options={slides.map((s, i) => ({
                                 value: s.id,

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { usePresenterStore } from '@/features/presenter/store/presenterStore';
 import { Type, Palette } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
@@ -9,7 +10,14 @@ import { FontLibrary } from '../fonts/FontLibrary';
 
 export const FontPicker: React.FC = () => {
     const { t } = useTranslation();
-    const { settings: globalSettings, draftSettings, updateFont, updateDraft } = usePresenterStore();
+    const { settings: globalSettings, draftSettings, updateFont, updateDraft } = usePresenterStore(
+        useShallow(s => ({
+            settings: s.settings,
+            draftSettings: s.draftSettings,
+            updateFont: s.updateFont,
+            updateDraft: s.updateDraft,
+        }))
+    );
 
     // Always prefer draft settings if available
     const settings = draftSettings || globalSettings;
@@ -37,7 +45,7 @@ export const FontPicker: React.FC = () => {
             {/* Core Metrics Bento Block */}
             <div className="bg-white/2 border border-white/5 rounded-3xl p-8 space-y-8 shadow-xl">
                 <div className="flex items-center gap-3 px-1">
-                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
+                    <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
                         <Type className="w-4 h-4 text-stone-500" />
                     </div>
                     <label className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em]">{t('visual_tone')}</label>
@@ -87,7 +95,7 @@ export const FontPicker: React.FC = () => {
                 <div className="flex items-center justify-between px-1">
                     <div className="flex items-center gap-3">
                         <div className={cn(
-                            "w-8 h-8 rounded-lg flex items-center justify-center border transition-all duration-500",
+                            "w-8 h-8 rounded-xl flex items-center justify-center border transition-all duration-500",
                             font.shadow ? "bg-accent/20 border-accent/40" : "bg-white/5 border-white/10"
                         )}>
                             <Palette className={cn("w-4 h-4 transition-colors duration-500", font.shadow ? "text-accent" : "text-stone-600")} />

@@ -4,6 +4,7 @@ export enum ModalType {
     CUSTOMIZATION = 'CUSTOMIZATION',
     BIBLE_SELECTION = 'BIBLE_SELECTION',
     PRESENTATION_PICKER = 'PRESENTATION_PICKER',
+    HYMN_PICKER = 'HYMN_PICKER',
     TEMPLATE_PICKER = 'TEMPLATE_PICKER',
     AUDIO_PICKER = 'AUDIO_PICKER',
     AUDIO_CONFLICT = 'AUDIO_CONFLICT',
@@ -11,18 +12,19 @@ export enum ModalType {
     PROMPT = 'PROMPT',
     CONFIRM = 'CONFIRM',
     PRESENTATION_IMPORTER = 'PRESENTATION_IMPORTER',
-    IMAGE_CROP = 'IMAGE_CROP'
+    IMAGE_CROP = 'IMAGE_CROP',
+    ORPHAN_AUDIO_SCOPES = 'ORPHAN_AUDIO_SCOPES'
 }
 
 
-interface ModalState {
+export interface ModalState {
     id: ModalType;
-    props?: any;
+    props?: Record<string, unknown>;
 }
 
 interface ModalStore {
     stack: ModalState[];
-    openModal: (id: ModalType, props?: any) => void;
+    openModal: (id: ModalType, props?: Record<string, unknown>) => void;
     closeModal: (id?: ModalType) => void;
     isModalOpen: (id: ModalType) => boolean;
 }

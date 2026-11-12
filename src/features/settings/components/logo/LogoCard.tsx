@@ -56,7 +56,7 @@ export const LogoCard: React.FC<LogoCardProps> = React.memo(({ logo, isActive, o
                             <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); setShowMove(!showMove); }}
-                                className="p-1.5 bg-stone-800/80 hover:bg-accent/30 text-stone-400 hover:text-accent rounded-xl transition-colors border border-white/10 cursor-pointer"
+                                className="p-1.5 bg-stone-800/80 hover:bg-accent/30 text-stone-400 hover:text-accent rounded-xl transition-colors border border-white/10 cursor-pointer apple-press"
                                 aria-label="Move to group"
                             >
                                 <ArrowRightLeft className="w-3.5 h-3.5" />
@@ -75,7 +75,7 @@ export const LogoCard: React.FC<LogoCardProps> = React.memo(({ logo, isActive, o
                         <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                            className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-500 rounded-xl transition-colors border border-red-500/20 cursor-pointer"
+                            className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-500 rounded-xl transition-colors border border-red-500/20 cursor-pointer apple-press"
                             aria-label="Remove logo"
                         >
                             <Trash2 className="w-3.5 h-3.5" />

@@ -35,7 +35,7 @@ export const AdvancedTextSettings: React.FC<IAdvancedTextSettingsProps> = ({
                 onClick={() => setIsOpen(!isOpen)}
                 onMouseDown={(e) => e.preventDefault()}
                 className={cn(
-                    "p-2 rounded-lg transition-all ml-auto cursor-pointer",
+                    "p-2 rounded-xl transition-all ml-auto cursor-pointer",
                     isOpen ? "bg-accent/20 text-accent" : "text-stone-500 hover:text-stone-300 hover:bg-white/5 active:bg-white/10"
                 )}
                 title={t('advanced_settings', 'Advanced Settings')}
@@ -56,6 +56,7 @@ export const AdvancedTextSettings: React.FC<IAdvancedTextSettingsProps> = ({
                             {(['none', 'disc', 'decimal'] as const).map((l) => (
                                 <button
                                     key={l}
+                                    type="button"
                                     onClick={() => {
                                         if (editingId && selectedIds.includes(editingId)) {
                                             setTextCommand({ command: 'listType', value: l, timestamp: Date.now() });
@@ -64,10 +65,11 @@ export const AdvancedTextSettings: React.FC<IAdvancedTextSettingsProps> = ({
                                     }}
                                     onMouseDown={(e) => e.preventDefault()}
                                     className={cn(
-                                        "flex-1 py-1.5 rounded-lg flex items-center justify-center transition-all cursor-pointer",
-                                        (txt.listType || 'none') === l ? "bg-accent/10 text-accent" : "text-stone-500 hover:text-stone-300"
+                                        "flex-1 py-1.5 rounded-xl flex items-center justify-center transition-all cursor-pointer apple-press",
+                                        (txt.listType || 'none') === l ? "bg-accent/10 text-accent font-bold" : "text-stone-500 hover:text-stone-300"
                                     )}
                                     title={l}
+                                    aria-label={l}
                                 >
                                     {l === 'none' ? <Minus className="w-3.5 h-3.5" /> : l === 'disc' ? <List className="w-3.5 h-3.5" /> : <ListOrdered className="w-3.5 h-3.5" />}
                                 </button>
@@ -80,6 +82,7 @@ export const AdvancedTextSettings: React.FC<IAdvancedTextSettingsProps> = ({
                             {([{ val: 'none', label: '---' }, { val: 'uppercase', label: 'UPPER' }, { val: 'lowercase', label: 'lower' }, { val: 'titlecase', label: 'Title' }] as const).map(({ val, label }) => (
                                 <button
                                     key={val}
+                                    type="button"
                                     onClick={() => {
                                         if (editingId && selectedIds.includes(editingId)) {
                                             setTextCommand({ command: 'textCase', value: val, timestamp: Date.now() });
@@ -88,10 +91,11 @@ export const AdvancedTextSettings: React.FC<IAdvancedTextSettingsProps> = ({
                                     }}
                                     onMouseDown={(e) => e.preventDefault()}
                                     className={cn(
-                                        "flex-1 py-1.5 rounded-lg text-[9px] font-bold transition-all cursor-pointer",
-                                        (txt.textCase || 'none') === val ? "bg-accent/10 text-accent" : "text-stone-500 hover:text-stone-300"
+                                        "flex-1 py-1.5 rounded-xl text-[9px] font-bold transition-all cursor-pointer apple-press",
+                                        (txt.textCase || 'none') === val ? "bg-accent/10 text-accent font-bold" : "text-stone-500 hover:text-stone-300"
                                     )}
                                     title={val}
+                                    aria-label={val}
                                 >
                                     {label}
                                 </button>

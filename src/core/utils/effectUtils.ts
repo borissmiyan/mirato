@@ -6,7 +6,7 @@ import { ICanvasEffect } from '../types';
 export const getEffectsStyle = (effects: ICanvasEffect[]) => {
     if (!effects || effects.length === 0) return { filter: undefined, backdropFilter: undefined, boxShadow: undefined };
 
-    const visibleEffects = effects.filter(e => e.visible);
+    const visibleEffects = effects.filter(e => e.visible !== false);
     
     // 1. Filter: Drop Shadow & Layer Blur
     const filters: string[] = [];

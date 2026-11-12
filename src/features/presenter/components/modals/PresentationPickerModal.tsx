@@ -1,52 +1,41 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
-import { ISlide, ICanvasSlide, IPresentationFile } from '@/core/types';
-import { X, Layers, Monitor, Music, Plus, Search, Folder, Edit2, Copy, Download, Trash2 } from 'lucide-react';
+import { ISlide, ICanvasSlide, IPresentationFile, IAudioScope } from '@/core/types';
+import { Layers, Monitor, Music, Plus, Edit2, Copy, Download, Trash2 } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import SlideContentRenderer from '../slide-editor/SlideContentRenderer';
 import { useContainFit } from '@/core/hooks/useContainFit';
 import TrackContainer from '../timeline/TrackContainer';
 import ContextMenu, { ContextMenuItem } from '@/shared/ui/ContextMenu';
+import Button from '@/shared/ui/Button';
 import { getUniquePresentationName } from '@/core/utils/nameUtils';
 import { GraceLibExportService } from '@/features/presenter/services/GraceLibExportService';
-
-const ModalAudioScope: React.FC<{
-    scope: any;
-    startIdx: number;
-    endIdx: number;
-    visualTimeline: any[];
-}> = ({ scope, startIdx, endIdx, visualTimeline }) => {
-    const left = visualTimeline[startIdx]?.x || 0;
-    const right = visualTimeline[endIdx] ? (visualTimeline[endIdx].x + visualTimeline[endIdx].width) : left;
-    const width = right - left;
-
-    if (width <= 0) return null;
-
-    return (
-        <div
-            className="absolute top-0 h-10 bg-purple-500/20 border border-purple-500/30 rounded-lg flex items-center px-3 overflow-hidden backdrop-blur-sm shadow-lg shadow-purple-500/5 animate-in fade-in zoom-in-95 duration-300"
-            style={{ left, width, marginTop: '8px' }}
-        >
-            <Music className="w-3.5 h-3.5 text-purple-400 mr-2 shrink-0" />
-            <span className="text-[10px] font-black text-purple-100 truncate uppercase tracking-wider">{scope.fileName || 'Audio Track'}</span>
-        </div>
-    );
-};
+import PresentationPickerSidebar from './PresentationPickerSidebar';
+import { ModalAudioScope } from './ModalAudioScope';
 
 const PresentationPickerModal: React.FC = () => {
     const { t, i18n } = useTranslation();
     const lang = i18n.language?.substring(0, 2) || 'en';
-    const { closeModal, stack } = useModalStore();
+    const closeModal = useModalStore(s => s.closeModal);
+    const openModal = useModalStore(s => s.openModal);
     // Find the LAST instance to correctly support nested modals
-    const modalData = [...stack].reverse().find(m => m.id === ModalType.PRESENTATION_PICKER);
+    const modalData = useModalStore(
+        useShallow(s => [...s.stack].reverse().find(m => m.id === ModalType.PRESENTATION_PICKER))
+    );
     const isOpen = !!modalData;
 
-    const { addPresentationToTimeline, activeServiceId } = usePresentationStore();
+    const { addPresentationToTimeline, activeServiceId } = usePresentationStore(
+        useShallow(s => ({
+            addPresentationToTimeline: s.addPresentationToTimeline,
+            activeServiceId: s.activeServiceId,
+        }))
+    );
 
     const [selectedPresentationId, setSelectedPresentationId] = useState<string | null>(null);
     const [previewSlideId, setPreviewSlideId] = useState<string | null>(null);
@@ -57,31 +46,50 @@ const PresentationPickerModal: React.FC = () => {
         presentation: IPresentationFile;
     } | null>(null);
 
-    const { openModal } = useModalStore();
+    const allPresentations = useLiveQuery(
+        () => {
+            if (!isOpen || !activeServiceId) return [];
+            return db.presentationFiles.where('serviceId').equals(activeServiceId).toArray();
+        },
+        [isOpen, activeServiceId]
+    );
+    const allTemplates = useLiveQuery(() => (isOpen ? db.templates.toArray() : []), [isOpen]);
+    const allBlocks = useLiveQuery(() => (isOpen ? db.blocks.toArray() : []), [isOpen]);
 
-    const allPresentations = useLiveQuery(() => db.presentationFiles.toArray()) || [];
-    const allTemplates = useLiveQuery(() => db.templates.toArray()) || [];
-    const allBlocks = useLiveQuery(() => db.blocks.toArray()) || [];
-    
-    const templatesMap = useMemo(() => new Map(allTemplates.map(t => [t.id, t])), [allTemplates]);
-    const blocksMap = useMemo(() => new Map(allBlocks.map(b => [b.id, b])), [allBlocks]);
+    const templatesMap = useMemo(() => new Map((allTemplates || []).map(t => [t.id, t])), [allTemplates]);
+    const blocksMap = useMemo(() => new Map((allBlocks || []).map(b => [b.id, b])), [allBlocks]);
 
     // Filter for current service's presentations
     const availablePresentations = useMemo(() => {
         if (!activeServiceId) return [];
-        let filtered = allPresentations.filter(p => p.serviceId === activeServiceId);
-        
+        let filtered = allPresentations || [];
+
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
             filtered = filtered.filter(p => p.name.toLowerCase().includes(query));
         }
-        
-        return filtered.sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
-    }, [allPresentations, searchQuery]);
 
-    const activePresentation = useMemo(() => {
-        return allPresentations.find(p => p.id === selectedPresentationId) || null;
-    }, [allPresentations, selectedPresentationId]);
+        return [...filtered].sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime());
+    }, [allPresentations, searchQuery, activeServiceId]);
+
+    // Lazy load only the selected presentation's full slides for preview
+    const liveSelectedPresentation = useLiveQuery(
+        () => {
+            if (!isOpen || !selectedPresentationId) return null;
+            return db.presentationFiles.get(selectedPresentationId);
+        },
+        [isOpen, selectedPresentationId]
+    );
+
+    const activePresentation = liveSelectedPresentation || null;
+
+    // Auto-select first presentation when modal opens or presentations change
+    useEffect(() => {
+        if (!isOpen) return;
+        if (!selectedPresentationId && availablePresentations.length > 0) {
+            setSelectedPresentationId(availablePresentations[0].id);
+        }
+    }, [isOpen, selectedPresentationId, availablePresentations]);
 
     const slides = useMemo(() => {
         const s = activePresentation?.slides || [];
@@ -97,7 +105,7 @@ const PresentationPickerModal: React.FC = () => {
             slide: ISlide,
         }> = [];
 
-        const TILE_WIDTH = 160; 
+        const TILE_WIDTH = 160;
         const TILE_GAP = 12;
 
         let currentX = 0;
@@ -125,20 +133,23 @@ const PresentationPickerModal: React.FC = () => {
 
     // Audio scopes from slides
     const allScopes = useMemo(() => {
-        const scopes: Array<{ scope: any; startIdx: number; endIdx: number }> = [];
+        const scopes: Array<{ scope: IAudioScope; startIdx: number; endIdx: number }> = [];
         const seenScopeIds = new Set<string>();
 
         slides.forEach((s) => {
-            if (s.type === 'normal' && (s as ICanvasSlide).audioScopes) {
-                for (const scope of (s as ICanvasSlide).audioScopes!) {
-                    if (seenScopeIds.has(scope.id)) continue;
+            if (s.type === 'normal') {
+                const audioScopes = (s as ICanvasSlide).audioScopes;
+                if (audioScopes) {
+                    for (const scope of audioScopes) {
+                        if (seenScopeIds.has(scope.id)) continue;
 
-                    const sIdx = slideToIndexMap.get(scope.startSlideId);
-                    const eIdx = slideToIndexMap.get(scope.endSlideId);
+                        const sIdx = slideToIndexMap.get(scope.startSlideId);
+                        const eIdx = slideToIndexMap.get(scope.endSlideId);
 
-                    if (sIdx !== undefined && eIdx !== undefined) {
-                        scopes.push({ scope: { ...scope, fileName: scope.fileName || scope.fileId.split('/').pop() }, startIdx: sIdx, endIdx: eIdx });
-                        seenScopeIds.add(scope.id);
+                        if (sIdx !== undefined && eIdx !== undefined) {
+                            scopes.push({ scope: { ...scope, fileName: scope.fileName || scope.fileId.split('/').pop() }, startIdx: sIdx, endIdx: eIdx });
+                            seenScopeIds.add(scope.id);
+                        }
                     }
                 }
             }
@@ -161,13 +172,13 @@ const PresentationPickerModal: React.FC = () => {
 
     const handleAdd = () => {
         if (!selectedPresentationId) return;
-        
+
         // Find insertion index: after the currently selected slide
-        const { activePresentation, selectedSlideIds } = usePresentationStore.getState();
+        const { activePresentation: currentActive, selectedSlideIds } = usePresentationStore.getState();
         let insertionIndex: number | undefined;
-        
-        if (activePresentation && selectedSlideIds.length > 0) {
-            const lastSelectedIndex = activePresentation.slides.findIndex(s => s.id === selectedSlideIds[selectedSlideIds.length - 1]);
+
+        if (currentActive && selectedSlideIds.length > 0) {
+            const lastSelectedIndex = currentActive.slides.findIndex(s => s.id === selectedSlideIds[selectedSlideIds.length - 1]);
             if (lastSelectedIndex !== -1) {
                 insertionIndex = lastSelectedIndex + 1;
             }
@@ -180,95 +191,21 @@ const PresentationPickerModal: React.FC = () => {
     const currentPreviewSlide = slides.find(s => s.id === previewSlideId) || slides[0];
 
     const mainPortal = createPortal(
-        <div className="fixed inset-0 z-10001 flex items-center justify-center bg-black/85 backdrop-blur-2xl animate-in fade-in duration-300 p-6">
-            <div className="bg-stone-900 border border-white/10 rounded-[40px] w-full max-w-7xl h-[90vh] flex overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)] animate-in zoom-in-95 duration-500">
-                
+        <div className="fixed inset-0 z-10001 flex items-center justify-center apple-backdrop bg-stone-950/75 backdrop-blur-xl p-6">
+            <div className="bg-stone-900 border border-white/10 ring-1 ring-white/5 rounded-2xl w-full max-w-7xl h-[90vh] flex overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)] apple-modal">
+
                 {/* Left Sidebar - Presentation Selection */}
-                <div className="w-80 shrink-0 border-r border-white/5 bg-stone-900/50 flex flex-col z-20">
-                    <div className="p-6 border-b border-white/5 flex flex-col gap-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-sm font-black text-white uppercase tracking-widest">
-                                {t('store')}
-                            </h2>
-                            <button
-                                onClick={() => closeModal(ModalType.PRESENTATION_PICKER)}
-                                className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-stone-400 hover:text-white transition-all active:scale-95"
-                            >
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-                        
-                        <div className="relative">
-                            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-500" />
-                            <input
-                                type="text"
-                                placeholder={t('search_presentations')}
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full bg-black/40 border border-white/10 rounded-xl py-2 pl-9 pr-3 text-xs text-white placeholder:text-stone-600 focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/50 transition-all font-medium"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 custom-scrollbar">
-                        {availablePresentations.map(p => (
-                            <button
-                                key={p.id}
-                                onClick={() => setSelectedPresentationId(p.id)}
-                                onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setContextMenu({ x: e.clientX, y: e.clientY, presentation: p });
-                                }}
-                                className={cn(
-                                    "flex flex-col text-left p-4 rounded-2xl border transition-all duration-200 group relative overflow-hidden shrink-0",
-                                    selectedPresentationId === p.id 
-                                        ? "bg-accent/10 border-accent/30 shadow-[0_0_20px_rgba(147,51,234,0.15)]" 
-                                        : "bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10"
-                                )}
-                            >
-                                <div className="flex items-center gap-3 mb-2">
-                                    <div className={cn(
-                                        "w-12 h-8 rounded-md flex items-center justify-center shrink-0 overflow-hidden bg-black/50 border border-white/10 transition-colors",
-                                        selectedPresentationId === p.id ? "border-accent/50 text-accent" : "text-stone-400 group-hover:text-stone-300"
-                                    )}>
-                                        {p.thumbnailUrl ? (
-                                            <img src={p.thumbnailUrl} alt="" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <Layers className="w-4 h-4" />
-                                        )}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className={cn(
-                                            "text-xs font-bold truncate transition-colors",
-                                            selectedPresentationId === p.id ? "text-white" : "text-stone-300 group-hover:text-white"
-                                        )}>
-                                            {p.name}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center justify-between mt-1">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-stone-500">
-                                        {t('slides_count', { count: p.slides.length, defaultValue: '{{count}} slides' })}
-                                    </span>
-                                    {p.binId && (
-                                        <div className="flex items-center gap-1 text-stone-600">
-                                            <Folder className="w-3 h-3" />
-                                            <span className="text-[8px] font-bold uppercase tracking-wider truncate max-w-[80px]">Bin</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </button>
-                        ))}
-
-                        {availablePresentations.length === 0 && (
-                            <div className="text-center py-10 flex flex-col items-center justify-center gap-3 text-stone-500">
-                                <Layers className="w-8 h-8 opacity-20" />
-                                <span className="text-[10px] font-black uppercase tracking-widest">{t('no_presentations_found')}</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                <PresentationPickerSidebar
+                    searchQuery={searchQuery}
+                    onSearchQueryChange={setSearchQuery}
+                    onClose={() => closeModal(ModalType.PRESENTATION_PICKER)}
+                    availablePresentations={availablePresentations}
+                    selectedPresentationId={selectedPresentationId}
+                    onSelectPresentation={setSelectedPresentationId}
+                    onContextMenu={(e, presentation) => {
+                        setContextMenu({ x: e.clientX, y: e.clientY, presentation });
+                    }}
+                />
 
                 {/* Right Area - Preview */}
                 <div className="flex-1 flex flex-col overflow-hidden bg-black/20">
@@ -279,7 +216,7 @@ const PresentationPickerModal: React.FC = () => {
                     >
                         {!activePresentation ? (
                             <div className="text-stone-700 flex flex-col items-center gap-6">
-                                <div className="w-24 h-24 rounded-[32px] bg-white/5 flex items-center justify-center border border-white/5">
+                                <div className="w-24 h-24 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5">
                                     <Layers className="w-10 h-10 opacity-20" />
                                 </div>
                                 <p className="text-sm font-black uppercase tracking-widest opacity-30">{t('select_to_preview')}</p>
@@ -290,9 +227,9 @@ const PresentationPickerModal: React.FC = () => {
                                 <div className="absolute inset-0 opacity-10 pointer-events-none">
                                     <div className="absolute inset-0 bg-radial-gradient from-accent/30 to-transparent scale-150" />
                                 </div>
-                                
+
                                 <div
-                                    className="relative shadow-[0_40px_100px_rgba(0,0,0,0.6)] rounded-[32px] overflow-hidden border border-white/10 ring-8 ring-white/5 animate-in fade-in zoom-in-95 duration-700 pointer-events-none"
+                                    className="relative shadow-[0_40px_100px_rgba(0,0,0,0.6)] rounded-xl overflow-hidden border border-white/10 ring-4 ring-white/5 animate-in fade-in zoom-in-95 duration-700 pointer-events-none"
                                     style={{ width: fitWidth, height: fitHeight }}
                                 >
                                     <SlideContentRenderer
@@ -397,7 +334,7 @@ const PresentationPickerModal: React.FC = () => {
                                                             />
                                                         </div>
 
-                                                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-md bg-black/40 backdrop-blur-md border border-white/5 text-[8px] font-black text-stone-400 z-10 tracking-widest">
+                                                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-xl bg-black/40 backdrop-blur-md border border-white/5 text-[8px] font-black text-stone-400 z-10 tracking-widest">
                                                             {(slide.order || index) + 1}
                                                         </div>
 
@@ -441,21 +378,16 @@ const PresentationPickerModal: React.FC = () => {
 
                     {/* Footer */}
                     <div className="px-8 py-5 border-t border-white/5 bg-stone-900 flex items-center justify-end shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.3)] z-20">
-                        <div className="flex flex-col items-end gap-3 w-full">
-                            <button
-                                onClick={handleAdd}
-                                disabled={!selectedPresentationId}
-                                className={cn(
-                                    "group px-10 py-3.5 font-black rounded-2xl transition-all border shadow-2xl text-xs uppercase tracking-widest flex items-center gap-3",
-                                    selectedPresentationId
-                                        ? "bg-accent text-black border-accent-hover shadow-accent/30 hover:scale-[1.02] active:scale-[0.98]"
-                                        : "bg-stone-800 text-stone-500 border-white/5 cursor-not-allowed opacity-50"
-                                )}
-                            >
-                                <Plus className={cn("w-5 h-5 transition-transform group-hover:rotate-90 duration-500", !selectedPresentationId && "opacity-20")} />
-                                {t('add_to_timeline')}
-                            </button>
-                        </div>
+                        <Button
+                            variant="primary"
+                            size="md"
+                            onClick={handleAdd}
+                            disabled={!selectedPresentationId}
+                            leftIcon={<Plus className={cn("w-5 h-5 transition-transform group-hover:rotate-90 duration-500", !selectedPresentationId && "opacity-20")} />}
+                            className="px-10 py-3.5 uppercase tracking-widest font-black"
+                        >
+                            {t('add_to_timeline')}
+                        </Button>
                     </div>
                 </div>
             </div>

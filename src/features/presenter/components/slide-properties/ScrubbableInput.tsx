@@ -17,7 +17,7 @@ interface IScrubbableInputProps {
     onMouseDown?: (e: React.MouseEvent) => void;
 }
 
-export const ScrubbableInput: React.FC<IScrubbableInputProps> = ({
+export const ScrubbableInput: React.FC<IScrubbableInputProps> = React.memo(({
     label,
     value,
     onChange,
@@ -27,16 +27,19 @@ export const ScrubbableInput: React.FC<IScrubbableInputProps> = ({
     formatter = (v: number) => Math.round(v * 10) / 10,
     className,
     name,
-    onMouseDown
 }) => {
-    const [isDragging, setIsDragging] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
     const [localValue, setLocalValue] = useState(value === 'mixed' ? 'Mixed' : formatter(value).toString());
-    const startY = useRef(0);
-    const startVal = useRef(typeof value === 'number' ? value : 0);
 
-    // Use refs for unstable functions to prevent infinite loops in effects
+    // Refs for stable callbacks inside pointer handlers
     const formatterRef = useRef(formatter);
     const onChangeRef = useRef(onChange);
+    const dragStateRef = useRef<{
+        startX: number;
+        startVal: number;
+        isScrubbing: boolean;
+        pointerId: number;
+    } | null>(null);
 
     useEffect(() => {
         formatterRef.current = formatter;
@@ -46,55 +49,120 @@ export const ScrubbableInput: React.FC<IScrubbableInputProps> = ({
     const inputId = useMemo(() => {
         if (name) return `scrubber-${name}`;
         if (typeof label === 'string') return `scrubber-${label}`;
-        return `scrubber-${Math.random().toString(36).substr(2, 9)}`;
+        return `scrubber-${Math.random().toString(36).substring(2, 9)}`;
     }, [name, label]);
 
+    // Global cleanup on unmount in case pointer release was interrupted
     useEffect(() => {
-        if (!isDragging && document.activeElement?.id !== inputId) {
-            const nextValue = value === 'mixed' ? 'Mixed' : formatterRef.current(value).toString();
-            if (nextValue !== localValue) {
-                setLocalValue(nextValue);
+        return () => {
+            if (dragStateRef.current?.isScrubbing) {
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        };
+    }, []);
+
+    // Track previous prop value to sync localValue only when external prop changes
+    const prevPropValueRef = useRef(value);
+    useEffect(() => {
+        if (prevPropValueRef.current !== value) {
+            prevPropValueRef.current = value;
+            if (!dragStateRef.current?.isScrubbing) {
+                setLocalValue(value === 'mixed' ? 'Mixed' : formatterRef.current(value).toString());
             }
         }
-    }, [value, isDragging, inputId, localValue]);
+    }, [value]);
 
-    const { takeSnapshot, previewSlideId } = usePresentationStore();
+    const takeSnapshot = usePresentationStore(s => s.takeSnapshot);
+    const previewSlideId = usePresentationStore(s => s.previewSlideId);
 
-    const handlePointerDown = async (e: React.PointerEvent) => {
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
         if (value === 'mixed') return;
-        if (previewSlideId) await takeSnapshot(previewSlideId);
-        setIsDragging(true);
-        startY.current = e.clientY;
-        startVal.current = typeof value === 'number' ? value : 0;
+
+        // If the user is already focused on the text input and clicking inside it, allow caret positioning
+        if (document.activeElement === inputRef.current && e.target === inputRef.current) {
+            return;
+        }
+
+        e.stopPropagation();
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+
+        dragStateRef.current = {
+            startX: e.clientX,
+            startVal: typeof value === 'number' ? value : 0,
+            isScrubbing: false,
+            pointerId: e.pointerId,
+        };
     };
 
-    useEffect(() => {
-        if (!isDragging) return;
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        const state = dragStateRef.current;
+        if (!state) return;
 
-        const handleMove = (e: PointerEvent) => {
-            const delta = startY.current - e.clientY;
-            let newVal = startVal.current + (delta * step);
-            newVal = Math.max(min, Math.min(max, newVal));
-            const inv = 1.0 / step;
-            newVal = Math.round(newVal * inv) / inv;
-            setLocalValue(formatterRef.current(newVal).toString());
-            onChangeRef.current(newVal);
-        };
+        const diffX = e.clientX - state.startX;
 
-        const handleUp = () => {
-            setIsDragging(false);
-        };
+        if (!state.isScrubbing) {
+            if (Math.abs(diffX) >= 3) {
+                state.isScrubbing = true;
+                document.body.style.cursor = 'ew-resize';
+                document.body.style.userSelect = 'none';
+                if (previewSlideId) {
+                    takeSnapshot(previewSlideId);
+                }
+            } else {
+                return;
+            }
+        }
 
-        window.addEventListener('pointermove', handleMove);
-        window.addEventListener('pointerup', handleUp);
-        return () => {
-            window.removeEventListener('pointermove', handleMove);
-            window.removeEventListener('pointerup', handleUp);
-        };
-    }, [isDragging, step, min, max]);
+        const effectiveStep = e.shiftKey ? step * 10 : (e.altKey ? step * 0.1 : step);
+        let newVal = state.startVal + (diffX * effectiveStep);
+        newVal = Math.max(min, Math.min(max, newVal));
+        const inv = 1.0 / (e.altKey ? step * 0.1 : step);
+        newVal = Math.round(newVal * inv) / inv;
 
-    const handleBlur = () => {
-        let parsed = parseFloat(localValue);
+        setLocalValue(formatterRef.current(newVal).toString());
+        onChangeRef.current(newVal);
+    };
+
+    const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        const state = dragStateRef.current;
+        if (!state) return;
+
+        try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch {
+            // Safe fallback if capture already detached
+        }
+
+        if (state.isScrubbing) {
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        } else {
+            // Movement < 3px is a click: immediately focus and select all text for replacement
+            inputRef.current?.focus();
+            inputRef.current?.select();
+        }
+
+        dragStateRef.current = null;
+    };
+
+    const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+        try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch {
+            // Safe fallback
+        }
+
+        if (dragStateRef.current?.isScrubbing) {
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+        dragStateRef.current = null;
+    };
+
+    const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+        const valToParse = e.target.value;
+        let parsed = parseFloat(valToParse);
         if (isNaN(parsed)) {
             setLocalValue(value === 'mixed' ? 'Mixed' : formatterRef.current(typeof value === 'number' ? value : 0).toString());
             return;
@@ -112,15 +180,27 @@ export const ScrubbableInput: React.FC<IScrubbableInputProps> = ({
 
     return (
         <div
-            className={cn("flex items-center gap-1.5 bg-black/40 px-2 py-1.5 rounded-lg border border-white/5 flex-1 min-w-0 group hover:border-white/20 transition-colors", className)}
+            className={cn(
+                "h-9 px-2.5 flex items-center gap-2 rounded-xl border transition-all",
+                "bg-stone-900/60 hover:bg-stone-900/90 border-white/10 hover:border-white/20",
+                "focus-within:border-accent/60 focus-within:ring-1 focus-within:ring-accent/25",
+                "flex-1 min-w-0 group select-none touch-none",
+                className
+            )}
             onPointerDown={handlePointerDown}
-            style={{ cursor: value === 'mixed' ? 'default' : 'ns-resize' }}
-            title={value === 'mixed' ? 'Multiple values' : 'Drag vertically to adjust, or click to type'}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
+            style={{ cursor: value === 'mixed' ? 'default' : 'ew-resize' }}
+            title={value === 'mixed' ? 'Multiple values' : 'Drag horizontally to adjust (Shift: ×10, Alt: 0.1×), or click to type'}
         >
             {label && (
-                <span className="text-[9px] font-black text-stone-500 uppercase min-w-[12px] shrink-0 select-none pointer-events-none group-hover:text-stone-300 transition-colors flex items-center justify-center">{label}</span>
+                <span className="text-[11px] font-bold text-stone-400 uppercase tracking-wider min-w-[14px] shrink-0 select-none pointer-events-none group-hover:text-stone-200 transition-colors flex items-center justify-center">
+                    {label}
+                </span>
             )}
             <input
+                ref={inputRef}
                 id={inputId}
                 type="text"
                 value={localValue}
@@ -131,13 +211,14 @@ export const ScrubbableInput: React.FC<IScrubbableInputProps> = ({
                 }}
                 onBlur={handleBlur}
                 onKeyDown={handleKeyDown}
-                onPointerDown={(e) => e.stopPropagation()}
                 className={cn(
-                    "w-full bg-transparent text-[10px] text-white font-mono focus:outline-none min-w-0 text-right",
+                    "w-full bg-transparent text-xs text-white font-sans tabular-nums font-semibold focus:outline-none min-w-0 text-right selection:bg-accent/30",
                     value === 'mixed' && "text-stone-500 italic"
                 )}
                 style={{ cursor: 'text' }}
             />
         </div>
     );
-};
+});
+
+ScrubbableInput.displayName = 'ScrubbableInput';

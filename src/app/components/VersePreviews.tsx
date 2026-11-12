@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { getBookName } from '@/core/data/bookData';
@@ -6,7 +6,7 @@ import { processVerseText, truncateMiddle } from '@/core/utils/markdownUtils';
 import { Verse } from '@/core/types';
 
 interface VersePreviewsProps {
-    appMode: 'scripture' | 'presentation';
+    appMode: 'scripture' | 'presentation' | 'hymns';
     lang: string;
     prevVersePreview: Verse | null | undefined;
     nextVersePreview: Verse | null | undefined;
@@ -23,6 +23,14 @@ export const VersePreviews: React.FC<VersePreviewsProps> = ({
     const { t } = useTranslation();
     const isCustomizationOpen = useModalStore(state => state.isModalOpen(ModalType.CUSTOMIZATION));
 
+    const handleSelectPrev = useCallback(() => {
+        if (prevVersePreview) setActiveVerse(prevVersePreview);
+    }, [prevVersePreview, setActiveVerse]);
+
+    const handleSelectNext = useCallback(() => {
+        if (nextVersePreview) setActiveVerse(nextVersePreview);
+    }, [nextVersePreview, setActiveVerse]);
+
     if (appMode !== 'scripture' || isCustomizationOpen) return null;
 
     return (
@@ -31,7 +39,7 @@ export const VersePreviews: React.FC<VersePreviewsProps> = ({
             {prevVersePreview && (
                 <div className="absolute bottom-6 left-6 z-40">
                     <button
-                        onClick={() => setActiveVerse(prevVersePreview)}
+                        onClick={handleSelectPrev}
                         className="bg-stone-900/90 border border-white/10 px-4 py-3 rounded-xl backdrop-blur-xl shadow-2xl hover:border-accent/50 transition-all text-left group animate-in slide-in-from-bottom-4 duration-500 flex flex-col gap-1 @md:w-72 @md:h-32 @md:p-4 @md:rounded-2xl"
                     >
                         <div className="flex items-center justify-between w-full">
@@ -53,7 +61,7 @@ export const VersePreviews: React.FC<VersePreviewsProps> = ({
             {nextVersePreview && (
                 <div className="absolute bottom-6 right-6 z-40">
                     <button
-                        onClick={() => setActiveVerse(nextVersePreview)}
+                        onClick={handleSelectNext}
                         className="bg-stone-900/90 border border-white/10 px-4 py-3 rounded-xl backdrop-blur-xl shadow-2xl hover:border-amber-500/50 transition-all text-left group animate-in slide-in-from-bottom-4 duration-500 flex flex-col gap-1 @md:w-72 @md:h-32 @md:p-4 @md:rounded-2xl"
                     >
                         <div className="flex items-center justify-between w-full">

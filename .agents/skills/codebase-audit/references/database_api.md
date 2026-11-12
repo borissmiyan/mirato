@@ -7,6 +7,7 @@ AI almost always writes database queries following the path of least resistance:
 1. [Client-Side Filtering (Data Leaks)](#1-client-side-filtering-data-leaks)
 2. [Overfetching (Network Killer)](#2-overfetching-network-killer)
 3. [The N+1 Problem (Loops vs Joins)](#3-the-n1-problem-loops-vs-joins)
+3b. [Empty `.in()` Arrays](#3b-empty-in-arrays)
 4. [Race Conditions (Missing Aborts)](#4-race-conditions-missing-aborts)
 
 ---
@@ -99,6 +100,39 @@ const { data } = await supabase
 ### Self-Correction Rule
 
 If a database query is called inside a loop, `.map`, or `Promise.all` → **CRITICAL PERFORMANCE FLAW**. Refactor to use Joins or `.in()`.
+
+---
+
+## 3b. Empty `.in()` Arrays
+
+### Constraint
+
+Before calling `.in('column', ids)`, check that `ids` is non-empty.
+Supabase/PostgREST either returns unexpected results or errors on an empty
+array depending on the client version — this is a common runtime crash when
+a filter/selection upstream legitimately resolves to zero items (e.g. no
+shared accounts yet).
+
+### Bad
+
+```typescript
+// ❌ Crashes or returns wrong data if accountIds is []
+const { data } = await supabase.from('transactions').select('*').in('account_id', accountIds);
+```
+
+### Good
+
+```typescript
+// ✅ Short-circuit before the query
+if (accountIds.length === 0) return [];
+const { data } = await supabase.from('transactions').select('*').in('account_id', accountIds);
+```
+
+### Self-Correction Rule
+
+If `.in(column, arr)` is called where `arr` is derived from a `.map()`/
+`.filter()` chain (i.e., could plausibly be empty) with no length check
+before the call → **WARNING: Unchecked Empty .in() Array**.
 
 ---
 

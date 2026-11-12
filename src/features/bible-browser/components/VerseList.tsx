@@ -1,108 +1,20 @@
 import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { useBibleStore } from '@/features/bible-browser/store/bibleStore';
 import { useShallow } from 'zustand/react/shallow';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Verse } from '@/core/types';
-import { List, Edit, CheckCircle2, Trash2, Plus } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
+import { List, Edit, Trash2, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
 import VerseEditor from './VerseEditor';
+import { VerseItem } from './VerseItem';
 import ContextMenu, { ContextMenuItem } from '@/shared/ui/ContextMenu';
 import TranslationPicker from '@/shared/ui/TranslationPicker';
+import IconButton from '@/shared/ui/IconButton';
+import { EmptyState, Badge, NavigationSelectorCard } from '@/shared/ui';
 import { getBookName } from '@/core/data/bookData';
 import { cn } from '@/core/utils/cn';
-import { processChildren } from '@/core/utils/markdownUtils';
-
-interface VerseItemProps {
-  verse: Verse;
-  isActive: boolean;
-  isSelected: boolean;
-  onSelect: (verse: Verse, event: React.MouseEvent) => void;
-  onMouseDown: (e: React.MouseEvent, verse: Verse) => void;
-  onMouseEnter: (verse: Verse) => void;
-  onContextMenu: (e: React.MouseEvent, verseId: number) => void;
-}
-
-const VerseItem = React.memo(({
-  verse, isActive, isSelected,
-  onSelect, onMouseDown, onMouseEnter, onContextMenu,
-}: VerseItemProps) => {
-  const itemRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (isActive && itemRef.current) {
-      itemRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [isActive]);
-
-  return (
-    <button
-      ref={itemRef}
-      onMouseDown={(e) => onMouseDown(e, verse)}
-      onClick={(e) => {
-        // Ignore keyboard-triggered clicks (Enter/Space) since global shortcuts handle Enter
-        if (e.detail === 0) return;
-        onSelect(verse, e);
-      }}
-      onMouseEnter={() => onMouseEnter(verse)}
-      onContextMenu={(e) => { if (verse.id) onContextMenu(e, verse.id); }}
-      className={cn(
-        'group w-full text-left p-4 transition-all duration-300 relative focus:outline-none border-b border-white/5 select-none',
-        isActive && !isSelected && 'bg-accent/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]',
-        isSelected && !isActive && 'bg-accent/20',
-        isSelected && isActive && 'bg-accent/25',
-        !isActive && !isSelected && 'hover:bg-white/5 [.is-dragging_&]:hover:bg-transparent',
-      )}
-    >
-      <div className="flex gap-4 pointer-events-none">
-        <div className={cn(
-          'flex flex-col items-center min-w-8 pt-1 transition-colors duration-300',
-          isActive || isSelected ? 'text-accent' : 'text-stone-600 group-hover:text-stone-400',
-        )}>
-          <span className="text-[10px] font-black font-sans tracking-tighter opacity-80 mb-1">
-            {verse.verseNumber}
-          </span>
-          {(isActive || isSelected) && (
-            <div className={cn(
-              'w-1.5 h-1.5 rounded-full bg-accent shadow-glow transition-all',
-              isSelected && !isActive && 'opacity-60 scale-75',
-            )} />
-          )}
-        </div>
-        <div className={cn(
-          'flex-1 font-serif text-lg leading-relaxed transition-colors duration-300',
-          isActive || isSelected ? 'text-stone-100' : 'text-stone-400 group-hover:text-stone-200',
-        )}>
-          <ReactMarkdown
-            components={{
-              strong: ({ children }) => (
-                <span className={cn('font-bold', isActive ? 'text-accent/90' : 'text-stone-200')}>
-                  {processChildren(children)}
-                </span>
-              ),
-              p: ({ children }) => <span>{processChildren(children)}</span>,
-              em: ({ children }) => <em className="italic opacity-90">{processChildren(children)}</em>,
-            }}
-          >
-            {verse.text}
-          </ReactMarkdown>
-        </div>
-      </div>
-      <div className={cn(
-        'absolute left-0 top-2 bottom-2 w-1 rounded-r-full transition-all duration-300',
-        isActive ? 'bg-accent opacity-100 scale-y-100 shadow-glow'
-          : isSelected ? 'bg-accent opacity-60 scale-y-90'
-            : 'bg-accent opacity-0 scale-y-50',
-      )} />
-    </button>
-  );
-}, (prev, next) =>
-  prev.verse.id === next.verse.id &&
-  prev.verse.text === next.verse.text &&
-  prev.isActive === next.isActive &&
-  prev.isSelected === next.isSelected
-);
 
 const VerseList: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -152,6 +64,7 @@ const VerseList: React.FC = () => {
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; verseId: number } | null>(null);
+  const handleCloseContextMenu = useCallback(() => setContextMenu(null), []);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -160,13 +73,32 @@ const VerseList: React.FC = () => {
   const [dragStartVerse, setDragStartVerse] = useState<Verse | null>(null);
   const dragTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const verses = useLiveQuery(
+  const liveVerses = useLiveQuery(
     () => db.verses
       .where('[translationId+bookId+chapter]')
       .equals([currentTranslationId, currentBookId, currentChapter])
       .sortBy('verseNumber'),
     [currentTranslationId, currentBookId, currentChapter]
-  ) || [];
+  );
+  const verses = useMemo(() => liveVerses || [], [liveVerses]);
+
+  const parentRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: verses.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 64,
+    overscan: 5,
+  });
+
+  const activeVerseId = activeVerse?.id;
+  useEffect(() => {
+    if (activeVerseId) {
+      const idx = verses.findIndex(v => v.id === activeVerseId);
+      if (idx !== -1) {
+        rowVirtualizer.scrollToIndex(idx, { align: 'center', behavior: 'smooth' });
+      }
+    }
+  }, [activeVerseId, verses, rowVirtualizer]);
 
   const lang = useMemo(() => i18n.language?.substring(0, 2) || 'en', [i18n.language]);
 
@@ -282,87 +214,122 @@ const VerseList: React.FC = () => {
           </div>
           <h2 className="font-bold text-stone-200 text-sm uppercase">{t('verses')}</h2>
         </div>
-        <div className="px-2 py-0.5 bg-white/5 rounded-full">
-          <span className="text-[10px] font-bold text-stone-600 uppercase tracking-widest">{verses.length}</span>
-        </div>
+        <Badge size="xs" variant="secondary">{verses.length}</Badge>
       </div>
 
-      <div className={cn('flex-1 overflow-y-auto no-scrollbar relative', isDragging && 'select-none is-dragging')}>
-        {verses.map((verse) =>
-          editingId === verse.id ? (
-            <VerseEditor
-              key={`editor-${verse.id}`}
-              verse={verse}
-              onSave={handleSave}
-              onCancel={() => setEditingId(null)}
-            />
-          ) : (
-            <VerseItem
-              key={`${verse.bookId}-${verse.chapter}-${verse.verseNumber}`}
-              verse={verse}
-              isActive={activeVerse?.id === verse.id}
-              isSelected={selectedVerses.some(v => v.id === verse.id)}
-              onSelect={handleSelect}
-              onMouseDown={handleMouseDown}
-              onMouseEnter={handleMouseEnter}
-              onContextMenu={handleContextMenu}
-            />
-          )
-        )}
+      <div
+        ref={parentRef}
+        className={cn('flex-1 overflow-y-auto no-scrollbar relative', isDragging && 'select-none is-dragging')}
+      >
+        {verses.length > 0 ? (
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const verse = verses[virtualRow.index];
+              if (!verse) return null;
 
-        {verses.length === 0 && (
-          <div className="py-20 text-center space-y-3">
-            <List className="w-10 h-10 text-stone-800 mx-auto" strokeWidth={1} />
-            <p className="text-sm text-stone-600 italic">{t('no_verses_found', 'No verses found for this chapter')}</p>
-          </div>
-        )}
-      </div>
-
-      <div className="p-3 border-t border-white/5 bg-stone-950/40 relative z-30">
-        {secondTranslationId ? (
-          <div className="group relative">
-            <button
-              ref={triggerRef}
-              onClick={() => { if (triggerRef.current) setTriggerRect(triggerRef.current.getBoundingClientRect()); setIsPickerOpen(true); }}
-              className="w-full h-[60px] flex items-center gap-3 p-3 rounded-2xl bg-stone-900/40 border border-white/5 hover:border-accent/40 hover:bg-stone-800/60 transition-all group active:scale-95 shadow-xl shadow-black/20"
-            >
-              <div className="min-w-10 h-8 px-2 rounded-xl bg-accent flex items-center justify-center border border-accent/20 shadow-lg shadow-accent/10 shrink-0">
-                <span className="text-[10px] font-black text-accent-foreground uppercase">{secondTranslationId}</span>
-              </div>
-              <div className="flex flex-col min-w-0 text-left">
-                <span className="text-[10px] font-bold text-stone-300 uppercase leading-none truncate group-hover:text-white transition-colors">
-                  {currentBookId ? getBookName(currentBookId, lang) : '-'}
-                </span>
-                <span className="text-[10px] font-bold text-stone-600 uppercase tracking-widest mt-1 truncate group-hover:text-stone-400">
-                  {currentChapter ? `${t('chapter')} ${currentChapter}` : '-'}
-                </span>
-              </div>
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); setSecondTranslation(null); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 bg-stone-950/50 hover:bg-red-500/20 text-stone-600 hover:text-red-400 rounded-xl transition-all opacity-0 group-hover:opacity-100 shadow-xl"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+              return (
+                <div
+                  key={verse.id || `${verse.bookId}-${verse.chapter}-${verse.verseNumber}`}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  {editingId === verse.id ? (
+                    <VerseEditor
+                      verse={verse}
+                      onSave={handleSave}
+                      onCancel={() => setEditingId(null)}
+                    />
+                  ) : (
+                    <VerseItem
+                      verse={verse}
+                      isActive={activeVerse?.id === verse.id}
+                      isSelected={selectedVerses.some(v => v.id === verse.id)}
+                      onSelect={handleSelect}
+                      onMouseDown={handleMouseDown}
+                      onMouseEnter={handleMouseEnter}
+                      onContextMenu={handleContextMenu}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : (
-          <button
+          <div className="py-16">
+            <EmptyState
+              icon={List}
+              title={t('no_verses_found', 'No verses found for this chapter')}
+              size="sm"
+              border="none"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className="shrink-0 p-3 border-t border-white/5 bg-stone-950/60 relative z-30">
+        {secondTranslationId ? (
+          <NavigationSelectorCard
             ref={triggerRef}
-            onClick={() => { if (triggerRef.current) setTriggerRect(triggerRef.current.getBoundingClientRect()); setIsPickerOpen(true); }}
-            className="w-full h-[60px] flex items-center gap-3 p-3 rounded-2xl bg-stone-900/40 border border-dashed border-white/10 hover:border-accent/40 hover:bg-accent/5 transition-all group active:scale-95"
-          >
-            <div className="w-10 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/5 shrink-0 group-hover:bg-accent/10 group-hover:border-accent/20 transition-all">
-              <Plus className="w-4 h-4 text-stone-600 group-hover:text-accent" />
-            </div>
-            <div className="text-left">
-              <span className="text-[10px] font-bold text-stone-600 uppercase tracking-widest leading-none group-hover:text-stone-400 transition-colors">
-                {t('multi_translation', 'Multi-Translation')}
+            onClick={() => {
+              if (triggerRef.current) setTriggerRect(triggerRef.current.getBoundingClientRect());
+              setIsPickerOpen(true);
+            }}
+            title={currentBookId ? getBookName(currentBookId, lang) : '-'}
+            subtitle={currentChapter ? `${t('chapter')} ${currentChapter}` : '-'}
+            badge={secondTranslationId}
+            badgeVariant="accent"
+            isOpen={isPickerOpen}
+            ariaLabel={t('select_second_translation', 'Second Translation')}
+            trailing={
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSecondTranslation(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                    setSecondTranslation(null);
+                  }
+                }}
+                className="p-1.5 rounded-xl text-stone-500 hover:text-red-400 hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                title={t('remove', 'Remove')}
+                aria-label={t('remove', 'Remove')}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
               </span>
-              <p className="text-[9px] text-stone-700 uppercase tracking-wider font-bold mt-1">
-                {t('multi_select_hint', 'Show side-by-side')}
-              </p>
-            </div>
-          </button>
+            }
+          />
+        ) : (
+          <NavigationSelectorCard
+            ref={triggerRef}
+            onClick={() => {
+              if (triggerRef.current) setTriggerRect(triggerRef.current.getBoundingClientRect());
+              setIsPickerOpen(true);
+            }}
+            isDashed
+            title={t('multi_translation', 'Multi-Translation')}
+            subtitle={t('multi_select_hint', 'Show side-by-side')}
+            badge={<Plus className="w-4 h-4 text-stone-600 group-hover:text-accent transition-colors" />}
+            badgeVariant="outline"
+            isOpen={isPickerOpen}
+            ariaLabel={t('multi_translation', 'Multi-Translation')}
+          />
         )}
         {isPickerOpen && (
           <TranslationPicker
@@ -376,7 +343,7 @@ const VerseList: React.FC = () => {
       </div>
 
       {contextMenu && (
-        <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+        <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={handleCloseContextMenu}>
           <ContextMenuItem
             icon={<Edit className="w-4 h-4" />}
             label={t('edit_verse', 'Edit Verse')}

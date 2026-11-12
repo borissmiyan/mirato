@@ -4,6 +4,12 @@ import { IpcService } from '@/core/services/ipcService';
 import { EktmpService } from '@/features/presenter/services/ektmpService';
 import { useLoadingStore } from '@/core/store/loadingStore';
 import { db } from '@/core/db';
+import { hymnLibraryService } from '@/features/hymns/services/hymnLibraryService';
+import { hymnThemeService } from '@/features/hymns/services/hymnThemeService';
+import { toast } from 'sonner';
+import i18n from '@/core/i18n';
+import { useModalStore, ModalType } from '@/core/store/modalStore';
+import { ErrorLoggingService } from '@/core/services/errorLoggingService';
 
 /**
  * Hook to handle application-level initialization logic.
@@ -11,7 +17,9 @@ import { db } from '@/core/db';
  * Reports progress to the global LoadingScreen.
  */
 export function useAppInitialization(themeAccent: string) {
-    const { setPhase, setProgress, setLoaded } = useLoadingStore();
+    const setPhase = useLoadingStore(s => s.setPhase);
+    const setProgress = useLoadingStore(s => s.setProgress);
+    const setLoaded = useLoadingStore(s => s.setLoaded);
 
     useEffect(() => {
         const performInit = async () => {
@@ -67,6 +75,31 @@ export function useAppInitialization(themeAccent: string) {
                     const previewSlideId = usePresentationStore.getState().previewSlideId;
                     setPreviewSlide(previewSlideId, selectedPresentationId);
                 }
+
+                // Phase 5: Hymn Library Sync
+                // Initialize built-in default theme (idempotent)
+                await hymnThemeService.initializeDefaultTheme();
+                // Sync hymnal manifests + covers from filesystem (no-op if no library dir set)
+                const { orphanScopeIds } = await hymnLibraryService.syncFileSystemHymnals();
+                
+                if (orphanScopeIds.length > 0) {
+                    toast.warning(i18n.t('hymns.sync.orphan_scopes_warning', {
+                        count: orphanScopeIds.length,
+                    }), {
+                        duration: 8000,
+                        description: i18n.t('hymns.sync.orphan_scopes_description'),
+                        action: {
+                            label: i18n.t('hymns.sync.view_orphans_btn'),
+                            onClick: () => useModalStore.getState().openModal(ModalType.ORPHAN_AUDIO_SCOPES),
+                        }
+                    });
+                }
+
+                // Phase 6: Maintenance (Log Rotation - 30 days & Auto Disaster Recovery Backup)
+                ErrorLoggingService.clearOldLogs(30).catch(e => console.warn('[ErrorLogs] Rotation failed:', e));
+                import('@/core/services/autoBackupService').then(({ AutoBackupService }) => {
+                    AutoBackupService.runScheduledBackup().catch(e => console.warn('[AutoBackup] Check failed:', e));
+                });
 
                 // Final Step: Complete
                 setPhase('ready');

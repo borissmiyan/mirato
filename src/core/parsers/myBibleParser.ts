@@ -9,7 +9,7 @@ import {
     BOOK_NAMES
 } from '@/core/data/bookData';
 import wasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
-import { extractWords } from '@/features/search/utils/bibleSearchUtils';
+import { extractWords } from '@/core/utils/textUtils';
 
 const RUSSIAN_ALIASES: Record<string, string> = {
     'притчей': 'PRO', 'притчи': 'PRO',
@@ -126,7 +126,7 @@ export class MyBibleParser {
     async parse(
         fileBuffer: ArrayBuffer, 
         fileName: string, 
-        onProgress?: (type: 'metadata' | 'verses', data: any, progress?: number) => void
+        onProgress?: (type: 'metadata' | 'verses', data: unknown, progress?: number) => void
     ): Promise<BibleData> {
         const SQL = await this.getSql();
         let db: Database;

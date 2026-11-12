@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
 import { ITimerSettings, IMediaItem, IAudioScope } from '@/core/types';
@@ -11,14 +11,15 @@ export const useTimerAudio = (id: string, settings: ITimerSettings, isLive: bool
     const lastInitiatedIndexRef = useRef<number | null>(null);
     const crossFadeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const playlistItems = useLiveQuery(
+    const livePlaylistItems = useLiveQuery(
         async () => {
             if (!settings.playlist?.length) return [];
             const items = await db.mediaPool.where('id').anyOf(settings.playlist).toArray();
             return settings.playlist.map(id => items.find(item => item.id === id)).filter(Boolean) as IMediaItem[];
         },
         [settings.playlist]
-    ) || [];
+    );
+    const playlistItems = useMemo(() => livePlaylistItems || [], [livePlaylistItems]);
 
     useEffect(() => {
         if (!isLive) {
@@ -96,7 +97,7 @@ export const useTimerAudio = (id: string, settings: ITimerSettings, isLive: bool
             if (crossFadeTimeoutRef.current) clearTimeout(crossFadeTimeoutRef.current);
             crossFadeTimeoutRef.current = null;
         };
-    }, [isLive, id, playlistItems.length, settings.playlist?.join(','), currentSongIndex]);
+    }, [isLive, id, playlistItems, settings.playlist, currentSongIndex]);
 
     // Command Listener for manual skips and Play/Pause (from LiveMediaToolbar)
     useEffect(() => {
@@ -115,7 +116,7 @@ export const useTimerAudio = (id: string, settings: ITimerSettings, isLive: bool
             lastPlayedFileRef.current = null;
         });
 
-        const unsubAudio = LiveSyncService.onAudioCommand(({ scopeId, command }) => {
+        const unsubAudio = LiveSyncService.onAudioCommand(({ scopeId, command, value }) => {
             // Only respond if the command targets our stable scope ID
             const stableScopeId = `timer-audio-${id}`;
             if (scopeId !== stableScopeId) return;
@@ -128,6 +129,8 @@ export const useTimerAudio = (id: string, settings: ITimerSettings, isLive: bool
                 const progress = audioService.getTrackProgress(stableScopeId);
                 if (progress?.isPlaying) audioService.pauseTrack(stableScopeId);
                 else audioService.playTrack(stableScopeId);
+            } else if (command === 'seek' && typeof value === 'number') {
+                audioService.seekTrack(stableScopeId, value);
             }
         });
 

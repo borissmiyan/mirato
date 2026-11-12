@@ -61,24 +61,96 @@ export const LayerItem: React.FC<ILayerItemProps> = React.memo(({
         }
     };
 
-    const handleOpacityDragStart = (e: React.MouseEvent) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const startY = e.clientY;
-        const startVal = Math.round((layer.opacity ?? 1) * 100);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const dragStateRef = useRef<{
+        startX: number;
+        startVal: number;
+        isScrubbing: boolean;
+        pointerId: number;
+    } | null>(null);
 
-        const onMouseMove = (moveEv: MouseEvent) => {
-            const diffY = startY - moveEv.clientY;
-            const newVal = Math.max(0, Math.min(100, startVal + diffY));
-            setOpacityStr(`${newVal}% `);
-            onUpdate({ opacity: newVal / 100 });
+    // Global cleanup on unmount for cursor and userSelect
+    useEffect(() => {
+        return () => {
+            if (dragStateRef.current?.isScrubbing) {
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
         };
-        const onMouseUp = () => {
-            window.removeEventListener('mousemove', onMouseMove);
-            window.removeEventListener('mouseup', onMouseUp);
+    }, []);
+
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+        // If the user already focused the input and is clicking inside it, allow standard text editing/caret
+        if (document.activeElement === inputRef.current && e.target === inputRef.current) {
+            return;
+        }
+
+        e.stopPropagation();
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        dragStateRef.current = {
+            startX: e.clientX,
+            startVal: Math.round((layer.opacity ?? 1) * 100),
+            isScrubbing: false,
+            pointerId: e.pointerId,
         };
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('mouseup', onMouseUp);
+    };
+
+    const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+        const state = dragStateRef.current;
+        if (!state) return;
+
+        const diffX = e.clientX - state.startX;
+
+        if (!state.isScrubbing) {
+            if (Math.abs(diffX) >= 3) {
+                state.isScrubbing = true;
+                document.body.style.cursor = 'ew-resize';
+                document.body.style.userSelect = 'none';
+            } else {
+                return;
+            }
+        }
+
+        const mult = e.shiftKey ? 10 : (e.altKey ? 0.2 : 1);
+        const newVal = Math.max(0, Math.min(100, Math.round(state.startVal + diffX * mult)));
+        setOpacityStr(`${newVal}% `);
+        onUpdate({ opacity: newVal / 100 });
+    };
+
+    const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+        const state = dragStateRef.current;
+        if (!state) return;
+
+        try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch {
+            // Safe fallback if pointer capture was already released
+        }
+
+        if (state.isScrubbing) {
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        } else {
+            // Movement < 3px is a click: focus and select all text for instant replacement
+            inputRef.current?.focus();
+            inputRef.current?.select();
+        }
+
+        dragStateRef.current = null;
+    };
+
+    const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+        try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        } catch {
+            // Safe fallback
+        }
+
+        if (dragStateRef.current?.isScrubbing) {
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+        dragStateRef.current = null;
     };
 
     const getBackgroundValue = () => {
@@ -115,7 +187,7 @@ export const LayerItem: React.FC<ILayerItemProps> = React.memo(({
             <div
                 ref={triggerRef}
                 className={cn(
-                    "flex-1 flex items-center bg-black/40 h-10 rounded-lg border overflow-hidden",
+                    "flex-1 flex items-center bg-black/40 h-10 rounded-xl border overflow-hidden",
                     !isDragging && "transition-all",
                     isOpen ? "border-accent/40 bg-accent/5 shadow-[0_0_10px_rgba(234,179,8,0.05)]" : "border-white/5 hover:border-white/10",
                 )}
@@ -134,7 +206,7 @@ export const LayerItem: React.FC<ILayerItemProps> = React.memo(({
                     className="w-12 h-full border-r border-white/5 shrink-0 flex items-center justify-center bg-black/20 overflow-hidden p-0.5 cursor-pointer"
                     onClick={() => setIsOpen(!isOpen)}
                 >
-                    <div className="w-full h-full rounded-md border border-white/10 shadow-inner relative overflow-hidden bg-stone-900" style={{ background: getBackgroundValue() }}>
+                    <div className="w-full h-full rounded-xl border border-white/10 shadow-inner relative overflow-hidden bg-stone-900" style={{ background: getBackgroundValue() }}>
                         {(layer.type === 'image') && (layer.image?.url || layer.image?.id) && (
                             <div className="absolute inset-0">
                                 <SlideBackground background={[layer]} showOverlay={false} />
@@ -166,40 +238,46 @@ export const LayerItem: React.FC<ILayerItemProps> = React.memo(({
                 </div>
 
                 <div
-                    className="h-full border-l border-white/5 flex flex-col justify-center items-center bg-black/10 w-12 hover:bg-black/20 transition-colors cursor-ns-resize"
+                    className="h-full border-l border-white/5 flex flex-col justify-center items-center bg-black/10 w-14 hover:bg-black/20 transition-colors cursor-ew-resize select-none touch-none"
                     onClick={(e) => e.stopPropagation()}
-                    onMouseDown={handleOpacityDragStart}
+                    onPointerDown={handlePointerDown}
+                    onPointerMove={handlePointerMove}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerCancel}
+                    title={t('scrub_opacity_hint', 'Перетащите горизонтально для изменения (Shift: ×10, Alt: 0.2×) или кликните для ввода')}
                 >
                     <input
+                        ref={inputRef}
                         type="text"
                         value={opacityStr}
                         onChange={(e) => setOpacityStr(e.target.value)}
                         onBlur={(e) => handleOpacityChange(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                        className="w-full bg-transparent text-[10px] text-stone-300 font-mono font-bold text-center focus:outline-none focus:text-accent selection:bg-accent/30 cursor-ns-resize"
-                        onMouseDown={(e) => {
-                            if (document.activeElement === e.currentTarget) e.stopPropagation();
-                        }}
+                        className="w-full bg-transparent text-xs text-stone-200 font-sans tabular-nums font-semibold text-center focus:outline-none focus:text-accent selection:bg-accent/30 cursor-ew-resize"
                     />
                 </div>
             </div>
 
+            {/* audit-ignore: event propagation boundary */}
             <div className="flex flex-col items-center justify-center w-6 opacity-0 group-hover:opacity-100 transition-opacity gap-0.5" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                 <button
+                    type="button"
                     onClick={() => onUpdate({ visible: !layer.visible })}
                     onMouseDown={(e) => e.preventDefault()}
-                    className={cn("p-1.5 transition-colors rounded-md", layer.visible ? "text-stone-500 hover:text-stone-300 hover:bg-white/5 active:bg-white/10" : "text-stone-700 hover:text-stone-500 hover:bg-white/5 bg-black/20")}
+                    className={cn("p-1.5 transition-colors rounded-xl apple-press cursor-pointer", layer.visible ? "text-stone-500 hover:text-stone-300 hover:bg-white/5 active:bg-white/10" : "text-stone-700 hover:text-stone-500 hover:bg-white/5 bg-black/20")}
                     title={layer.visible ? t('hide_layer') : t('show_layer')}
                 >
                     {layer.visible ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
                 </button>
             </div>
 
+            {/* audit-ignore: event propagation boundary */}
             <div className="flex flex-col items-center justify-center w-6 opacity-0 group-hover:opacity-100 transition-opacity gap-0.5" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                 <button
+                    type="button"
                     onClick={onRemove}
                     onMouseDown={(e) => e.preventDefault()}
-                    className="p-1.5 text-stone-600 hover:text-red-400 hover:bg-red-500/10 active:bg-red-500/20 transition-colors rounded-md cursor-pointer"
+                    className="p-1.5 text-stone-600 hover:text-red-400 hover:bg-red-500/10 active:bg-red-500/20 transition-colors rounded-xl cursor-pointer apple-press"
                     title={t('remove_layer')}
                 >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -238,7 +316,7 @@ export const LayerItem: React.FC<ILayerItemProps> = React.memo(({
                                 label={t(`blend_mode.${m.value}`, m.label)}
                                 icon={layer.blendMode === m.value ? <Check className="w-3.5 h-3.5" /> : <div className="w-3.5 h-3.5" />}
                                 onClick={() => {
-                                    onUpdate({ blendMode: m.value as any });
+                                    onUpdate({ blendMode: m.value as IStyleLayer['blendMode'] });
                                     setBlendMenu(null);
                                 }}
                             />

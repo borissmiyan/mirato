@@ -55,7 +55,7 @@ export function useLogoUrl(logo: ILogo | null) {
                 URL.revokeObjectURL(currentUrl);
             }
         };
-    }, [logo?.id, logo?.isFromDb, logo?.url]);
+    }, [logo]);
 
     return logoUrl;
 }

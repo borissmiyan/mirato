@@ -32,7 +32,7 @@ export const BibleSelectionChapters: React.FC<BibleSelectionChaptersProps> = ({
               setSelectedVerseNumbers([]);
             }}
             className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-black transition-all border cursor-pointer",
+              "w-8 h-8 rounded-xl flex items-center justify-center text-[11px] font-black transition-all border cursor-pointer",
               selectedChapter === ch
                 ? "bg-amber-500 text-black border-amber-500 shadow-lg shadow-amber-500/20"
                 : "bg-stone-950/50 text-stone-400 border-white/5 hover:border-white/20 hover:text-white"

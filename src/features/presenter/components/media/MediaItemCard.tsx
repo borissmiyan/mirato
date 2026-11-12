@@ -1,5 +1,5 @@
 import React from 'react';
-import { Music, Film, Image as ImageIcon, Play, Pause, AlertCircle } from 'lucide-react';
+import { Music, Film, Image as ImageIcon, Play, Pause, AlertCircle, Eye } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { IMediaItem, MediaType } from '@/core/types';
 import { useMediaUrl } from '@/core/hooks/useMediaUrl';
@@ -9,26 +9,47 @@ export const THUMB_BG = "bg-stone-900";
 export const CARD_BG = "bg-stone-700/40 hover:bg-stone-700/60";
 const STRIP_BG = "bg-stone-950/20";
 
+const TAG_DOT_COLORS: Record<string, string> = {
+  red: 'bg-red-500',
+  orange: 'bg-orange-500',
+  yellow: 'bg-amber-400',
+  green: 'bg-emerald-500',
+  blue: 'bg-blue-500',
+  purple: 'bg-purple-500',
+};
+
 interface MediaItemCardProps {
   item: IMediaItem;
   isSelected: boolean;
-  onClick: (e: React.MouseEvent) => void;
-  playingItemId: string | null;
-  setPlayingItemId: (id: string | null) => void;
-  handleDragStart: (e: React.DragEvent, item: IMediaItem) => void;
-  setContextMenu: (menu: { x: number, y: number, kind: 'item', item: IMediaItem }) => void;
-  togglePlayback: (e: React.MouseEvent, item: IMediaItem) => void;
-  videoRefs: React.MutableRefObject<Record<string, HTMLVideoElement | null>>;
-  handleTimeUpdate: (id: string, current: number, duration: number) => void;
-  mediaTimes?: { current: number, duration: number };
+  isPlaying: boolean;
+  onSelect: (id: string, e: React.MouseEvent) => void;
+  onHover?: (id: string | null) => void;
+  onDragStart: (e: React.DragEvent, item: IMediaItem) => void;
+  onContextMenu: (e: React.MouseEvent, item: IMediaItem) => void;
+  onTogglePlayback: (e: React.MouseEvent, item: IMediaItem) => void;
+  onPlaybackEnded: (id: string) => void;
+  onDoubleClick?: (item: IMediaItem) => void;
+  videoRefs?: React.MutableRefObject<Record<string, HTMLVideoElement | null>>;
+  onTimeUpdate: (id: string, current: number, duration: number) => void;
+  mediaTimes?: { current: number; duration: number };
 }
 
 export const MediaItemCard: React.FC<MediaItemCardProps> = React.memo(({
-  item, isSelected, onClick, playingItemId, setPlayingItemId, handleDragStart, 
-  setContextMenu, togglePlayback, videoRefs, handleTimeUpdate, mediaTimes
+  item,
+  isSelected,
+  isPlaying,
+  onSelect,
+  onHover,
+  onDragStart,
+  onContextMenu,
+  onTogglePlayback,
+  onPlaybackEnded,
+  onDoubleClick,
+  videoRefs,
+  onTimeUpdate,
+  mediaTimes
 }) => {
   const { t } = useTranslation();
-  const isPlaying = playingItemId === item.id;
   const displayUrl = useMediaUrl(item);
 
   const formatTime = (seconds: number) => {
@@ -41,17 +62,23 @@ export const MediaItemCard: React.FC<MediaItemCardProps> = React.memo(({
   return (
     <div
       draggable
-      onClick={onClick}
-      onDragStart={(e) => handleDragStart(e, item)}
+      onClick={(e) => onSelect(item.id, e)}
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        onDoubleClick?.(item);
+      }}
+      onMouseEnter={() => onHover?.(item.id)}
+      onMouseLeave={() => onHover?.(null)}
+      onDragStart={(e) => onDragStart(e, item)}
       onContextMenu={(e) => {
         e.preventDefault();
         if (!isSelected) {
-          onClick(e);
+          onSelect(item.id, e);
         }
-        setContextMenu({ x: e.clientX, y: e.clientY, kind: 'item', item });
+        onContextMenu(e, item);
       }}
       className={cn(
-        "group flex flex-col rounded-md overflow-hidden cursor-grab active:cursor-grabbing transition-all ring-offset-2 ring-offset-stone-900",
+        "group flex flex-col rounded-xl overflow-hidden cursor-grab active:cursor-grabbing transition-all ring-offset-2 ring-offset-stone-900",
         isSelected ? "bg-accent/20 ring-2 ring-accent" : CARD_BG,
         item.isMissing && "ring-2 ring-red-500/80 bg-red-950/30"
       )}
@@ -61,6 +88,12 @@ export const MediaItemCard: React.FC<MediaItemCardProps> = React.memo(({
         item.isMissing && "bg-red-500/10"
       )}>
         <TypeIcon type={item.type} className={cn("w-3 h-3 shrink-0", getTypeAccent(item.type))} />
+        {item.colorTag && TAG_DOT_COLORS[item.colorTag] && (
+          <div
+            className={cn("w-2 h-2 rounded-full shrink-0 shadow-sm border border-black/30", TAG_DOT_COLORS[item.colorTag])}
+            title={item.colorTag}
+          />
+        )}
         <span className={cn(
           "text-[10px] truncate min-w-0 flex-1 font-medium group-hover:text-white transition-colors",
           item.isMissing ? "text-red-400" : "text-stone-300"
@@ -75,17 +108,35 @@ export const MediaItemCard: React.FC<MediaItemCardProps> = React.memo(({
           <img src={displayUrl} alt="" className="w-full h-full object-cover" />
         )}
 
-        {item.type === 'video' && displayUrl && !item.isMissing && (
-          <video
-            ref={el => { videoRefs.current[item.id] = el; }}
-            src={displayUrl}
-            muted
-            playsInline
-            onLoadedMetadata={(e) => handleTimeUpdate(item.id, 0, e.currentTarget.duration)}
-            onTimeUpdate={(e) => handleTimeUpdate(item.id, e.currentTarget.currentTime, e.currentTarget.duration)}
-            onEnded={() => setPlayingItemId(null)}
-            className="w-full h-full object-cover"
-          />
+        {item.type === 'video' && !item.isMissing && (
+          <>
+            {item.thumbnailUrl ? (
+              <img src={item.thumbnailUrl} alt="" className="w-full h-full object-cover pointer-events-none" />
+            ) : displayUrl ? (
+              <video
+                src={`${displayUrl}#t=0.5`}
+                preload="metadata"
+                muted
+                playsInline
+                disablePictureInPicture
+                className="w-full h-full object-cover pointer-events-none"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Film className="w-6 h-6 text-sky-500/40" />
+              </div>
+            )}
+            {/* Quick Look hover pill - video plays strictly in Quick Look */}
+            <div className="absolute inset-0 flex items-center justify-center transition-opacity opacity-0 group-hover:opacity-100 z-10 pointer-events-none">
+              <div className="px-2 py-1 rounded-xl bg-stone-950/80 backdrop-blur-md flex items-center gap-1.5 text-[10px] text-white font-medium border border-white/10 shadow-lg">
+                <Eye className="w-3 h-3 text-accent" />
+                <span>{t('media_pool.quick_look', 'Quick Look')}</span>
+              </div>
+            </div>
+            <div className="absolute bottom-1 right-1 px-1 py-0.5 rounded bg-black/70 text-[8px] font-bold text-stone-300 uppercase tracking-wider pointer-events-none">
+              VIDEO
+            </div>
+          </>
         )}
 
         {item.type === 'audio' && (
@@ -103,11 +154,11 @@ export const MediaItemCard: React.FC<MediaItemCardProps> = React.memo(({
           </div>
         )}
 
-        {!item.isMissing && (item.type === 'video' || item.type === 'audio') && (
+        {!item.isMissing && item.type === 'audio' && (
           <>
             <button
               type="button"
-              onClick={(e) => togglePlayback(e, item)}
+              onClick={(e) => onTogglePlayback(e, item)}
               className={cn(
                 "absolute inset-0 flex items-center justify-center transition-opacity z-10",
                 isPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
@@ -121,7 +172,7 @@ export const MediaItemCard: React.FC<MediaItemCardProps> = React.memo(({
             {mediaTimes && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10 z-20">
                 <div 
-                  className={cn("h-full transition-all", item.type === 'audio' ? "bg-purple-500" : "bg-accent")}
+                  className="h-full transition-all bg-purple-500"
                   style={{ width: `${(mediaTimes.current / mediaTimes.duration) * 100}%` }}
                 />
               </div>

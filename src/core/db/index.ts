@@ -51,7 +51,7 @@ export class ScriptureDatabase extends Dexie {
         // Single consolidated schema — all tables defined upfront.
         // Previous migrations (v1–v16) have been collapsed since there are no existing users.
         this.version(5).stores({
-            verses: '++id, [translationId+bookId+chapter], translationId',
+            verses: '++id, [translationId+bookId+chapter], translationId, *words',
             books: '++id, [translationId+bookId], translationId',
             translations: 'id',
             settings: 'key',
@@ -65,11 +65,6 @@ export class ScriptureDatabase extends Dexie {
             presentationBins: 'id, createdAt',
             audioScopes: 'id, presentationId, startSlideId, endSlideId',
             serviceFiles: 'id, lastOpened, updatedAt',
-        });
-
-        // v5: Added *words index for fast keyword search
-        this.version(5).stores({
-            verses: '++id, [translationId+bookId+chapter], translationId, *words',
         });
 
         // v6: Added error_logs for stability tracking
@@ -130,12 +125,23 @@ export class ScriptureDatabase extends Dexie {
 
             // Proceed in batches to avoid locking the whole DB for long periods
             const BATCH_SIZE = 1000;
-            let offset = 0;
+            let lastId = 0;
             let indexed = 0;
 
             while (true) {
-                const batch = await this.verses.offset(offset).limit(BATCH_SIZE).toArray();
+                const batch = await this.verses
+                    .where('id')
+                    .above(lastId)
+                    .limit(BATCH_SIZE)
+                    .toArray();
                 if (batch.length === 0) break;
+
+                const lastItem = batch[batch.length - 1];
+                if (lastItem && typeof lastItem.id === 'number') {
+                    lastId = lastItem.id;
+                } else {
+                    lastId += batch.length;
+                }
 
                 const updates: Verse[] = [];
                 for (const v of batch) {
@@ -152,7 +158,6 @@ export class ScriptureDatabase extends Dexie {
                     await this.settings.put({ key: 'reindex_progress', value: { indexed, total } });
                 }
 
-                offset += BATCH_SIZE;
                 // Yield to event loop to avoid blocking the UI thread
                 await new Promise(r => setTimeout(r, 0));
             }
@@ -223,8 +228,19 @@ export class ScriptureDatabase extends Dexie {
                 .toArray();
             
             if (brokenItems.length > 0) {
-                console.warn(`[DB] Sanitizing ${brokenItems.length} broken media items...`);
-                await this.mediaPool.bulkDelete(brokenItems.map(i => i.id));
+                const toDelete: string[] = [];
+                for (const item of brokenItems) {
+                    // Never delete items that possess binary data Blob or are audio/video assets
+                    if (item.data || item.type === 'audio' || item.type === 'video') {
+                        await this.mediaPool.update(item.id, { path: undefined });
+                    } else {
+                        toDelete.push(item.id);
+                    }
+                }
+                if (toDelete.length > 0) {
+                    console.warn(`[DB] Sanitizing ${toDelete.length} empty broken media items...`);
+                    await this.mediaPool.bulkDelete(toDelete);
+                }
             }
 
             // 2. Sanitize Presentation Thumbnails (One-time check)

@@ -1,5 +1,4 @@
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import { Book as BookIcon, ChevronRight } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { getBookSection, getSectionColors, getBookName, SECTION_NAMES, BibleSection } from '@/core/data/bookData';
@@ -34,8 +33,6 @@ export const BookList: React.FC<BookListProps> = React.memo(({
   searchQuery,
   lang
 }) => {
-  const { t } = useTranslation();
-
   const getSectionName = (section: BibleSection): string => {
     return SECTION_NAMES[lang]?.[section] || SECTION_NAMES.en[section];
   };
@@ -61,15 +58,16 @@ export const BookList: React.FC<BookListProps> = React.memo(({
               </div>
             )}
             <button
+              type="button"
               onClick={() => onBookSelect(book.bookId)}
               className={cn(
-                "w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-300 flex items-center gap-3 border shadow-sm",
+                "w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 flex items-center gap-3 border shadow-sm apple-press cursor-pointer",
                 currentBookId === book.bookId
                   ? `${colors.bg} ${colors.border} ${colors.icon} font-bold shadow-[0_4px_12px_rgba(0,0,0,0.1)]`
                   : "bg-white/2 border-transparent text-stone-400 hover:bg-white/5 hover:text-stone-200"
               )}
             >
-              <BookIcon className={cn("w-4 h-4 shrink-0 transition-transform duration-300", currentBookId === book.bookId ? "scale-110" : "opacity-40")} />
+              <BookIcon className={cn("w-4 h-4 shrink-0 transition-transform duration-200", currentBookId === book.bookId ? "scale-110" : "opacity-40")} />
               <span className="truncate flex-1">
                 <SearchHighlight text={getBookName(book.bookId, lang)} query={searchQuery} />
               </span>
@@ -83,3 +81,5 @@ export const BookList: React.FC<BookListProps> = React.memo(({
 });
 
 BookList.displayName = 'BookList';
+
+export default BookList;

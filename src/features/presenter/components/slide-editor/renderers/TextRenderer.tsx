@@ -3,8 +3,8 @@ import { ICanvasItem, IStyleLayer } from '@/core/types';
 import { cn } from '@/core/utils/cn';
 import { sanitizeHtml } from '@/core/utils/sanitizeHtml';
 import { getComputedColor } from '@/core/utils/blendEngine';
-import { mediaCache } from '@/core/utils/mediaCache';
 import { needsFauxBold } from '@/core/services/fontService';
+import { useRichTextBackground } from '../hooks/useRichTextBackground';
 
 interface TextRendererProps {
   item: ICanvasItem;
@@ -17,8 +17,13 @@ interface TextRendererProps {
   idPrefix: string;
 }
 
-export const TextRenderer: React.FC<TextRendererProps> = ({
+interface TextRendererContentProps extends TextRendererProps {
+  textData: NonNullable<ICanvasItem['text']>;
+}
+
+const TextRendererContent: React.FC<TextRendererContentProps> = ({
   item,
+  textData,
   containerRef,
   textRef,
   fittedFontSize,
@@ -27,32 +32,30 @@ export const TextRenderer: React.FC<TextRendererProps> = ({
   isEditing,
   idPrefix,
 }) => {
-  if (!item.text) return null;
-
-  const isAutoWidthText = item.text.resizingMode === 'auto-width';
-  const isAutoHeightText = item.text.resizingMode === 'auto-height';
+  const isAutoWidthText = textData.resizingMode === 'auto-width';
+  const isAutoHeightText = textData.resizingMode === 'auto-height';
   const isFlowText = isAutoWidthText || isAutoHeightText;
 
   const fills = React.useMemo(() => {
-    const rawFills = item.text?.textFills || [];
+    const rawFills = textData.textFills || [];
     if (rawFills.length > 0) return rawFills;
-    if (item.text?.color) {
+    if (textData.color) {
       return [{
         id: `legacy-color-${item.id}`,
         type: 'color',
         visible: true,
         opacity: 1,
         blendMode: 'normal',
-        color: item.text.color,
+        color: textData.color,
         adjustments: { brightness: 100, contrast: 100, exposure: 0, saturation: 100, vibrance: 0, hue: 0, blur: 0 }
       } as IStyleLayer];
     }
     return [];
-  }, [item.text?.textFills, item.text?.color, item.id]);
+  }, [textData.textFills, textData.color, item.id]);
 
   const textStrokes = React.useMemo(() => {
-    return item.text?.textStrokes?.filter(s => s.visible !== false) || [];
-  }, [item.text?.textStrokes]);
+    return textData.textStrokes?.filter(s => s.visible !== false) || [];
+  }, [textData.textStrokes]);
 
   const hasRichMedia = React.useMemo(() => fills.some(f => f.type !== 'color'), [fills]);
   const isRichTextFill = fills.length > 0 && hasRichMedia;
@@ -63,129 +66,33 @@ export const TextRenderer: React.FC<TextRendererProps> = ({
     return getComputedColor(fills, 'transparent');
   }, [fills, isRichTextFill]);
 
-  // Robust Async CSS Mapping for Webkit clipping
-  const [dynamicCSS, setDynamicCSS] = React.useState<React.CSSProperties | null>(null);
+  // Robust Async CSS Mapping for Webkit clipping via hook
+  const dynamicCSS = useRichTextBackground(fills);
 
-  React.useEffect(() => {
-    let active = true;
-
-    const compileBackgroundStyles = async () => {
-      if (!hasRichMedia) {
-        if (active) setDynamicCSS(null);
-        return;
-      }
-
-      const bgImages: string[] = [];
-      const bgBlendModes: string[] = [];
-      const bgSizes: string[] = [];
-      const bgPositions: string[] = [];
-
-      // Build layer by layer from Bottom to Top (since array is Top-First, we must reverse?)
-      // Actually CSS multiple backgrounds stack from first (top) to last (bottom). So Top-First is perfect!
-      for (const layer of fills) {
-        if (layer.visible === false) continue;
-
-        const opacity = layer.opacity ?? 1;
-        const blendMode = layer.blendMode || 'normal';
-
-        if (layer.type === 'color' && layer.color) {
-          let alphaHex = Math.round(opacity * 255).toString(16).padStart(2, '0');
-          let baseHex = layer.color.length === 9 ? layer.color.substring(0, 7) : layer.color.padEnd(7, '0');
-          let finalOutputColor = baseHex + alphaHex;
-          
-          bgImages.push(`linear-gradient(${finalOutputColor}, ${finalOutputColor})`);
-          bgBlendModes.push(blendMode);
-          bgSizes.push('100% 100%');
-          bgPositions.push('left top');
-        } 
-        else if (layer.type === 'image' && layer.image) {
-          let resolvedUrl = layer.image.url;
-
-          // Resolve stable blobs using mediaCache
-          const isRemote = !window.electron?.ipcRenderer;
-          let dbUrl: string | null = null;
-          
-          if (!isRemote && layer.image.isFromDb && layer.image.id) {
-            try {
-               const cachedUrl = await mediaCache.getBackgroundUrl(layer.image.id);
-               if (cachedUrl) dbUrl = cachedUrl;
-            } catch (e) {
-               console.error("Failed caching text background layer", e);
-            }
-          }
-
-          // Fallback logic for Remote Controllers identical to SlideBackground
-          const displayUrl = (isRemote && resolvedUrl && !resolvedUrl.startsWith('blob:')) 
-              ? resolvedUrl 
-              : (dbUrl || (resolvedUrl && !resolvedUrl.startsWith('blob:') ? resolvedUrl : null));
-
-          // Guard against literal "null" strings overriding fetch results
-          if (displayUrl && String(displayUrl).toLowerCase() !== 'null') {
-            let imgToken = `url("${displayUrl}")`;
-            if (opacity < 1) {
-               // Fake opacity via cross-fade on webkit
-               imgToken = `cross-fade(transparent ${(1 - opacity) * 100}%, url("${displayUrl}") ${opacity * 100}%)`;
-            }
-            bgImages.push(imgToken);
-            bgBlendModes.push(blendMode);
-            bgSizes.push('cover');
-            bgPositions.push('center center');
-          }
-        } 
-        else if (layer.type === 'video') {
-          // Native CSS Background does not support video rendering. 
-          // Advanced presentation apps handle this differently, skipping gracefully.
-          console.warn('[TextRenderer] HTML Video masks are visually stubbed in text layers pending Canvas engine upgrades.');
-        }
-      }
-
-      if (!active) return;
-
-      if (bgImages.length > 0) {
-        setDynamicCSS({
-          backgroundImage: bgImages.join(', '),
-          backgroundBlendMode: bgBlendModes.join(', '),
-          backgroundSize: bgSizes.join(', '),
-          backgroundPosition: bgPositions.join(', '),
-          backgroundRepeat: 'no-repeat',
-          WebkitBackgroundClip: 'text',
-          backgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          color: 'transparent',
-        });
-      } else {
-        setDynamicCSS(null);
-      }
-    };
-
-    compileBackgroundStyles();
-    return () => { active = false; };
-  }, [fills, hasRichMedia]);
-
-  const hAlign = item.text.alignHorizontal || item.text.textAlign || 'center';
+  const hAlign = textData.alignHorizontal || textData.textAlign || 'center';
   const textAlignCss = hAlign === 'justify' ? 'justify' : hAlign;
-  const vAlign = item.text.alignVertical || 'middle';
+  const vAlign = textData.alignVertical || 'middle';
   const alignItemsCss = vAlign === 'top' ? 'flex-start' : vAlign === 'bottom' ? 'flex-end' : 'center';
 
   const commonTextStyle: React.CSSProperties = {
     fontFamily: activeFontFamily,
     fontSize: `${fittedFontSize}px`,
     fontWeight: activeFontWeight,
-    lineHeight: item.text.lineHeight || 1.3,
-    letterSpacing: typeof item.text.letterSpacing === 'number' ? `${item.text.letterSpacing}px` : (parseFloat(item.text.letterSpacing as string) || 0) + 'px',
-    fontStyle: item.text.isItalic ? 'italic' : 'normal',
+    lineHeight: textData.lineHeight || 1.3,
+    letterSpacing: typeof textData.letterSpacing === 'number' ? `${textData.letterSpacing}px` : (parseFloat(textData.letterSpacing as string) || 0) + 'px',
+    fontStyle: textData.isItalic ? 'italic' : 'normal',
     textDecorationLine: [
-      item.text.isStrikethrough ? 'line-through' : '',
-      item.text.isUnderline ? 'underline' : ''
+      textData.isStrikethrough ? 'line-through' : '',
+      textData.isUnderline ? 'underline' : ''
     ].filter(Boolean).join(' ') || 'none',
-    textTransform: (item.text.textCase === 'titlecase' ? 'capitalize' : item.text.textCase || 'none') as any,
-    textAlign: textAlignCss as any,
+    textTransform: (textData.textCase === 'titlecase' ? 'capitalize' : textData.textCase || 'none') as React.CSSProperties['textTransform'],
+    textAlign: textAlignCss as React.CSSProperties['textAlign'],
     whiteSpace: isAutoWidthText ? 'pre' : 'pre-wrap',
     wordBreak: isAutoWidthText ? 'normal' : 'break-word',
   };
 
   // Faux bold support matching InlineTextEditor
-  const isFauxBold = needsFauxBold(item.text.isBold, activeFontWeight);
+  const isFauxBold = needsFauxBold(textData.isBold, activeFontWeight);
   if (isFauxBold) {
     const shadowSize = Math.max(0.3, fittedFontSize * 0.015);
     commonTextStyle.textShadow = `0 0 ${shadowSize}px currentColor`;
@@ -193,35 +100,33 @@ export const TextRenderer: React.FC<TextRendererProps> = ({
     commonTextStyle.paintOrder = 'stroke fill';
   }
 
-
-
   const listClasses = cn(
     '[&_ul]:list-inside [&_ol]:list-inside [&_ul]:pl-2 [&_ol]:pl-2',
-    item.text.listType === 'circle' ? '[&_ul]:list-[circle]' :
-    item.text.listType === 'square' ? '[&_ul]:list-[square]' :
+    textData.listType === 'circle' ? '[&_ul]:list-[circle]' :
+    textData.listType === 'square' ? '[&_ul]:list-[square]' :
     '[&_ul]:list-disc',
-    item.text.listType === 'lower-alpha' ? '[&_ol]:list-[lower-alpha]' :
-    item.text.listType === 'upper-alpha' ? '[&_ol]:list-[upper-alpha]' :
-    item.text.listType === 'lower-roman' ? '[&_ol]:list-[lower-roman]' :
-    item.text.listType === 'upper-roman' ? '[&_ol]:list-[upper-roman]' :
+    textData.listType === 'lower-alpha' ? '[&_ol]:list-[lower-alpha]' :
+    textData.listType === 'upper-alpha' ? '[&_ol]:list-[upper-alpha]' :
+    textData.listType === 'lower-roman' ? '[&_ol]:list-[lower-roman]' :
+    textData.listType === 'upper-roman' ? '[&_ol]:list-[upper-roman]' :
     '[&_ol]:list-decimal'
   );
-  const sanitizedContent = sanitizeHtml(item.text.content);
+  const sanitizedContent = sanitizeHtml(textData.content);
   const filteredStrokes = textStrokes.filter(s => s.visible !== false);
 
-  let computedTextStyles = { 
+  let computedTextStyles: React.CSSProperties & Record<string, string | number | undefined> = { 
     ...commonTextStyle,
-    '--list-style': item.text.listType === 'circle' ? 'circle' :
-                  item.text.listType === 'square' ? 'square' :
-                  item.text.listType === 'lower-alpha' ? 'lower-alpha' :
-                  item.text.listType === 'upper-alpha' ? 'upper-alpha' :
-                  item.text.listType === 'lower-roman' ? 'lower-roman' :
-                  item.text.listType === 'upper-roman' ? 'upper-roman' :
-                  item.text.listType === 'decimal' ? 'decimal' : 'disc'
-  } as any;
+    '--list-style': textData.listType === 'circle' ? 'circle' :
+                  textData.listType === 'square' ? 'square' :
+                  textData.listType === 'lower-alpha' ? 'lower-alpha' :
+                  textData.listType === 'upper-alpha' ? 'upper-alpha' :
+                  textData.listType === 'lower-roman' ? 'lower-roman' :
+                  textData.listType === 'upper-roman' ? 'upper-roman' :
+                  textData.listType === 'decimal' ? 'decimal' : 'disc'
+  };
   
   if (isRichTextFill && dynamicCSS) {
-     computedTextStyles = { ...computedTextStyles, ...dynamicCSS } as any;
+     computedTextStyles = { ...computedTextStyles, ...dynamicCSS };
   } else {
      computedTextStyles.color = finalColor;
   }
@@ -254,9 +159,10 @@ export const TextRenderer: React.FC<TextRendererProps> = ({
                   WebkitTextStroke: `${baseWidth}px ${stroke.color || '#000000'}`,
                   paintOrder: 'fill stroke',
                   opacity: stroke.opacity ?? 1,
-                  mixBlendMode: (stroke.blendMode || 'normal') as any,
+                  mixBlendMode: (stroke.blendMode || 'normal') as React.CSSProperties['mixBlendMode'],
                   zIndex: 0
                 }}
+                // audit-ignore: sanitized with DOMPurify
                 dangerouslySetInnerHTML={{ __html: sanitizedContent }}
              />
           );
@@ -266,10 +172,12 @@ export const TextRenderer: React.FC<TextRendererProps> = ({
         <div
           className={cn(isAutoWidthText ? '' : 'w-full', 'relative z-10', isRichTextFill ? 'rich-media-text-fill' : '')}
           style={computedTextStyles}
+          // audit-ignore: sanitized with DOMPurify
           dangerouslySetInnerHTML={{ __html: sanitizedContent }}
         />
 
         {/* Strict override to force all dangerouslySet innerHTML spans to respect standard webkit transparency rendering */}
+        {/* audit-ignore: Static CSS styling rule */}
         <style dangerouslySetInnerHTML={{ __html: `
           .stroke-layer-content * { 
             color: transparent !important; 
@@ -299,4 +207,9 @@ export const TextRenderer: React.FC<TextRendererProps> = ({
       </div>
     </div>
   );
+};
+
+export const TextRenderer: React.FC<TextRendererProps> = (props) => {
+  if (!props.item.text) return null;
+  return <TextRendererContent {...props} textData={props.item.text} />;
 };

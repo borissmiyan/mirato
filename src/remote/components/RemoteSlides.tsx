@@ -2,9 +2,11 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Play, Pause, RotateCcw, Image as ImageIcon, ChevronLeft, ChevronRight, Music } from 'lucide-react';
 import { cn } from '../../core/utils/cn';
+import { sanitizeHtml } from '../../core/utils/sanitizeHtml';
 import { PreviewScaler } from './PreviewScaler';
 import { SlideThumbnail } from './SlideThumbnail';
 import SlideContentRenderer from '../../features/presenter/components/slide-editor/SlideContentRenderer';
+import { RemoteOverrides } from './RemoteOverrides';
 
 import { ISlide } from '../../core/types';
 import { RemoteSlideState } from '../types';
@@ -48,10 +50,10 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
     const slideAudio = currentSlide?.type === 'normal' ? currentSlide.audio : undefined;
     const slideAudioScopes = currentSlide?.type === 'normal' ? currentSlide.audioScopes : undefined;
 
-    const settingsObj = slideState.settings as unknown as Record<string, unknown> | undefined;
+    const legacySettings = (slideState.settings ?? {}) as { logo?: { url?: string }; appearance?: { logo?: { url?: string } } };
     const activeLogoUrl = slideState.activeLogoUrl || 
-        (settingsObj?.logo as Record<string, unknown>)?.url as string || 
-        ((settingsObj?.appearance as Record<string, unknown>)?.logo as Record<string, unknown>)?.url as string;
+        legacySettings.logo?.url || 
+        legacySettings.appearance?.logo?.url;
 
     return (
         <div className="flex-1 flex flex-col justify-between gap-4 mb-3 animate-in fade-in slide-in-from-right-4 duration-300 min-h-0 overflow-y-auto pr-1 scroll-smooth">
@@ -101,7 +103,8 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
                                     style={{
                                         fontFamily: slideState.settings?.font?.family || 'inherit'
                                     }}
-                                    dangerouslySetInnerHTML={{ __html: slideState.slidePreviewText || t('remote.no_slide_selected') }}
+                                    // audit-ignore: sanitized with DOMPurify
+                                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(slideState.slidePreviewText || t('remote.no_slide_selected')) }}
                                 />
                             </div>
                         </PreviewScaler>
@@ -118,7 +121,11 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
             <div className="flex flex-col gap-3 mb-2 shrink-0">
                 {/* 3. Media Controls & Overrides */}
                 <div className="grid grid-cols-5 gap-3">
-                    <button onClick={onMediaToggle} className="col-span-1 bg-stone-900/60 py-4 rounded-4xl border border-white/5 active:bg-stone-800 flex flex-col items-center justify-center gap-1.5 active:scale-[0.98] transition-all backdrop-blur-md">
+                    <button 
+                        type="button"
+                        onClick={onMediaToggle} 
+                        className="col-span-1 bg-stone-900/60 py-4 rounded-4xl border border-white/5 active:bg-stone-800 flex flex-col items-center justify-center gap-1.5 apple-press transition-all backdrop-blur-md"
+                    >
                         {slideState.playing ? (
                             <Pause size={20} className="text-accent" fill="currentColor" />
                         ) : (
@@ -129,45 +136,18 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
                         </span>
                     </button>
 
-                    <div className="col-span-3 flex items-center justify-center gap-2 bg-stone-900/60 py-2.5 px-3 rounded-4xl border border-white/5 backdrop-blur-md">
-                        <button
-                            onClick={() => onOverrideToggle('blackout')}
-                            className={cn(
-                                "flex-1 h-full border border-white/5 rounded-2xl flex items-center justify-center active:scale-[0.96] transition-all pt-1",
-                                slideState.activeOverride === 'blackout' ? "bg-red-600 text-white" : "bg-black/40 text-stone-500"
-                            )}
-                        >
-                            <span className="text-lg font-black">{t('remote.blackout_char')}</span>
-                        </button>
-                        <button
-                            onClick={() => onOverrideToggle('logo')}
-                            className={cn(
-                                "flex-1 h-full border border-white/5 rounded-2xl flex items-center justify-center active:scale-[0.96] transition-all overflow-hidden",
-                                slideState.activeOverride === 'logo' ? "bg-red-600 text-white border-accent/20" : "bg-black/40 text-accent/60"
-                            )}
-                        >
-                            {activeLogoUrl ? (
-                                <img
-                                    src={activeLogoUrl}
-                                    alt="Logo"
-                                    className={cn("w-6 h-6 object-contain transition-all", slideState.activeOverride === 'logo' && "brightness-0 invert scale-110")}
-                                />
-                            ) : (
-                                <ImageIcon size={16} />
-                            )}
-                        </button>
-                        <button
-                            onClick={() => onOverrideToggle('whiteout')}
-                            className={cn(
-                                "flex-1 h-full border border-white/5 rounded-2xl flex items-center justify-center active:scale-[0.96] transition-all pt-1",
-                                slideState.activeOverride === 'whiteout' ? "bg-red-600 text-white" : "bg-black/40 text-stone-500"
-                            )}
-                        >
-                            <span className="text-lg font-black">{t('remote.whiteout_char')}</span>
-                        </button>
-                    </div>
+                    <RemoteOverrides 
+                        className="col-span-3"
+                        activeOverride={slideState.activeOverride}
+                        activeLogoUrl={activeLogoUrl}
+                        onOverrideToggle={onOverrideToggle}
+                    />
 
-                    <button onClick={onMediaStop} className="col-span-1 bg-stone-900/60 py-4 rounded-4xl border border-white/5 active:bg-stone-800 flex flex-col items-center justify-center gap-1.5 active:scale-[0.98] transition-all backdrop-blur-md text-stone-500 hover:text-red-500">
+                    <button 
+                        type="button"
+                        onClick={onMediaStop} 
+                        className="col-span-1 bg-stone-900/60 py-4 rounded-4xl border border-white/5 active:bg-stone-800 flex flex-col items-center justify-center gap-1.5 apple-press transition-all backdrop-blur-md text-stone-500 hover:text-red-500"
+                    >
                         <RotateCcw size={20} />
                         <span className="text-[9px] font-black text-stone-600 uppercase tracking-widest">{t('remote.reset')}</span>
                     </button>
@@ -176,23 +156,26 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
                 {/* 4. Bottom Navigation */}
                 <div className="flex flex-col gap-3">
                     <button
+                        type="button"
                         onClick={onShowTimeline}
-                        className="bg-stone-900/60 py-3 rounded-4xl border border-white/5 font-bold text-stone-400 active:bg-stone-800 active:scale-[0.98] transition-all backdrop-blur-md"
+                        className="bg-stone-900/60 py-3 rounded-4xl border border-white/5 font-bold text-stone-400 active:bg-stone-800 apple-press transition-all backdrop-blur-md"
                     >
                         {t('remote.all_slides', 'All Slides')}
                     </button>
                     <div className="grid grid-cols-2 gap-3">
                         <button
+                            type="button"
                             onClick={() => onCommand('PREV')}
-                            className="bg-stone-800/60 text-stone-300 rounded-4xl border border-white/5 font-bold active:bg-stone-700 active:scale-[0.96] transition-all flex flex-col items-center justify-center py-5 backdrop-blur-lg"
+                            className="bg-stone-800/60 text-stone-300 rounded-4xl border border-white/5 font-bold active:bg-stone-700 apple-press transition-all flex flex-col items-center justify-center py-5 backdrop-blur-lg"
                             aria-label={t('remote.previous_slide')}
                         >
                             <ChevronLeft size={42} />
                         </button>
 
                         <button
+                            type="button"
                             onClick={() => onCommand('NEXT')}
-                            className="bg-stone-800/60 text-stone-300 rounded-4xl border border-white/5 font-bold active:bg-stone-700 active:scale-[0.96] transition-all flex flex-col items-center justify-center py-5 backdrop-blur-lg"
+                            className="bg-stone-800/60 text-stone-300 rounded-4xl border border-white/5 font-bold active:bg-stone-700 apple-press transition-all flex flex-col items-center justify-center py-5 backdrop-blur-lg"
                             aria-label={t('remote.next_slide')}
                         >
                             <ChevronRight size={42} />

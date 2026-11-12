@@ -9,7 +9,7 @@ interface ILibraryMediaSectionProps {
     graceLibMediaBins: Array<{ id: string, name: string, mediaIds: string[] }>;
     t: TFunction;
     handleAddBin: () => void;
-    setContextMenu: (menu: { x: number; y: number; item: any; type: 'template' | 'media-bin' | 'template-slide' | 'presentation-bin' | 'presentation' } | null) => void;
+    setContextMenu: (menu: { x: number; y: number; item: Record<string, unknown>; type: 'template' | 'media-bin' | 'template-slide' | 'presentation-bin' | 'presentation' } | null) => void;
 }
 
 export const LibraryMediaSection: React.FC<ILibraryMediaSectionProps> = ({
@@ -24,7 +24,7 @@ export const LibraryMediaSection: React.FC<ILibraryMediaSectionProps> = ({
                 <span className="text-[10px] font-bold text-stone-600 uppercase tracking-widest">{t('media_bins', 'Media Bins')}</span>
                 <button
                     onClick={handleAddBin}
-                    className="p-1 hover:bg-white/5 rounded-lg text-stone-500 hover:text-accent transition-all"
+                    className="p-1 hover:bg-white/5 rounded-xl text-stone-500 hover:text-accent transition-all"
                     title={t('new_media_bin', 'New Media Bin')}
                 >
                     <Plus className="w-4 h-4" />

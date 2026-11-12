@@ -8,6 +8,7 @@ import { LogicalCanvas } from '../slide-editor/LogicalCanvas';
 import { VerseDisplay } from '../bible/VerseDisplay';
 import { MultiVerseDisplay } from '../bible/MultiVerseDisplay';
 import { ParallelVerseDisplay } from '../bible/ParallelVerseDisplay';
+import { Button, IconButton, Badge } from '@/shared/ui';
 
 interface BibleSelectionPreviewProps {
   selectedVerses: Verse[];
@@ -17,7 +18,7 @@ interface BibleSelectionPreviewProps {
   showSecondTranslation: boolean;
   setShowSecondTranslation: (show: boolean) => void;
   setSecondTranslationId: (id: string | null) => void;
-  translations: any[];
+  translations: Array<{ id: string; name: string }>;
   selectedTranslationId: string;
   insertMode: 'single' | 'multiple';
   carouselIndex: number;
@@ -93,19 +94,14 @@ export const BibleSelectionPreview: React.FC<BibleSelectionPreviewProps> = ({
           </div>
 
           <div className="flex items-center gap-3 shrink-0">
-            <button
-              type="button"
+            <IconButton
+              icon={<ChevronLeft className="w-4 h-4" />}
+              label="Previous Slide"
+              size="xs"
+              variant="surface"
               disabled={clampedIndex === 0}
               onClick={() => setCarouselIndex(i => Math.max(0, i - 1))}
-              className={cn(
-                "p-2 rounded-xl border transition-all cursor-pointer",
-                clampedIndex === 0
-                  ? "border-white/5 text-stone-700 cursor-not-allowed"
-                  : "border-white/10 text-stone-300 hover:bg-white/5 hover:text-white"
-              )}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+            />
             <div className="flex items-center gap-1.5">
               {selectedVerses.map((v, idx) => (
                 <button
@@ -113,27 +109,22 @@ export const BibleSelectionPreview: React.FC<BibleSelectionPreviewProps> = ({
                   key={v.verseNumber}
                   onClick={() => setCarouselIndex(idx)}
                   className={cn(
-                    "transition-all rounded-full cursor-pointer",
-                    idx === clampedIndex ? "w-6 h-2 bg-amber-500" : "w-2 h-2 bg-stone-700 hover:bg-stone-500"
+                    "transition-all duration-200 rounded-full cursor-pointer",
+                    idx === clampedIndex ? "w-6 h-2 bg-accent shadow-sm" : "w-2 h-2 bg-stone-700 hover:bg-stone-500"
                   )}
                 />
               ))}
             </div>
-            <button
-              type="button"
+            <IconButton
+              icon={<ChevronRight className="w-4 h-4" />}
+              label="Next Slide"
+              size="xs"
+              variant="surface"
               disabled={clampedIndex >= totalCarouselSlides - 1}
               onClick={() => setCarouselIndex(i => Math.min(totalCarouselSlides - 1, i + 1))}
-              className={cn(
-                "p-2 rounded-xl border transition-all cursor-pointer",
-                clampedIndex >= totalCarouselSlides - 1
-                  ? "border-white/5 text-stone-700 cursor-not-allowed"
-                  : "border-white/10 text-stone-300 hover:bg-white/5 hover:text-white"
-              )}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+            />
           </div>
-          <span className="text-[10px] font-bold text-stone-600 shrink-0">
+          <span className="text-[10px] font-bold text-stone-500 shrink-0">
             {t('slide_of', 'Slide {{current}} of {{total}}', { current: clampedIndex + 1, total: totalCarouselSlides })}
           </span>
         </div>
@@ -183,12 +174,13 @@ export const BibleSelectionPreview: React.FC<BibleSelectionPreviewProps> = ({
       <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <Monitor className="w-3.5 h-3.5 text-stone-500" />
-          <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
+          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">
             {t('slide_preview', 'Slide Preview')}
           </span>
         </div>
-        <button
-          type="button"
+        <Button
+          size="xs"
+          variant={showSecondTranslation ? "primary" : "secondary"}
           onClick={() => {
             if (showSecondTranslation) {
               setShowSecondTranslation(false);
@@ -197,24 +189,18 @@ export const BibleSelectionPreview: React.FC<BibleSelectionPreviewProps> = ({
               setShowSecondTranslation(true);
             }
           }}
-          className={cn(
-            "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer border",
-            showSecondTranslation
-              ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
-              : "text-stone-500 hover:text-stone-300 border-white/5 hover:border-white/10"
-          )}
+          leftIcon={<Languages className="w-3.5 h-3.5" />}
         >
-          <Languages className="w-3.5 h-3.5" />
           {t('parallel', 'Parallel')}
-        </button>
+        </Button>
       </div>
 
       {showSecondTranslation && (
         <div className="px-4 py-2.5 border-b border-white/5 flex items-center gap-2 shrink-0">
-          <span className="text-[10px] font-black text-stone-600 uppercase tracking-widest shrink-0">
+          <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest shrink-0">
             {t('second_translation', '2nd Translation')}
           </span>
-          <div className="flex gap-1 flex-wrap min-w-0">
+          <div className="flex gap-1.5 flex-wrap min-w-0">
             {translations
               .filter(tr => tr.id !== selectedTranslationId)
               .map(tr => (
@@ -223,10 +209,10 @@ export const BibleSelectionPreview: React.FC<BibleSelectionPreviewProps> = ({
                   key={tr.id}
                   onClick={() => setSecondTranslationId(secondTranslationId === tr.id ? null : tr.id)}
                   className={cn(
-                    "px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer border",
+                    "px-2.5 py-1 rounded-xl text-[10px] font-bold transition-all cursor-pointer border select-none active:scale-[0.97]",
                     secondTranslationId === tr.id
-                      ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                      : "text-stone-500 hover:text-stone-300 border-white/5 hover:border-white/10"
+                      ? "bg-accent/15 text-accent border-accent/30 shadow-sm"
+                      : "text-stone-400 hover:text-stone-200 border-white/5 hover:border-white/10 bg-white/5"
                   )}
                 >
                   {tr.name}
@@ -244,15 +230,15 @@ export const BibleSelectionPreview: React.FC<BibleSelectionPreviewProps> = ({
         <div className="px-4 pb-3 shrink-0">
           <div className="bg-stone-900/80 border border-white/5 rounded-xl px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
-              <BookOpen className="w-3.5 h-3.5 text-amber-500/70 shrink-0" />
-              <span className="text-xs font-bold text-amber-500 truncate">
+              <BookOpen className="w-3.5 h-3.5 text-accent/70 shrink-0" />
+              <span className="text-xs font-bold text-accent truncate">
                 {referenceText}
               </span>
             </div>
             {secondTranslationId && (
-              <span className="text-[10px] font-bold text-stone-500 shrink-0 ml-2">
+              <Badge variant="secondary" size="xs">
                 + {translations.find(tr => tr.id === secondTranslationId)?.name}
-              </span>
+              </Badge>
             )}
           </div>
         </div>

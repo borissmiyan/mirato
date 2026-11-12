@@ -89,7 +89,7 @@ export const ComicDotsTransition: React.FC<{
         gridTemplateColumns: `repeat(${cols}, 1fr)`,
         gridTemplateRows: `repeat(${rows}, 1fr)`,
         '--transition-duration': `${transition.duration}s`
-      } as any}
+      } as React.CSSProperties}
     >
       {cells.map((_, i) => {
         const r = Math.floor(i / cols);

@@ -25,17 +25,18 @@ export const TypeSelector: React.FC<TypeSelectorProps> = ({ activeLayer, onTypeC
             {types.map(type => (
                 <button
                     key={type.id}
-                    onClick={() => onTypeChange(type.id as any)}
+                    type="button"
+                    onClick={() => onTypeChange(type.id as IStyleLayer['type'])}
                     className={cn(
-                        "flex flex-col items-center gap-1.5 py-2.5 rounded-lg transition-all active:scale-95",
+                        "flex flex-col items-center gap-1.5 py-2.5 rounded-xl transition-all cursor-pointer apple-press",
                         activeLayer?.type === type.id 
-                            ? "bg-white/5 text-accent shadow-lg ring-1 ring-white/10" 
-                            : "text-stone-600 hover:bg-white/5 hover:text-stone-400"
+                            ? "bg-white/10 text-accent shadow-sm ring-1 ring-white/10 font-bold" 
+                            : "text-stone-500 hover:bg-white/5 hover:text-stone-300"
                     )}
                     title={type.label}
                 >
                     <type.icon className="w-4 h-4" />
-                    <span className="text-[7px] font-black uppercase tracking-tighter opacity-50">{type.label}</span>
+                    <span className="text-[7px] font-black uppercase tracking-tighter opacity-80">{type.label}</span>
                 </button>
             ))}
         </div>

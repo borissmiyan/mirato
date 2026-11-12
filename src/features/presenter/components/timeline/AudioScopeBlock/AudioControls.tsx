@@ -25,14 +25,15 @@ export const AudioVolumeBadge: React.FC<AudioVolumeBadgeProps> = ({
         <div
             onPointerDown={onVolumeBadgeDown}
             className={cn(
-                "bg-stone-900/60 h-7 px-2 rounded-lg border border-white/5 backdrop-blur-xl shadow-lg flex items-center gap-2 cursor-ew-resize transition-all hover:bg-stone-800/80 hover:border-white/10 select-none group/vol",
+                "bg-stone-900/60 h-7 px-2 rounded-xl border border-white/5 backdrop-blur-xl shadow-lg flex items-center gap-2 cursor-ew-resize transition-all hover:bg-stone-800/80 hover:border-white/10 select-none group/vol",
                 isEditingVolume && "ring-2 ring-purple-500/50"
             )}
         >
             <button
+                type="button"
                 onClick={onToggleMute}
                 className={cn(
-                    "transition-colors cursor-pointer",
+                    "transition-colors cursor-pointer apple-press",
                     scope.isMuted ? "text-red-400" : "text-purple-300 hover:text-white"
                 )}
             >
@@ -84,6 +85,7 @@ export const AudioFadeHandles: React.FC<AudioFadeHandlesProps> = ({
             {/* Left Side */}
             <div className="absolute left-0 top-0 w-8 h-full">
                 <button
+                    type="button"
                     onPointerDown={onFadeInDown}
                     className={cn(
                         "absolute top-0 left-0 w-8 h-8 transition-all flex items-start justify-start p-1 rounded-br-lg pointer-events-auto cursor-pointer",
@@ -101,6 +103,7 @@ export const AudioFadeHandles: React.FC<AudioFadeHandlesProps> = ({
             {/* Right Side */}
             <div className="absolute right-0 top-0 w-8 h-full">
                 <button
+                    type="button"
                     onPointerDown={onFadeOutDown}
                     className={cn(
                         "absolute top-0 right-0 w-8 h-8 transition-all flex items-start justify-end p-1 rounded-bl-lg pointer-events-auto cursor-pointer",

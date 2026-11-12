@@ -37,7 +37,7 @@ const HistoryPanel: React.FC = React.memo(() => {
                 </div>
                 <button
                     onClick={clearHistory}
-                    className="p-1.5 hover:bg-red-500/10 hover:text-red-400 text-stone-500 rounded-xl transition-all"
+                    className="p-1.5 hover:bg-red-500/10 hover:text-red-400 text-stone-500 rounded-xl transition-all cursor-pointer apple-press"
                     title={t('clear_history', 'Clear History')}
                     aria-label={t('clear_history', 'Clear History')}
                 >
@@ -50,7 +50,7 @@ const HistoryPanel: React.FC = React.memo(() => {
                     <button
                         key={`${verse.id}-${index}`}
                         onClick={() => setActiveVerse(verse)}
-                        className="w-full text-left p-3 rounded-xl bg-stone-950/40 border border-white/5 hover:border-amber-500/30 hover:bg-stone-800/60 transition-all group"
+                        className="w-full text-left p-2.5 rounded-xl bg-stone-950/40 border border-white/5 hover:border-amber-500/30 hover:bg-stone-800/60 transition-all group cursor-pointer apple-press"
                     >
                         <div className="flex items-center justify-between mb-1">
                             <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">

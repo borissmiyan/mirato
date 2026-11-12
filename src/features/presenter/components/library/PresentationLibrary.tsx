@@ -4,6 +4,7 @@ import { useAtom } from 'jotai';
 import { db } from '@/core/db';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
+import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
 import { BookOpen, Monitor, Music, Coins, Baby, Mic2, Megaphone, Plus, Presentation, LayoutTemplate, Layers, Layout, type LucideIcon, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -26,14 +27,19 @@ import { LibraryImportService } from '../../services/LibraryImportService';
 import { LibraryTemplatesSection } from './LibraryTemplatesSection';
 import { LibraryPresentationsSection } from './LibraryPresentationsSection';
 import { LibraryMediaSection } from './LibraryMediaSection';
+import { LibraryContextMenu, LibraryContextMenuData } from './LibraryContextMenu';
 
 import { LibraryHeader } from './LibraryHeader';
-import { LibraryContextMenu } from './LibraryContextMenu';
 import { useLibraryInteraction } from '../../hooks/useLibraryInteraction';
 
 const ICON_MAP: Record<string, LucideIcon> = {
     Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus, Presentation, Layers, Layout
 };
+
+const EMPTY_PRESENTATIONS: IPresentationFile[] = [];
+const EMPTY_BINS: IPresentationBin[] = [];
+const EMPTY_BLOCKS: IBlock[] = [];
+const EMPTY_TEMPLATES: ITemplate[] = [];
 
 interface IPresentationLibraryProps {
     className?: string;
@@ -74,26 +80,52 @@ const PresentationLibrary: React.FC<IPresentationLibraryProps> = ({ className })
         removeTemplate,
         renameTemplateSlide,
         removeTemplateSlide
-    } = usePresentationStore();
+    } = usePresentationStore(
+        useShallow(s => ({
+            activePresentationId: s.activePresentationId,
+            activeServiceId: s.activeServiceId,
+            activeService: s.activeService,
+            updatePresentationSlides: s.updatePresentationSlides,
+            setPreviewSlide: s.setPreviewSlide,
+            activeBlockId: s.activeBlockId,
+            setActiveBlockId: s.setActiveBlockId,
+            previewSlideId: s.previewSlideId,
+            graceLibSection: s.graceLibSection,
+            setGraceLibSection: s.setGraceLibSection,
+            graceLibMediaBins: s.graceLibMediaBins,
+            addMediaBin: s.addMediaBin,
+            updateMediaBin: s.updateMediaBin,
+            removeMediaBin: s.removeMediaBin,
+            templateNavPath: s.templateNavPath,
+            pushTemplateNav: s.pushTemplateNav,
+            popTemplateNav: s.popTemplateNav,
+            setTemplateNavPath: s.setTemplateNavPath,
+            presentationBinNavPath: s.presentationBinNavPath,
+            setPresentationBinNavPath: s.setPresentationBinNavPath,
+            createPresentationBin: s.createPresentationBin,
+            renamePresentationBin: s.renamePresentationBin,
+            removePresentationBin: s.removePresentationBin,
+            movePresentationToBin: s.movePresentationToBin,
+            overrideTemplateSlide: s.overrideTemplateSlide,
+            updateTemplate: s.updateTemplate,
+            removeTemplate: s.removeTemplate,
+            renameTemplateSlide: s.renameTemplateSlide,
+            removeTemplateSlide: s.removeTemplateSlide
+        }))
+    );
 
-    const { openModal: openGlobalModal } = useModalStore();
+    const openGlobalModal = useModalStore(s => s.openModal);
     const [devMode] = useAtom(devModeAtom);
 
-    const [contextMenu, setContextMenu] = useState<{
-        x: number;
-        y: number;
-        item: ITemplate | ITemplateSlide | IPresentationBin | IPresentationFile | { id: string; name: string; mediaIds: string[] };
-        type: 'template' | 'media-bin' | 'template-slide' | 'presentation-bin' | 'presentation';
-    } | null>(null);
+    const [contextMenu, setContextMenu] = useState<LibraryContextMenuData | null>(null);
 
-    const blocks = useLiveQuery(() => db.blocks.toArray()) || [];
+    const blocks = useLiveQuery(() => db.blocks.toArray()) ?? EMPTY_BLOCKS;
     const presentation = useLiveQuery(
         () => activePresentationId ? db.presentationFiles.get(activePresentationId) : undefined,
         [activePresentationId]
     );
-    const allPresentations = useLiveQuery(() => db.presentationFiles.toArray()) || [];
-    const presentationBins = useLiveQuery(() => db.presentationBins.toArray()) || [];
-    const allTemplates = useLiveQuery(() => db.templates.toArray()) || [];
+    const presentationBins = useLiveQuery(() => db.presentationBins.toArray());
+    const allTemplates = useLiveQuery(() => db.templates.toArray()) ?? EMPTY_TEMPLATES;
 
     const selectedSlide = useMemo(() =>
         presentation?.slides?.find((s: ISlide) => s.id === previewSlideId),
@@ -102,11 +134,18 @@ const PresentationLibrary: React.FC<IPresentationLibraryProps> = ({ className })
 
     const currentBinId = presentationBinNavPath.length > 0 ? presentationBinNavPath[presentationBinNavPath.length - 1] : null;
 
-    const filteredPresentations = useMemo(() => {
-        return allPresentations.filter((p: IPresentationFile) => !p.serviceId && (p.binId || null) === (currentBinId || null));
-    }, [allPresentations, currentBinId]);
+    // Load only library presentations (excluding hymns and service presentations to save RAM)
+    const filteredPresentations = useLiveQuery(async () => {
+        if (currentBinId) {
+            return db.presentationFiles.where('binId').equals(currentBinId).toArray();
+        }
+        return db.presentationFiles
+            .filter((p: IPresentationFile) => !p.serviceId && !p.hymnalId && !p.binId)
+            .toArray();
+    }, [currentBinId]) ?? EMPTY_PRESENTATIONS;
 
     const filteredBins = useMemo(() => {
+        if (!presentationBins) return EMPTY_BINS;
         return presentationBins.filter((b: IPresentationBin) => (b.parentId || null) === (currentBinId || null));
     }, [presentationBins, currentBinId]);
 
@@ -187,7 +226,7 @@ const PresentationLibrary: React.FC<IPresentationLibraryProps> = ({ className })
         setPreviewSlide(newSlide.id);
     };
 
-    const handleOverrideTemplateSlideInLibrary = async (template: ITemplate, layoutSlideId: string) => {
+    const handleOverrideTemplateSlideInLibrary = async (template: ITemplate | { id: string }, layoutSlideId: string) => {
         if (!selectedSlide) return;
         await overrideTemplateSlide(template.id, layoutSlideId, selectedSlide, devMode);
     };
@@ -200,7 +239,7 @@ const PresentationLibrary: React.FC<IPresentationLibraryProps> = ({ className })
                 graceLibSection={graceLibSection}
                 templateNavPath={templateNavPath}
                 presentationBinNavPath={presentationBinNavPath}
-                presentationBins={presentationBins}
+                presentationBins={presentationBins ?? EMPTY_BINS}
                 isRu={isRu}
                 t={t}
                 setTemplateNavPath={setTemplateNavPath}
@@ -288,8 +327,8 @@ const PresentationLibrary: React.FC<IPresentationLibraryProps> = ({ className })
                 )}
             </div>
 
-            <div className="shrink-0 p-3 border-t border-white/5 bg-stone-950/40 relative z-30">
-                <PresentationSelector className="h-[60px]" />
+            <div className="shrink-0 p-3 border-t border-white/5 bg-stone-950/60 relative z-30">
+                <PresentationSelector />
             </div>
 
             <LibraryContextMenu

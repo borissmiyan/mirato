@@ -25,6 +25,9 @@ vi.mock('@/core/db', () => ({
       get: vi.fn(),
     },
     audioScopes: {
+      get: vi.fn(),
+      add: vi.fn(),
+      put: vi.fn(),
       where: vi.fn().mockReturnThis(),
       equals: vi.fn().mockReturnThis(),
       toArray: vi.fn().mockResolvedValue([]),

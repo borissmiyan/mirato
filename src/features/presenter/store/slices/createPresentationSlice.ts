@@ -1,6 +1,6 @@
 import { db } from '@/core/db';
 import { PresentationSliceCreator } from '../types';
-import { IPresentationFile, IServiceFile } from '@/core/types';
+import { IPresentationFile, IServiceFile, ISlide, INestedSlide, ICanvasSlide } from '@/core/types';
 import { toast } from '@/core/utils/toast';
 import i18n from '@/core/i18n';
 
@@ -61,6 +61,8 @@ export const createPresentationSlice: PresentationSliceCreator = (set, get) => (
             name,
             serviceId: options?.serviceId,
             isMaster: options?.isMaster,
+            hymnalId: options?.hymnalId,
+            metadata: options?.metadata,
             createdAt: now,
             updatedAt: now,
             lastOpened: now,
@@ -179,9 +181,9 @@ export const createPresentationSlice: PresentationSliceCreator = (set, get) => (
             order: i
         }));
 
-        const updateNestedServiceId = async (slidesToCheck: any[]) => {
+        const updateNestedServiceId = async (slidesToCheck: ISlide[]) => {
             for (const s of slidesToCheck) {
-                const nestedId = s.type === 'nested' ? s.presentationId : s.masterPresentationId || s.linkedPresentationId || s.localNestedPresentationId;
+                const nestedId = s.type === 'nested' ? (s as INestedSlide).presentationId : (s as ICanvasSlide).masterPresentationId || (s as ICanvasSlide).linkedPresentationId || (s as ICanvasSlide).localNestedPresentationId;
                 if (nestedId) {
                     const nestedPres = await db.presentationFiles.get(nestedId);
                     if (nestedPres && nestedPres.serviceId !== activeServiceId) {

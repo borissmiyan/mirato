@@ -101,7 +101,13 @@ export const InlineBackgroundPicker: React.FC<IInlineBackgroundPickerProps> = ({
                         <span className="text-[9px] font-black text-stone-500 uppercase tracking-[0.2em]">{label}</span>
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={handleAddLayer} className="cursor-pointer p-1 hover:bg-white/10 rounded-lg active:bg-white/20 transition-all">
+                        <button
+                            type="button"
+                            onClick={handleAddLayer}
+                            className="cursor-pointer p-1 hover:bg-white/10 rounded-xl transition-all apple-press"
+                            title="Add layer"
+                            aria-label="Add layer"
+                        >
                             <Plus className="w-3.5 h-3.5 text-stone-400 hover:text-accent transition-colors" />
                         </button>
                     </div>
@@ -154,7 +160,7 @@ export const ColorPickerField: React.FC<IColorPickerFieldProps> = ({ label, valu
     const triggerRef = useRef<HTMLDivElement>(null);
 
     return (
-        <div className="flex items-center gap-1.5 bg-black/40 px-2 py-1.5 rounded-lg border border-white/5 flex-1 min-w-0 group hover:border-white/20 transition-colors w-[60px] relative">
+        <div className="flex items-center gap-1.5 bg-black/40 px-2 py-1.5 rounded-xl border border-white/5 flex-1 min-w-0 group hover:border-white/20 transition-colors w-[60px] relative">
             <span className="text-[10px] font-bold text-stone-400 uppercase w-2 shrink-0 select-none pointer-events-none text-center" title="Color Picker">{label}</span>
             <div
                 ref={triggerRef}
@@ -172,10 +178,12 @@ export const ColorPickerField: React.FC<IColorPickerFieldProps> = ({ label, valu
             </div>
             {value && (
                 <button
+                    type="button"
                     onClick={(e) => { e.stopPropagation(); onChange(''); }}
                     onMouseDown={(e) => e.preventDefault()}
-                    className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 text-stone-600 rounded cursor-pointer"
+                    className="p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:text-red-400 text-stone-600 rounded cursor-pointer apple-press"
                     title="Clear color"
+                    aria-label="Clear color"
                 >
                     <X className="w-2.5 h-2.5" />
                 </button>

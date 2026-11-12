@@ -15,8 +15,11 @@ export interface UseMetadataReturn {
  * This prevents multiple components from querying the entire tables individually.
  */
 export function useMetadata(): UseMetadataReturn {
-  const blocks = useLiveQuery(() => db.blocks.toArray(), []) || [];
-  const templates = useLiveQuery(() => db.templates.toArray(), []) || [];
+  const liveBlocks = useLiveQuery(() => db.blocks.toArray(), []);
+  const liveTemplates = useLiveQuery(() => db.templates.toArray(), []);
+
+  const blocks = useMemo(() => liveBlocks || [], [liveBlocks]);
+  const templates = useMemo(() => liveTemplates || [], [liveTemplates]);
 
   const blocksMap = useMemo(() => new Map(blocks.map(b => [b.id, b])), [blocks]);
   const templatesMap = useMemo(() => new Map(templates.map(t => [t.id, t])), [templates]);

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@/core/utils/cn';
 import { ISlide, ICanvasSlide, INestedSlide, IBlock, ITemplate, IPresentationFile } from '@/core/types';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
@@ -20,6 +21,7 @@ interface NestedPresentationTileProps {
     nestedPresentation: IPresentationFile;
     blocksMap: Map<string, IBlock>;
     templatesMap: Map<string, ITemplate>;
+    presentationsMap: Map<string, IPresentationFile>;
     lang: string;
     previewSlideId: string | null;
     selectedPresentationId: string | null;
@@ -42,10 +44,23 @@ const NestedPresentationTile: React.FC<NestedPresentationTileProps> = ({
     onContextMenu,
 }) => {
     const { t } = useTranslation();
-    const { setPreviewSlide, setLiveSlide, setActivePresentation, toggleSlideExpansion, activePresentationId } = usePresentationStore();
+    const { setPreviewSlide, setLiveSlide, setActivePresentation, toggleSlideExpansion, activePresentationId } = usePresentationStore(
+        useShallow(s => ({
+            setPreviewSlide: s.setPreviewSlide,
+            setLiveSlide: s.setLiveSlide,
+            setActivePresentation: s.setActivePresentation,
+            toggleSlideExpansion: s.toggleSlideExpansion,
+            activePresentationId: s.activePresentationId,
+        }))
+    );
 
     if (!slide.isExpanded) return null;
 
+    const isHymn = Boolean(
+        nestedPresentation.hymnalId || 
+        nestedPresentation.metadata?.isHymn || 
+        nestedPresentation.metadata?.hymnOrder
+    );
     const isLinked = slide.type === 'normal' && Boolean((slide as ICanvasSlide).linkedPresentationId);
 
     return (
@@ -53,7 +68,7 @@ const NestedPresentationTile: React.FC<NestedPresentationTileProps> = ({
             {/* Left accent bar */}
             <div className={cn(
                 'w-1 h-12 rounded-full shrink-0',
-                isLinked ? 'bg-accent/30' : 'bg-orange-500/20'
+                isHymn ? 'bg-amber-400/40' : (isLinked ? 'bg-accent/30' : 'bg-orange-500/20')
             )} />
 
             <div className="flex gap-2.5">
@@ -81,7 +96,7 @@ const NestedPresentationTile: React.FC<NestedPresentationTileProps> = ({
                                 }
                             }}
                             className={cn(
-                                'group/nested relative shrink-0 w-24 aspect-video rounded-lg border transition-all cursor-pointer overflow-hidden',
+                                'group/nested relative shrink-0 w-24 aspect-video rounded-xl border transition-all cursor-pointer overflow-hidden',
                                 isNSel
                                     ? 'border-accent ring-1 ring-accent/30 scale-105 z-10'
                                     : 'border-white/5 hover:border-white/20 bg-stone-900/50'
@@ -114,23 +129,27 @@ const NestedPresentationTile: React.FC<NestedPresentationTileProps> = ({
                     );
                 })}
 
-                {/* Edit Nested Button */}
-                <button
-                    onClick={() => setActivePresentation(nestedPresentation.id)}
-                    className="w-10 aspect-video rounded-lg border border-dashed border-white/10 flex flex-col items-center justify-center gap-1 hover:border-accent/40 hover:bg-accent/5 transition-all group"
-                    title={t('edit_nested_presentation', 'Open for full editing')}
-                >
-                    <ExternalLink className="w-3 h-3 text-stone-600 group-hover:text-accent" />
-                    <span className="text-[6px] font-bold text-stone-700 uppercase group-hover:text-accent/70">
-                        {t('edit', 'Edit')}
-                    </span>
-                </button>
+                {/* Edit Nested Button - hidden for hymns (read-only) */}
+                {!isHymn && (
+                    <button
+                        type="button"
+                        onClick={() => setActivePresentation(nestedPresentation.id)}
+                        className="w-10 aspect-video rounded-xl border border-dashed border-white/10 flex flex-col items-center justify-center gap-1 hover:border-accent/40 hover:bg-accent/5 transition-all group cursor-pointer apple-press"
+                        title={t('edit_nested_presentation', 'Open for full editing')}
+                        aria-label={t('edit_nested_presentation', 'Open for full editing')}
+                    >
+                        <ExternalLink className="w-3 h-3 text-stone-600 group-hover:text-accent" />
+                        <span className="text-[6px] font-bold text-stone-700 uppercase group-hover:text-accent/70">
+                            {t('edit', 'Edit')}
+                        </span>
+                    </button>
+                )}
             </div>
 
             {/* Right accent bar */}
             <div className={cn(
                 'w-1 h-12 rounded-full shrink-0',
-                isLinked ? 'bg-accent/30' : 'bg-orange-500/20'
+                isHymn ? 'bg-amber-400/40' : (isLinked ? 'bg-accent/30' : 'bg-orange-500/20')
             )} />
         </div>
     );

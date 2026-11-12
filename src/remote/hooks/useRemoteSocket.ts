@@ -1,21 +1,41 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
 import { rewriteMediaUrls } from '../utils/mediaUrlRewriter';
-import { RemoteSlideState } from '../types';
+import { RemoteSlideState, RemoteSocketOptions } from '../types';
+import { useRemoteLifecycleSync } from './useRemoteLifecycleSync';
 
-const getWsUrl = () => {
+export type { RemoteSocketOptions };
+
+const getWsUrl = (customHost?: string, customPort?: number) => {
+    if (customHost) {
+        return `ws://${customHost}:${customPort || 3211}`;
+    }
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.hostname}:3211`;
+    const searchParams = new URLSearchParams(window.location.search);
+    const overridePort = searchParams.get('wsPort');
+
+    let port = '3211';
+    if (overridePort) {
+        port = overridePort;
+    } else if (window.location.port && window.location.port !== '3210' && window.location.port !== '5173') {
+        port = window.location.port;
+    }
+    return `${protocol}//${window.location.hostname || '127.0.0.1'}:${port}`;
 };
 
-export const useRemoteSocket = () => {
-    const { i18n } = useTranslation();
+export const useRemoteSocket = (options?: RemoteSocketOptions) => {
     const [connected, setConnected] = useState(false);
     const [authError, setAuthError] = useState('');
     const [slideState, setSlideState] = useState<RemoteSlideState | null>(null);
     
+    const optionsRef = useRef(options);
+    useEffect(() => {
+        optionsRef.current = options;
+    }, [options]);
+
     const wsRef = useRef<WebSocket | null>(null);
     const pendingRequestsRef = useRef<Record<string, (results: unknown[]) => void>>({});
+    const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pendingSignalsRef = useRef<unknown[]>([]);
 
     // Reconnection & backoff state refs
     const targetPinRef = useRef<string>('');
@@ -23,6 +43,13 @@ export const useRemoteSocket = () => {
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const maxReconnectAttempts = 5;
     const isManualDisconnectRef = useRef(false);
+
+    const cleanupHeartbeat = useCallback(() => {
+        if (heartbeatTimerRef.current) {
+            clearInterval(heartbeatTimerRef.current);
+            heartbeatTimerRef.current = null;
+        }
+    }, []);
 
     const cleanupReconnect = useCallback(() => {
         if (reconnectTimerRef.current) {
@@ -33,6 +60,7 @@ export const useRemoteSocket = () => {
 
     const connect = useCallback((pin: string) => {
         cleanupReconnect();
+        cleanupHeartbeat();
         isManualDisconnectRef.current = false;
         targetPinRef.current = pin;
 
@@ -42,14 +70,16 @@ export const useRemoteSocket = () => {
         }
         
         setAuthError('');
-        const ws = new WebSocket(getWsUrl());
+        const ws = new WebSocket(getWsUrl(optionsRef.current?.host, optionsRef.current?.port));
 
         ws.onopen = () => {
             const token = localStorage.getItem('remote_token');
             ws.send(JSON.stringify({
                 type: 'AUTH',
                 pin,
-                token
+                token,
+                role: optionsRef.current?.role || 'remote',
+                speakerName: optionsRef.current?.speakerName
             }));
         };
 
@@ -57,18 +87,51 @@ export const useRemoteSocket = () => {
             try {
                 const data = JSON.parse(event.data);
 
+                if (data.type === 'PONG') {
+                    return;
+                }
+
+                if (data.type === 'RELAY_SIGNAL') {
+                    optionsRef.current?.onSignal?.(data.signal);
+                    return;
+                }
+
+                if (data.type === 'PRIVACY_UPDATE') {
+                    optionsRef.current?.onPrivacyChange?.(data.active);
+                    return;
+                }
+
                 if (data.type === 'AUTH_SUCCESS') {
                     setConnected(true);
                     reconnectCountRef.current = 0;
-                    localStorage.setItem('remote_token', data.token);
-                    localStorage.setItem('remote_pin', pin);
+                    if (optionsRef.current?.role === 'remote') {
+                        localStorage.setItem('remote_token', data.token);
+                        localStorage.setItem('remote_pin', pin);
+                    }
                     ws.send(JSON.stringify({ type: 'COMMAND', command: 'GET_STATE' }));
+
+                    // Flush any pending WebRTC signals created before auth completed
+                    while (pendingSignalsRef.current.length > 0) {
+                        const sig = pendingSignalsRef.current.shift();
+                        ws.send(JSON.stringify({ type: 'RELAY_SIGNAL', signal: sig }));
+                    }
+
+                    // Start NAT keep-alive heartbeat every 15 seconds
+                    cleanupHeartbeat();
+                    heartbeatTimerRef.current = setInterval(() => {
+                        if (wsRef.current?.readyState === WebSocket.OPEN) {
+                            wsRef.current.send(JSON.stringify({ type: 'PING' }));
+                        }
+                    }, 15000);
                 } else if (data.type === 'AUTH_ERROR') {
                     setAuthError(data.message);
                     setConnected(false);
                     isManualDisconnectRef.current = true;
-                    localStorage.removeItem('remote_pin');
-                    localStorage.removeItem('remote_token');
+                    if (optionsRef.current?.role === 'remote') {
+                        localStorage.removeItem('remote_pin');
+                        localStorage.removeItem('remote_token');
+                    }
+                    cleanupHeartbeat();
                 } else if (data.type === 'STATE_UPDATE') {
                     const transformed = rewriteMediaUrls(data.payload);
                     setSlideState(transformed);
@@ -84,11 +147,19 @@ export const useRemoteSocket = () => {
             }
         };
 
+        ws.onerror = () => {
+            if (optionsRef.current?.role === 'transmitter') {
+                setAuthError('Не удалось подключиться к проектору. Проверьте сеть или статус приёмника.');
+                isManualDisconnectRef.current = true;
+            }
+        };
+
         ws.onclose = () => {
             setConnected(false);
+            cleanupHeartbeat();
             
-            // Auto reconnect if not manually disconnected and attempts remain
-            if (!isManualDisconnectRef.current && targetPinRef.current && reconnectCountRef.current < maxReconnectAttempts) {
+            const isTransmitter = optionsRef.current?.role === 'transmitter';
+            if (!isManualDisconnectRef.current && targetPinRef.current && reconnectCountRef.current < maxReconnectAttempts && !isTransmitter) {
                 const delay = Math.min(10000, 1000 * Math.pow(2, reconnectCountRef.current));
                 
                 reconnectCountRef.current += 1;
@@ -98,7 +169,7 @@ export const useRemoteSocket = () => {
             }
         };
         wsRef.current = ws;
-    }, [cleanupReconnect]);
+    }, [cleanupReconnect, cleanupHeartbeat]);
 
     const sendCommand = useCallback((command: string, payload?: unknown) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -110,7 +181,7 @@ export const useRemoteSocket = () => {
         return new Promise((resolve) => {
             const requestId = Math.random().toString(36).substring(7);
             pendingRequestsRef.current[requestId] = resolve as (results: unknown[]) => void;
-            sendCommand(type, { ...payload, requestId });
+            sendCommand('BIBLE_QUERY', { type, ...payload, requestId });
         });
     }, [sendCommand]);
 
@@ -119,43 +190,54 @@ export const useRemoteSocket = () => {
         targetPinRef.current = '';
         reconnectCountRef.current = 0;
         cleanupReconnect();
+        cleanupHeartbeat();
 
         if (wsRef.current) {
             wsRef.current.onclose = null;
             wsRef.current.close();
             wsRef.current = null;
         }
+        pendingSignalsRef.current = [];
         setConnected(false);
-    }, [cleanupReconnect]);
+    }, [cleanupReconnect, cleanupHeartbeat]);
 
-    // Theme & Language Sync
-    useEffect(() => {
-        const theme = slideState?.themeAccent || 
-            slideState?.settings?.background?.[0]?.color || 
-            ((slideState?.settings as unknown as Record<string, unknown>)?.appearance as Record<string, unknown>)?.themeAccent as string;
-        if (theme) {
-            document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('remote-theme', theme);
-        }
-
-        const targetLang = slideState?.language;
-        if (targetLang && !i18n.language.startsWith(targetLang)) {
-            i18n.changeLanguage(targetLang);
-            localStorage.setItem('remote-lang', targetLang);
-        }
-    }, [slideState, i18n]);
+    // Visibility / wake-up reconnect & theme/locale synchronization
+    useRemoteLifecycleSync({
+        slideState,
+        optionsRef,
+        isManualDisconnectRef,
+        targetPinRef,
+        wsRef,
+        reconnectCountRef,
+        connect
+    });
 
     // Cleanup on unmount
     useEffect(() => {
         return () => {
             isManualDisconnectRef.current = true;
             cleanupReconnect();
+            cleanupHeartbeat();
             if (wsRef.current) {
                 wsRef.current.onclose = null;
                 wsRef.current.close();
             }
         };
-    }, [cleanupReconnect]);
+    }, [cleanupReconnect, cleanupHeartbeat]);
+
+    const sendSignal = useCallback((signal: unknown) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'RELAY_SIGNAL', signal }));
+        } else {
+            pendingSignalsRef.current.push(signal);
+        }
+    }, []);
+
+    const setPrivacy = useCallback((active: boolean) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'SET_PRIVACY', active }));
+        }
+    }, []);
 
     return {
         connected,
@@ -165,6 +247,8 @@ export const useRemoteSocket = () => {
         connect,
         disconnect,
         sendCommand,
-        handleBibleQuery
+        handleBibleQuery,
+        sendSignal,
+        setPrivacy
     };
 };

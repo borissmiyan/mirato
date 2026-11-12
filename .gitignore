@@ -42,4 +42,14 @@ Thumbs.db
 # Project Specific
 .agent/
 *.tsbuildinfo
+website/
 
+
+.env.*.local
+.dev.vars
+.ci-verified.json
+*.pem
+*.key
+
+__pycache__/
+*.pyc

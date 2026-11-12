@@ -2,11 +2,14 @@ import React, { useState } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/core/utils/cn';
 import { toast } from '@/core/utils/toast';
+import { IMediaItem } from '@/core/types';
+import { TimelineItem } from './hooks/useTimelineLayout';
 
 export interface TimelineDroppableZoneProps {
     onAddSlide: (blockId: string) => void;
     onAddPresentation: (presentationId: string, index?: number) => void;
-    visualTimeline: any[];
+    onAddMediaSlides?: (items: IMediaItem[], index?: number) => void;
+    visualTimeline: TimelineItem[];
     onNativeDragOver?: (index: number | null) => void;
     disabled?: boolean;
 }
@@ -19,6 +22,7 @@ export interface TimelineDroppableZoneProps {
 export const TimelineDroppableZone: React.FC<TimelineDroppableZoneProps> = ({ 
     onAddSlide, 
     onAddPresentation, 
+    onAddMediaSlides,
     visualTimeline, 
     onNativeDragOver,
     disabled
@@ -34,7 +38,7 @@ export const TimelineDroppableZone: React.FC<TimelineDroppableZoneProps> = ({
     const [isNativeOver, setIsNativeOver] = useState(false);
 
     const handleNativeDragOver = (e: React.DragEvent) => {
-        // Only accept drags from our library
+        // Only accept drags from our library or media pool
         const types = e.dataTransfer.types;
         if (types.includes('application/json')) {
             e.preventDefault();
@@ -81,27 +85,31 @@ export const TimelineDroppableZone: React.FC<TimelineDroppableZoneProps> = ({
             if (!dataStr) return;
 
             const data = JSON.parse(dataStr);
-            if (data.source === 'presentation-library' && data.presentationId) {
-                // Calculate drop index based on horizontal position
-                const rect = e.currentTarget.getBoundingClientRect();
-                const dropX = e.clientX - rect.left;
+            // Calculate drop index based on horizontal position
+            const rect = e.currentTarget.getBoundingClientRect();
+            const dropX = e.clientX - rect.left;
+            const topLevelSlides = visualTimeline.filter(item => item.type === 'slide');
+            let insertionIndex = topLevelSlides.length;
 
-                // Find top-level slides from visualTimeline
-                const topLevelSlides = visualTimeline.filter(item => item.type === 'slide');
-                let insertionIndex = topLevelSlides.length;
-
-                for (let i = 0; i < topLevelSlides.length; i++) {
-                    const slideItem = topLevelSlides[i];
-                    // If we drop before the middle of a slide, insert at its index
-                    const slideMidX = slideItem.x + slideItem.width / 2;
-                    if (dropX < slideMidX) {
-                        insertionIndex = i;
-                        break;
-                    }
+            for (let i = 0; i < topLevelSlides.length; i++) {
+                const slideItem = topLevelSlides[i];
+                const slideMidX = slideItem.x + slideItem.width / 2;
+                if (dropX < slideMidX) {
+                    insertionIndex = i;
+                    break;
                 }
+            }
 
+            if (data.source === 'presentation-library' && data.presentationId) {
                 onAddPresentation(data.presentationId, insertionIndex);
                 toast.success('Presentation added to timeline');
+            } else if (data.source === 'media-pool' && onAddMediaSlides) {
+                const items = Array.isArray(data.items) && data.items.length > 0
+                    ? data.items
+                    : (data.media ? [data.media] : []);
+                if (items.length > 0) {
+                    onAddMediaSlides(items, insertionIndex);
+                }
             }
         } catch (err) {
             console.error('[TimelineDroppableZone] Native drop parse failed:', err);

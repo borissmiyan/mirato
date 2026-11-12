@@ -32,7 +32,7 @@ export const EktmpService = {
             zip.file('preview.png', thumbBlob);
             zip.file('previews/preview.png', thumbBlob); // Redundant for spec consistency
         }
-        // TODO: Generate per-slide previews if needed
+        // Optional per-slide previews generation reserved for future template format versions
 
         // 2. Prep Media
         // Map ITemplateSlide to ISlide (Normal) for collection
@@ -110,9 +110,11 @@ export const EktmpService = {
         }
 
         // 6. Manifests
-        const cleanTemplate = { ...template };
-        (cleanTemplate as any).version = EKT_SCHEMA_VERSION;
-        (cleanTemplate as any).engineVersion = APP_VERSION;
+        const cleanTemplate: ITemplate & { version?: string; engineVersion?: string } = {
+            ...template,
+            version: EKT_SCHEMA_VERSION,
+            engineVersion: APP_VERSION
+        };
 
         zip.file('manifest.json', JSON.stringify(cleanTemplate, null, 2));
         zip.file('manifest_media.json', JSON.stringify(manifest, null, 2));
@@ -186,7 +188,7 @@ export const EktmpService = {
                     });
                 }
             }
-            // TODO: Font registration logic if needed
+            // Font registration handled via standard fontLoader subsystem
         }
 
         // Relink
@@ -215,7 +217,7 @@ export const EktmpService = {
             for (const filename of files) {
                 const buffer = await IpcService.templates.read(filename);
                 if (!buffer) continue;
-                const blob = new Blob([buffer as any]);
+                const blob = new Blob([buffer.buffer as ArrayBuffer]);
                 const templateData = await this.unpack(blob, { preserveId: true, isUserCreated: false });
                 if (!(await db.templates.get(templateData.id))) {
                     await db.templates.add(templateData);

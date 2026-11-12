@@ -61,9 +61,9 @@ const SortableCanvasItemComponent: React.FC<ISortableCanvasItemProps> = ({
                         : "bg-black/30 border-white/5 hover:border-white/10 hover:bg-white/2"
                 )}
             >
-                <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 -ml-1 hover:bg-white/5 rounded-md transition-colors">
+                <div {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing p-1 -ml-1 hover:bg-white/5 rounded-xl transition-colors">
                     <div className={cn(
-                        "w-6 h-6 rounded-lg flex items-center justify-center transition-colors border",
+                        "w-6 h-6 rounded-xl flex items-center justify-center transition-colors border",
                         isSelected ? "bg-accent/20 border-accent/30 text-accent" : "bg-white/5 border-white/5 text-stone-500 group-hover:text-stone-300"
                     )}>
                         <ItemIcon className="w-3.5 h-3.5" />
@@ -76,33 +76,39 @@ const SortableCanvasItemComponent: React.FC<ISortableCanvasItemProps> = ({
 
                 <div className="flex items-center gap-0.5">
                     <button
+                        type="button"
                         onClick={(e) => { e.stopPropagation(); onUpdate(item.id, { visible: item.visible === false }) }}
                         className={cn(
-                            "p-1.5 rounded-lg transition-all cursor-pointer",
+                            "p-1.5 rounded-xl transition-all cursor-pointer apple-press",
                             item.visible === false
                                 ? "text-accent bg-accent/10 opacity-100"
                                 : "text-stone-600 hover:text-stone-400 hover:bg-white/5 opacity-0 group-hover:opacity-100"
                         )}
                         title={item.visible === false ? t('show') : t('hide')}
+                        aria-label={item.visible === false ? t('show') : t('hide')}
                     >
                         {item.visible === false ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
                     <button
+                        type="button"
                         onClick={(e) => { e.stopPropagation(); onLock(item.id, !item.locked) }}
                         className={cn(
-                            "p-1.5 rounded-lg transition-all cursor-pointer",
+                            "p-1.5 rounded-xl transition-all cursor-pointer apple-press",
                             item.locked
                                 ? "text-accent bg-accent/10 opacity-100"
                                 : "text-stone-600 hover:text-stone-400 hover:bg-white/5 opacity-0 group-hover:opacity-100"
                         )}
                         title={item.locked ? t('unlock') : t('lock')}
+                        aria-label={item.locked ? t('unlock') : t('lock')}
                     >
                         <Lock className={cn("w-3.5 h-3.5", item.locked && "fill-current")} />
                     </button>
                     <button
+                        type="button"
                         onClick={(e) => { e.stopPropagation(); onRemove(item.id); }}
-                        className="p-1.5 rounded-lg hover:bg-red-500/10 text-stone-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer"
+                        className="p-1.5 rounded-xl hover:bg-red-500/10 text-stone-700 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 cursor-pointer apple-press"
                         aria-label={t('delete')}
+                        title={t('delete')}
                     >
                         <Trash2 className="w-3.5 h-3.5" />
                     </button>

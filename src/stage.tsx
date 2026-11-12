@@ -5,6 +5,7 @@ import StageView from '@/features/presenter/components/display/StageView';
 import { ErrorBoundary } from '@/shared/ui/ErrorBoundary';
 
 import './core/styles/globals.css';
+import './core/styles/fonts';
 import './core/i18n';
 
 const rootElement = document.getElementById('root');

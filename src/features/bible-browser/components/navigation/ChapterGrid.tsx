@@ -28,7 +28,7 @@ export const ChapterGrid: React.FC<ChapterGridProps> = React.memo(({
           </span>
         </div>
         {currentBook && (
-          <span className="text-[10px] font-bold text-stone-600 px-2 py-0.5 bg-white/5 rounded-full">
+          <span className="text-[10px] font-bold text-stone-600 px-2 py-0.5 bg-white/5 rounded-xl">
             {currentBook.chapters.length}
           </span>
         )}
@@ -43,9 +43,10 @@ export const ChapterGrid: React.FC<ChapterGridProps> = React.memo(({
               return (
                 <button
                   key={chap}
+                  type="button"
                   onClick={() => onChapterSelect(chap)}
                   className={cn(
-                    "aspect-square rounded-xl text-xs font-bold transition-all duration-300 shadow-sm",
+                    "aspect-square rounded-xl text-xs font-bold transition-all duration-200 shadow-sm apple-press cursor-pointer",
                     isSelected
                       ? `${colors.bg} ${colors.icon} ${colors.border} border-2 scale-105 shadow-[0_4px_12px_rgba(0,0,0,0.2)]`
                       : "bg-white/3 text-stone-500 hover:bg-white/8 hover:text-stone-200 border border-transparent"
@@ -68,3 +69,5 @@ export const ChapterGrid: React.FC<ChapterGridProps> = React.memo(({
 });
 
 ChapterGrid.displayName = 'ChapterGrid';
+
+export default ChapterGrid;

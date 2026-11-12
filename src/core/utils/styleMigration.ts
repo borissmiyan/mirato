@@ -41,7 +41,7 @@ export const migrateBackgroundToLayers = (bg: BackgroundSettings | undefined): I
 /**
  * Ensures that the input is an array of layers, migrating if necessary.
  */
-export const ensureLayers = (layers: IStyleLayer[] | BackgroundSettings | undefined, fallbackColor?: string): IStyleLayer[] => {
+export const ensureLayers = (layers: IStyleLayer[] | BackgroundSettings | unknown, fallbackColor?: string): IStyleLayer[] => {
     if (Array.isArray(layers) && layers.length > 0) return layers;
 
     if (!layers && fallbackColor) {

@@ -75,6 +75,26 @@ export class AudioBufferLoader {
                 }
             }
 
+            // Fallback 3: In Electron, check disk via IPC (media:resolve-audio-path) and auto-heal mediaPool
+            if (!dbItem && IpcService.isElectron()) {
+                const scope = await db.audioScopes.where('fileId').equals(fileId).first();
+                const resolvedDiskPath = await IpcService.invoke<string | null>('media:resolve-audio-path', {
+                    fileId,
+                    fileName: scope?.fileName
+                });
+                if (resolvedDiskPath) {
+                    const resolvedName = scope?.fileName || resolvedDiskPath.split(/[/\\]/).pop() || 'audio.mp3';
+                    await db.mediaPool.put({
+                        id: fileId,
+                        name: resolvedName,
+                        path: resolvedDiskPath,
+                        type: 'audio',
+                        createdAt: Date.now()
+                    }).catch(() => {});
+                    return this.resolveUrl(resolvedDiskPath);
+                }
+            }
+
             if (dbItem?.data) {
                 const blobUrl = URL.createObjectURL(dbItem.data);
                 

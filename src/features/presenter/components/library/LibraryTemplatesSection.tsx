@@ -6,13 +6,9 @@ import { GraceLibBin } from './GraceLibBin';
 import { TemplatePreviewItem } from './TemplatePreviewItem';
 import { GraceLibExportService } from '@/features/presenter/services/GraceLibExportService';
 import { TFunction } from 'i18next';
+import { ITemplateNav, LibraryContextMenuData } from './types';
 
-export interface ITemplateNav {
-    id: string;
-    type: 'root' | 'all' | 'blocks' | 'template' | 'block';
-    name?: string;
-    nameRu?: string;
-}
+export type { ITemplateNav };
 
 const ICON_MAP: Record<string, LucideIcon> = {
     Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus, Presentation, Layers, Layout
@@ -31,7 +27,7 @@ interface ILibraryTemplatesSectionProps {
     pushTemplateNav: (nav: ITemplateNav) => void;
     handleTemplateClick: (template: ITemplate, templateSlideId?: string, isBefore?: boolean) => void;
     handleOverrideTemplateSlide: (template: ITemplate, layoutSlideId: string) => void;
-    setContextMenu: (menu: { x: number; y: number; item: any; type: 'template' | 'media-bin' | 'template-slide' | 'presentation-bin' | 'presentation' } | null) => void;
+    setContextMenu: (menu: LibraryContextMenuData | null) => void;
 }
 
 export const LibraryTemplatesSection: React.FC<ILibraryTemplatesSectionProps> = ({

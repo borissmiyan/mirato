@@ -57,7 +57,7 @@ export const PlaylistItemRow: React.FC<IPlaylistItemRowProps> = React.memo(({ id
                 <GripVertical className="w-3.5 h-3.5 text-stone-400" />
             </div>
 
-            <div className="w-8 h-8 rounded-lg bg-black/40 flex items-center justify-center border border-white/5 shadow-inner">
+            <div className="w-8 h-8 rounded-xl bg-black/40 flex items-center justify-center border border-white/5 shadow-inner">
                 <Music className="w-3.5 h-3.5 text-stone-500" />
             </div>
             <div className="flex-1 min-w-0">
@@ -65,8 +65,11 @@ export const PlaylistItemRow: React.FC<IPlaylistItemRowProps> = React.memo(({ id
                 <p className="text-[9px] text-stone-600 font-bold uppercase tracking-wider">{t('audio_item', 'Audio Item')}</p>
             </div>
             <button
+                type="button"
                 onClick={() => onRemove(index)}
-                className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-stone-500 hover:text-red-400 rounded-lg transition-all cursor-pointer"
+                className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-stone-500 hover:text-red-400 rounded-xl transition-all cursor-pointer apple-press"
+                aria-label={t('delete', 'Delete')}
+                title={t('delete', 'Delete')}
             >
                 <Trash2 className="w-3.5 h-3.5" />
             </button>

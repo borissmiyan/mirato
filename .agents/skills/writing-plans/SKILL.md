@@ -1,116 +1,123 @@
 ---
 name: writing-plans
-description: Use when you have a spec or requirements for a multi-step task, before touching code
+description: "Use when you have a spec or requirements for a multi-step task, before touching code. Produces bite-sized TDD plans with Diff Budget and Adversarial Audit Gate."
 ---
 
-# Writing Plans
+# 📋 Writing Implementation Plans (Harness-Standard)
 
-## Overview
+## Обзор
 
-Write comprehensive implementation plans assuming the engineer has zero context for our codebase and questionable taste. Document everything they need to know: which files to touch for each task, code, testing, docs they might need to check, how to test it. Give them the whole plan as bite-sized tasks. DRY. YAGNI. TDD. Frequent commits.
+Этот скилл предназначен для составления исчерпывающих, пошаговых планов реализации (Implementation Plans).  
+Каждый шаг должен быть атомарным (2–5 минут работы) и строго следовать дисциплине **TDD (Red-Green-Refactor)**, принципам **DRY/YAGNI** и жестким ограничениям нашего AI-харнесса (**Scope Lock** и **Diff Budget < 450 строк**).
 
-Assume they are a skilled developer, but know almost nothing about our toolset or problem domain. Assume they don't know good test design very well.
+> **Обязательное объявление при старте:**  
+> «Я использую скилл writing-plans для составления плана реализации».
 
-**Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
-
-**Context:** This should be run in a dedicated worktree (created by brainstorming skill).
-
-**Save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md`
-
-## Bite-Sized Task Granularity
-
-**Each step is one action (2-5 minutes):**
-- "Write the failing test" - step
-- "Run it to make sure it fails" - step
-- "Implement the minimal code to make the test pass" - step
-- "Run the tests and make sure they pass" - step
-- "Commit" - step
-
-## Plan Document Header
-
-**Every plan MUST start with this header:**
-
-```markdown
-# [Feature Name] Implementation Plan
-
-> **For Antigravity:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
-
-**Goal:** [One sentence describing what this builds]
-
-**Architecture:** [2-3 sentences about approach]
-
-**Tech Stack:** [Key technologies/libraries]
+Планы сохраняются в: `docs/plans/YYYY-MM-DD-<feature-name>.md` (или `implementation_plan.md` в корне при быстрых задачах).
 
 ---
-```
 
-## Task Structure
+## Обязательная шапка плана (Plan Header)
+
+Каждый план **ОБЯЗАН** начинаться со следующей структуры:
 
 ```markdown
-### Task N: [Component Name]
+# [Название Фичи / Задачи] — Implementation Plan
 
-**Files:**
-- Create: `exact/path/to/file.py`
-- Modify: `exact/path/to/existing.py:123-145`
-- Test: `tests/exact/path/to/test.py`
+> **Статус:** [DRAFT | UNDER_AUDIT | APPROVED]  
+> **Стек:** React 18, TypeScript 5.9, Vite 7, Vitest, Dexie.js, Supabase, Tailwind CSS v4  
+> **Связанные ADR:** [ADR D-XX](.planning/decisions/D-XX.md)  
+> **Оценка Diff Budget:** ~XXX строк кода, Y файлов (Лимит: 450 строк / 10 файлов)  
 
-**Step 1: Write the failing test**
+### Цель и Архитектура
+* **Цель:** [Одно емкое предложение о том, какую проблему решаем]
+* **Архитектурный подход:** [2-3 предложения о потоках данных, таблицах Dexie/Supabase и хуках]
 
-```python
-def test_specific_behavior():
-    result = function(input)
-    assert result == expected
+### Границы задачи (Scope Lock & Non-Goals)
+* ✅ **Входит в скоуп:** [Четкий список того, что реализуем]
+* 🛑 **НЕ входит (Non-Goals):** [Что сознательно НЕ трогаем и не рефакторим]
 ```
 
-**Step 2: Run test to verify it fails**
+---
 
-Run: `pytest tests/path/test.py::test_name -v`
-Expected: FAIL with "function not defined"
+## Обязательный шлюз: Состязательный аудит (Adversarial Audit Gate)
 
-**Step 3: Write minimal implementation**
+Перед тем как приступить к написанию кода по плану, план **ОБЯЗАН** пройти состязательный аудит по протоколу [`.agents/skills/adversarial-critic/SKILL.md`](.agents/skills/adversarial-critic/SKILL.md).
 
-```python
-def function(input):
-    return expected
+В документе плана обязательно фиксируется блок аудита:
+
+```markdown
+## 🕵️ Adversarial Critic Audit Gate
+
+- [ ] Фильтр 1 (Offline & Dexie Integrity): проверен
+- [ ] Фильтр 2 (Physical & Mathematical Invariants): проверен
+- [ ] Фильтр 3 (Diff Budget < 450 lines / 10 files): проверен
+- [ ] Фильтр 4 (Type Safety & noUncheckedIndexedAccess): проверен
+- [ ] Фильтр 5 (Race Conditions & Double-Clicks): проверен
+- [ ] Фильтр 6 (Anti-Test Tampering): проверен
+- [ ] Фильтр 7 (UI & Localization — no emojis, Slovak sk default): проверен
+
+**Вердикт Сомневающегося Агента:** [APPROVED / REJECTED]  
+*(Если REJECTED — перечисляются блокеры и план дорабатывается до получения APPROVED)*.
 ```
 
-**Step 4: Run test to verify it passes**
+---
 
-Run: `pytest tests/path/test.py::test_name -v`
-Expected: PASS
+## Структура атомарной TDD-задачи (TypeScript / Vitest)
 
-**Step 5: Commit**
+Каждая задача разбивается на микро-шаги по 2–5 минут:
 
+```markdown
+### Task N: [Название шага / Компонента]
+
+**Файлы:**
+* Создать: `src/features/reports/utils/exampleHelper.ts`
+* Изменить: `src/types/reports.ts:45-60`
+* Тест: `src/features/reports/utils/__tests__/exampleHelper.test.ts`
+
+#### Шаг 1: Написать падающий тест (RED)
+```typescript
+import { describe, it, expect } from 'vitest';
+import { calculateSomething } from '../exampleHelper';
+
+describe('calculateSomething', () => {
+  it('correctly handles zero and nullish inputs safely', () => {
+    const result = calculateSomething(0, null);
+    expect(result).toBe(0);
+  });
+});
+```
+
+#### Шаг 2: Запустить тест и убедиться, что он упал по правильной причине
+Выполнить: `npx vitest run src/features/reports/utils/__tests__/exampleHelper.test.ts`  
+Ожидается: FAIL (функция не экспортирована или возвращает ошибку).
+
+#### Шаг 3: Написать минимальный чистый код (GREEN)
+```typescript
+export function calculateSomething(value: number, fallback: number | null): number {
+  if (value === 0) return 0;
+  return fallback ?? value;
+}
+```
+
+#### Шаг 4: Запустить тест и убедиться, что он проходит
+Выполнить: `npx vitest run src/features/reports/utils/__tests__/exampleHelper.test.ts`  
+Ожидается: PASS (1 passed).
+
+#### Шаг 5: Проверка бюджета и атомарный коммит
 ```bash
-git add tests/path/test.py src/path/file.py
-git commit -m "feat: add specific feature"
+git add src/features/reports/utils/exampleHelper.ts src/features/reports/utils/__tests__/exampleHelper.test.ts
+git commit -m "feat(reports): implement calculateSomething helper with nullish safety"
 ```
 ```
 
-## Remember
-- Exact file paths always
-- Complete code in plan (not "add validation")
-- Exact commands with expected output
-- Reference relevant skills with @ syntax
-- DRY, YAGNI, TDD, frequent commits
+---
 
-## Execution Handoff
+## Финальная приемка после выполнения всех задач плана
 
-After saving the plan, offer execution choice:
+Когда все задачи реализованы, запускается **единая цепочка детерминированной верификации**:
+1. `npm run check` (Typecheck + AST ESLint + 117+ Vitest тест-сьютов).
+2. `npm run build` (Сборка чистого прод-бандла).
+3. `graphify update .` (Актуализация AST графа знаний).
 
-**"Plan complete and saved to `docs/plans/<filename>.md`. Two execution options:**
-
-**1. Subagent-Driven (this session)** - I dispatch fresh subagent per task, review between tasks, fast iteration
-
-**2. Parallel Session (separate)** - Open new session with executing-plans, batch execution with checkpoints
-
-**Which approach?"**
-
-**If Subagent-Driven chosen:**
-- **REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development
-- Stay in this session
-- Fresh subagent per task + code review
-
-**If Parallel Session chosen:**
-- Guide them to open new session in worktree
-- **REQUIRED SUB-SKILL:** New session uses superpowers:executing-plans
+Только при 0 ошибок работа над планом считается завершенной.

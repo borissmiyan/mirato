@@ -1,12 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
-import { IMediaItem, MediaType, IMediaBin } from '@/core/types';
+import { IMediaItem, MediaType, IMediaBin, MediaColorTag } from '@/core/types';
 import { getLocalResourceUrl } from '@/core/hooks/useMediaUrl';
 import { IpcService } from '@/core/services/ipcService';
 
+export type MediaSortOrder = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'type';
+
 export interface UseMediaPoolDataReturn {
   bins: IMediaBin[];
+  allBins: IMediaBin[];
+  binPath: IMediaBin[];
   mediaItems: IMediaItem[];
   visibleItems: IMediaItem[];
   activeBin: IMediaBin | null;
@@ -15,83 +19,188 @@ export interface UseMediaPoolDataReturn {
 }
 
 /**
- * Hook to manage media pool data: bins, media items, and duration preloading.
+ * Hook to manage media pool data: bins, media items, nested folders, tag filtering, and duration preloading.
  */
-export function useMediaPoolData(filter: MediaType | 'all', activeBinId: string | null): UseMediaPoolDataReturn {
+export function useMediaPoolData(
+  filter: MediaType | 'all',
+  activeBinId: string | null,
+  searchQuery: string = '',
+  sortBy: MediaSortOrder = 'date-desc',
+  tagFilter: MediaColorTag | 'all' = 'all'
+): UseMediaPoolDataReturn {
   const [mediaTimes, setMediaTimes] = useState<Record<string, { current: number; duration: number }>>({});
+  const mediaTimesRef = useRef(mediaTimes);
+  mediaTimesRef.current = mediaTimes;
 
-  const bins = useLiveQuery(() => db.mediaBins.orderBy('createdAt').toArray(), []) || [];
+  const rawBins = useLiveQuery(() => db.mediaBins.orderBy('createdAt').toArray(), []);
+  const allBins = useMemo(() => rawBins || [], [rawBins]);
   
+  // Sub-bins: show root bins if activeBinId is null, or children of activeBinId
+  const bins = useMemo(() => {
+    if (activeBinId) {
+      return allBins.filter(b => b.parentId === activeBinId);
+    }
+    return allBins.filter(b => !b.parentId);
+  }, [allBins, activeBinId]);
+
+  const activeBin = useMemo(() => {
+    return activeBinId ? (allBins.find(b => b.id === activeBinId) ?? null) : null;
+  }, [allBins, activeBinId]);
+
+  // Compute full breadcrumb path from root to current bin
+  const binPath = useMemo(() => {
+    if (!activeBin) return [];
+    const path: IMediaBin[] = [];
+    let cur: IMediaBin | null = activeBin;
+    const visited = new Set<string>();
+    while (cur && !visited.has(cur.id)) {
+      visited.add(cur.id);
+      path.unshift(cur);
+      const pid = cur.parentId;
+      cur = pid ? (allBins.find(b => b.id === pid) ?? null) : null;
+    }
+    return path;
+  }, [activeBin, allBins]);
+
   const mediaItems = useLiveQuery(
-    () => {
-      if (filter === 'all') {
-        return db.mediaPool.orderBy('createdAt').reverse().toArray();
-      } else {
-        return db.mediaPool.where('type').equals(filter).reverse().toArray();
-      }
+    async () => {
+      const collection = filter === 'all'
+        ? db.mediaPool.orderBy('createdAt').reverse()
+        : db.mediaPool.where('type').equals(filter).reverse();
+      
+      const items = await collection.toArray();
+      // Drop raw binary blobs from the in-memory array to save V8 heap and prevent memory bloat
+      return items.map(({ data, ...item }) => item as IMediaItem);
     },
     [filter]
   ) || [];
 
-  const visibleItems = activeBinId
+  const rawVisible = activeBinId
     ? mediaItems.filter(i => i.binId === activeBinId)
     : mediaItems.filter(i => !i.binId);
 
-  const activeBin = activeBinId ? bins.find(b => b.id === activeBinId) : null;
+  const visibleItems = useMemo(() => {
+    let items = rawVisible;
 
-  // File integrity check: Verify that local files still exist on disk
-  useEffect(() => {
-    // Only check items that haven't been checked in this session or are visible
-    // We check visible items to ensure they are up to date
-    visibleItems.forEach(async (item) => {
-      // Skip blobs (they are always "present") and items already marked correctly
-      if (!item.path || !!item.data) return;
+    if (tagFilter !== 'all') {
+      items = items.filter(i => i.colorTag === tagFilter);
+    }
 
-      try {
-        const stats = await IpcService.invoke('get-file-stats', item.path);
-        const isMissing = !stats;
-        
-        // Only update if state changed to avoid unnecessary re-renders/db writes
-        if (item.isMissing !== isMissing) {
-          await db.mediaPool.update(item.id, { isMissing });
-        }
-      } catch (error) {
-        if (item.isMissing !== true) {
-          await db.mediaPool.update(item.id, { isMissing: true });
-        }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      items = items.filter(i => i.name.toLowerCase().includes(q));
+    }
+
+    return [...items].sort((a, b) => {
+      switch (sortBy) {
+        case 'date-asc':
+          return (a.createdAt || 0) - (b.createdAt || 0);
+        case 'date-desc':
+          return (b.createdAt || 0) - (a.createdAt || 0);
+        case 'name-asc':
+          return a.name.localeCompare(b.name, undefined, { numeric: true });
+        case 'name-desc':
+          return b.name.localeCompare(a.name, undefined, { numeric: true });
+        case 'type':
+          return a.type.localeCompare(b.type) || a.name.localeCompare(b.name);
+        default:
+          return (b.createdAt || 0) - (a.createdAt || 0);
       }
     });
-  }, [visibleItems.length, activeBinId]); // Re-check when bin changes or count changes
+  }, [rawVisible, searchQuery, sortBy, tagFilter]);
 
-  // Preload audio durations using AudioContext for audio items without stored duration
+  // File integrity check: Verify that local files still exist on disk (debounced and guarded)
   useEffect(() => {
-    // Skip items marked as missing to avoid console noise (404s)
-    const audioOnly = visibleItems.filter(i => i.type === 'audio' && !mediaTimes[i.id] && !i.isMissing);
+    if (!IpcService.isElectron()) return;
+
+    // Only check real filesystem paths (not hashes or blobs)
+    const itemsToCheck = visibleItems.filter(i => 
+      !i.data && 
+      i.path && 
+      (i.path.startsWith('/') || i.path.includes(':\\') || i.path.startsWith('local-resource:'))
+    );
+
+    if (itemsToCheck.length === 0) return;
+
+    const checkTimer = setTimeout(async () => {
+      for (const item of itemsToCheck) {
+        try {
+          const stats = await IpcService.invoke('get-file-stats', item.path);
+          const isMissing = !stats;
+          if (item.isMissing !== isMissing) {
+            await db.mediaPool.update(item.id, { isMissing });
+          }
+        } catch {
+          if (!item.isMissing) {
+            await db.mediaPool.update(item.id, { isMissing: true });
+          }
+        }
+      }
+    }, 500);
+
+    return () => clearTimeout(checkTimer);
+  }, [visibleItems, activeBinId]);
+
+  // Preload audio durations for audio items without stored duration using lightweight metadata loading (no PCM decode)
+  useEffect(() => {
+    const audioOnly = visibleItems.filter(i => 
+      i.type === 'audio' && 
+      !i.duration && 
+      !mediaTimesRef.current[i.id] && 
+      !i.isMissing &&
+      i.path
+    );
+
+    if (audioOnly.length === 0) return;
+
+    let isCancelled = false;
+
     for (const item of audioOnly) {
-      if (!item.path) continue;
-      
       const url = getLocalResourceUrl(item.path);
-      fetch(url)
-        .then(res => res.arrayBuffer())
-        .then(buf => {
-          const ctx = new AudioContext();
-          return ctx.decodeAudioData(buf).then(decoded => {
-            setMediaTimes(prev => ({
-              ...prev,
-              [item.id]: prev[item.id] ?? { current: 0, duration: decoded.duration }
-            }));
-            ctx.close();
-          });
-        })
-        .catch(() => {
-          // If fetch fails, it might be missing. We could mark it here too,
-          // but the dedicated integrity check useEffect handles it more reliably.
-        });
+      if (!url) continue;
+
+      const audio = new Audio();
+      audio.preload = 'metadata';
+
+      const cleanup = () => {
+        audio.removeEventListener('loadedmetadata', onLoaded);
+        audio.removeEventListener('error', onError);
+        audio.src = '';
+        audio.load();
+      };
+
+      const onLoaded = () => {
+        const dur = audio.duration;
+        cleanup();
+        if (isCancelled || !isFinite(dur) || dur <= 0) return;
+
+        setMediaTimes(prev => ({
+          ...prev,
+          [item.id]: prev[item.id] ?? { current: 0, duration: dur }
+        }));
+
+        // Persist to IndexedDB so it never needs to be probed or loaded again
+        db.mediaPool.update(item.id, { duration: Math.round(dur) }).catch(() => {});
+      };
+
+      const onError = () => {
+        cleanup();
+      };
+
+      audio.addEventListener('loadedmetadata', onLoaded);
+      audio.addEventListener('error', onError);
+      audio.src = url;
     }
-  }, [visibleItems.length]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [visibleItems]);
 
   return {
     bins,
+    allBins,
+    binPath,
     mediaItems,
     visibleItems,
     activeBin,

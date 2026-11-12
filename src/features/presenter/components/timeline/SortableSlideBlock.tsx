@@ -1,6 +1,5 @@
 import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { cn } from '@/core/utils/cn';
 import { ISlide, ICanvasSlide, INestedSlide, IPresentationFile, IBlock, ITemplate } from '@/core/types';
 import { SlideTile } from './SlideTile';
@@ -27,8 +26,10 @@ export interface SortableSlideBlockProps {
     isMultiSelect?: boolean;
     isSubItemSelected?: boolean;
     isMultiDragHidden?: boolean;
+    isNew?: boolean;
     dragActiveId?: string | null;
     setContextMenu: (menu: { x: number; y: number; slideId: string; presentationId: string } | null) => void;
+    disabled?: boolean;
 }
 
 /**
@@ -54,30 +55,19 @@ export const SortableSlideBlock = React.memo<SortableSlideBlockProps>(({
     isMultiSelect,
     isSubItemSelected,
     isMultiDragHidden,
+    isNew,
     dragActiveId,
     navigationParentSlideId,
-    setContextMenu
+    setContextMenu,
+    disabled
 }) => {
     const {
         attributes,
         listeners,
         setNodeRef,
-        transform,
-        transition,
-    } = useSortable({ id: slide.id });
+    } = useSortable({ id: slide.id, disabled });
 
     const isCurrentDragging = slide.id === dragActiveId;
-
-    const style: React.CSSProperties = {
-        transform: transform && !isCurrentDragging
-            ? CSS.Transform.toString(transform)
-            : undefined,
-        transition,
-        willChange: 'transform',
-        display: 'flex',
-        gap: '0.75rem',
-        alignItems: 'center',
-    };
 
     const isMaster = slide.blockId === 'master-presentation';
     const masterPresId = slide.type === 'normal' ? (slide as ICanvasSlide).masterPresentationId : (slide.type === 'nested' ? (slide as INestedSlide).presentationId : undefined);
@@ -86,9 +76,12 @@ export const SortableSlideBlock = React.memo<SortableSlideBlockProps>(({
     return (
         <div
             ref={setNodeRef}
+            data-slide-block-id={slide.id}
             style={{
-                ...style,
-                visibility: isCurrentDragging ? 'hidden' : undefined,
+                display: 'flex',
+                gap: '0.75rem',
+                alignItems: 'center',
+                willChange: 'transform',
                 // Collapse hidden multi-drag items to zero width — they must not
                 // reserve layout space, otherwise the drop-target gap = N * slide width
                 // instead of always being exactly one slide width.
@@ -99,13 +92,21 @@ export const SortableSlideBlock = React.memo<SortableSlideBlockProps>(({
                 isCurrentDragging && "z-50"
             )}
         >
-            {/* Drop placeholder — always in DOM, toggled via CSS only (no DOM mutation on drag) */}
+            {/* Drop placeholder — dedicated gap matching the 128x72 slide card with Apple spring fade */}
             <div
-                className="absolute inset-0 rounded-xl border-2 border-dashed border-accent/30 bg-accent/5 pointer-events-none"
-                style={{ visibility: isCurrentDragging ? 'visible' : 'hidden' }}
+                className={cn(
+                    "absolute inset-0 rounded-xl border-2 border-dashed border-accent/40 bg-accent/10 pointer-events-none transition-all duration-200 shadow-[inset_0_0_15px_rgba(var(--accent-rgb,147,51,234),0.12)]",
+                    isCurrentDragging ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+                )}
             />
-            <TransitionSeparator slide={slide} activePresentationId={activePresentationId} />
-            <SlideTile
+
+            {/* Slide contents — smoothly fades during drag lift and drop */}
+            <div className={cn(
+                "flex items-center gap-3 transition-opacity duration-150",
+                isCurrentDragging ? "opacity-0 pointer-events-none" : "opacity-100"
+            )}>
+                <TransitionSeparator slide={slide} activePresentationId={activePresentationId} />
+                <SlideTile
                 slide={slide}
                 index={index}
                 activePresentationId={activePresentationId}
@@ -123,6 +124,7 @@ export const SortableSlideBlock = React.memo<SortableSlideBlockProps>(({
                 isMultiSelect={isMultiSelect}
                 isSubItemSelected={isSubItemSelected}
                 isMultiDragHidden={isMultiDragHidden}
+                isNew={isNew}
                 presentationsMap={presentationsMap}
                 navigationParentSlideId={navigationParentSlideId}
                 listeners={listeners}
@@ -135,6 +137,7 @@ export const SortableSlideBlock = React.memo<SortableSlideBlockProps>(({
                     nestedPresentation={nestedPres}
                     blocksMap={blocksMap}
                     templatesMap={templatesMap}
+                    presentationsMap={presentationsMap}
                     lang={lang}
                     previewSlideId={previewSlideId}
                     selectedPresentationId={selectedPresentationId}
@@ -143,6 +146,7 @@ export const SortableSlideBlock = React.memo<SortableSlideBlockProps>(({
                     }}
                 />
             )}
+            </div>
         </div>
     );
 });

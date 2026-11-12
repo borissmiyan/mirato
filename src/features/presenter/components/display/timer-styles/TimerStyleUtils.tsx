@@ -5,7 +5,7 @@ import { SlideBackground } from '../SlideBackground';
 
 export const getFillColor = (fill?: IStyleLayer[], fallback: string = 'white'): string => {
     if (!fill || fill.length === 0) return fallback;
-    const firstLayer = fill.find(l => l.visible);
+    const firstLayer = fill.find(l => l.visible !== false);
     if (!firstLayer) return fallback;
     if (firstLayer.type === 'color') return firstLayer.color || fallback;
     if (firstLayer.type === 'gradient') return firstLayer.gradient?.from || fallback;

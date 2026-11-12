@@ -62,13 +62,13 @@ describe('historyStore undo-redo state', () => {
         expect(useHistoryStore.getState().redo()).toBeNull();
     });
 
-    it('should respect the 256 snapshot limit', () => {
-        for (let i = 0; i < 260; i++) {
+    it('should respect the 64 snapshot limit', () => {
+        for (let i = 0; i < 70; i++) {
             useHistoryStore.getState().pushSnapshot({ presentationId: PRES_A, slides: makeSlides(`v${i}`) });
         }
-        expect(useHistoryStore.getState().past.length).toBe(256);
-        // The oldest entries should have been dropped — first entry is v4 (0-indexed)
-        expect(useHistoryStore.getState().past[0].slides[0].id).toBe('slide-v4');
+        expect(useHistoryStore.getState().past.length).toBe(64);
+        // The oldest entries should have been dropped — first entry is v6 (0-indexed)
+        expect(useHistoryStore.getState().past[0].slides[0].id).toBe('slide-v6');
     });
 
     it('snapshot stores presentationId and slides', () => {

@@ -1,17 +1,18 @@
-import React from 'react';
-import { Music, Volume2, VolumeX, Repeat, Trash2 } from 'lucide-react';
+import React, { useState, useCallback } from 'react';
+import { Music, Volume2, VolumeX, Repeat, Trash2, Play, Clock } from 'lucide-react';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@/core/utils/cn';
-import { CustomSlider } from '@/components/CustomSlider';
 import { IAudioScope } from '@/core/types';
 import type { TFunction } from 'i18next';
 import { ScrubbableInput } from '../slide-properties/ScrubbableInput';
 import { db } from '@/core/db';
 import { toast } from '@/core/utils/toast';
 import { ffmpegService } from '@/core/services/ffmpegService';
-import { useState, useCallback } from 'react';
-import { Play, Clock } from 'lucide-react';
+import Button from '@/shared/ui/Button';
+import IconButton from '@/shared/ui/IconButton';
+import Switch from '@/shared/ui/Switch';
+import Slider from '@/shared/ui/Slider';
 
 const STRATEGY_OPTIONS: Array<{ value: IAudioScope['strategy']; label: string; icon: React.ElementType }> = [
     { value: 'auto', label: 'Auto-play', icon: Play },
@@ -76,7 +77,7 @@ export const AudioTabContent: React.FC<IAudioTabContentProps> = ({
             });
 
             toast.success(t('audio_trimmed_success', 'Audio physically trimmed successfully!'));
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('[AudioTabContent] Trim failed:', error);
             toast.error(t('audio_trim_failed', 'Failed to trim audio. Check console.'));
         } finally {
@@ -118,7 +119,7 @@ export const AudioTabContent: React.FC<IAudioTabContentProps> = ({
                             if (name && !isTechnicalId(name)) return name;
                             
                             // Try path extraction
-                            const path = (mediaItem as any)?.path || scope?.fileId || '';
+                            const path = (mediaItem as { path?: string } | undefined)?.path || scope?.fileId || '';
                             if (path) {
                                 const extracted = path.replace(/^local-resource:\/\//, '').split(/[/\\]/).pop();
                                 if (extracted && !isTechnicalId(extracted)) return extracted;
@@ -135,13 +136,27 @@ export const AudioTabContent: React.FC<IAudioTabContentProps> = ({
             {/* Volume */}
             <div className="space-y-4 px-1">
                 <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2"><div className="w-1 h-3 bg-accent/40 rounded-full" /><span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">{t('volume', 'Volume')}</span></div>
-                    <button onClick={() => updateAudioScope(scope.id, { isMuted: !scope.isMuted })} className={cn("p-1.5 rounded-lg transition-all active:scale-90 cursor-pointer", scope.isMuted ? "bg-red-500/10 text-red-500" : "text-stone-500 hover:text-stone-300 hover:bg-white/5")} title={scope.isMuted ? t('unmute', 'Unmute') : t('mute', 'Mute')}>
-                        {scope.isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <div className="w-1 h-3 bg-accent/40 rounded-full" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">{t('volume', 'Volume')}</span>
+                    </div>
+                    <IconButton
+                        icon={scope.isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                        onClick={() => updateAudioScope(scope.id, { isMuted: !scope.isMuted })}
+                        variant={scope.isMuted ? 'danger' : 'ghost'}
+                        size="xs"
+                        label={scope.isMuted ? t('unmute', 'Unmute') : t('mute', 'Mute')}
+                    />
                 </div>
                 <div className={cn("bg-black/40 p-5 rounded-3xl border border-white/5 transition-opacity", scope.isMuted && "opacity-50 pointer-events-none")}>
-                    <CustomSlider min={0} max={1} step={0.01} value={scope.volume ?? 1} onChange={(v) => updateAudioScope(scope.id, { volume: v })} formatValue={(v) => `${Math.round(v * 100)}%`} />
+                    <Slider
+                        min={0}
+                        max={1}
+                        step={0.01}
+                        value={scope.volume ?? 1}
+                        onChange={(v) => updateAudioScope(scope.id, { volume: v })}
+                        formatValue={(v) => `${Math.round(v * 100)}%`}
+                    />
                 </div>
             </div>
 
@@ -160,18 +175,15 @@ export const AudioTabContent: React.FC<IAudioTabContentProps> = ({
                         </div>
                     </div>
                     {((scope.trimStart ?? 0) > 0 || (scope.trimEnd ?? 0) > 0) && (
-                        <button
+                        <Button
+                            variant="secondary"
+                            size="md"
                             onClick={handleApplyTrim}
                             disabled={isTrimming}
-                            className={cn(
-                                "w-full flex items-center justify-center gap-2 p-3 rounded-2xl transition-all font-bold text-[11px] uppercase tracking-wider",
-                                isTrimming 
-                                ? "bg-white/5 text-stone-500 cursor-wait" 
-                                : "bg-accent/10 border border-accent/20 text-accent hover:bg-accent/15 cursor-pointer active:scale-[0.98]"
-                            )}
+                            className="w-full uppercase tracking-wider font-bold text-[11px]"
                         >
                             {isTrimming ? t('trimming_wait', 'Applying Trim...') : t('apply_physical_trim', 'Apply Physical Trim')}
-                        </button>
+                        </Button>
                     )}
                     <p className="text-[9px] text-stone-600 px-1 font-medium">{t('trim_help')} <span className="text-stone-400">{((scope.trimEnd || 0) - (scope.trimStart || 0)).toFixed(1)}s</span></p>
                 </div>
@@ -189,14 +201,15 @@ export const AudioTabContent: React.FC<IAudioTabContentProps> = ({
                 <div className="grid grid-cols-1 gap-2">
                     {STRATEGY_OPTIONS.map((opt) => {
                         const Icon = opt.icon;
+                        const isSelected = (scope.strategy || 'auto') === opt.value;
                         return (
                             <button
                                 key={opt.value}
                                 type="button"
                                 onClick={() => updateAudioScope(scope.id, { strategy: opt.value })}
                                 className={cn(
-                                    "w-full flex items-center gap-3 p-4 rounded-3xl border transition-all cursor-pointer active:scale-[0.98]",
-                                    (scope.strategy || 'auto') === opt.value
+                                    "w-full flex items-center gap-3 p-4 rounded-3xl border transition-all cursor-pointer apple-press",
+                                    isSelected
                                         ? "bg-accent/10 border-accent/30 text-accent font-bold"
                                         : "bg-black/40 border-white/5 text-stone-500 hover:border-white/10 hover:text-stone-300"
                                 )}
@@ -232,10 +245,27 @@ export const AudioTabContent: React.FC<IAudioTabContentProps> = ({
             {/* Loop Playback */}
             <div className="space-y-4 px-1">
                 <div className="flex items-center gap-2"><div className="w-1 h-3 bg-accent/40 rounded-full" /><span className="text-[10px] font-black uppercase tracking-[0.2em] text-stone-500">{t('playback', 'Loop')}</span></div>
-                <button onClick={() => updateAudioScope(scope.id, { loop: !scope.loop })} className={cn("w-full flex items-center justify-between p-5 rounded-3xl border transition-all active:scale-[0.98] cursor-pointer", scope.loop ? "bg-accent/10 border-accent/30 text-accent font-bold" : "bg-black/40 border-white/5 text-stone-500 hover:border-white/10 hover:text-stone-300")}>
-                    <div className="flex items-center gap-3"><div className={cn("p-2 rounded-xl border transition-colors", scope.loop ? "bg-accent/20 border-accent/20" : "bg-white/5 border-white/5")}><Repeat className={cn("w-4 h-4", scope.loop ? "text-accent" : "text-stone-600")} /></div><span className="text-[11px] font-bold uppercase tracking-widest">{t('loop_playback', 'Loop Playback')}</span></div>
-                    <div className={cn("w-9 h-5 rounded-full relative transition-colors duration-300 flex items-center px-1", scope.loop ? "bg-accent" : "bg-stone-800")}><div className={cn("w-3 h-3 rounded-full bg-white transition-all duration-300 shadow-sm", scope.loop ? "ml-4" : "ml-0")} /></div>
-                </button>
+                <div
+                    onClick={() => updateAudioScope(scope.id, { loop: !scope.loop })}
+                    className={cn(
+                        "w-full flex items-center justify-between p-5 rounded-3xl border transition-all cursor-pointer apple-press",
+                        scope.loop
+                            ? "bg-accent/10 border-accent/30 text-accent font-bold"
+                            : "bg-black/40 border-white/5 text-stone-500 hover:border-white/10 hover:text-stone-300"
+                    )}
+                >
+                    <div className="flex items-center gap-3">
+                        <div className={cn("p-2 rounded-xl border transition-colors", scope.loop ? "bg-accent/20 border-accent/20" : "bg-white/5 border-white/5")}>
+                            <Repeat className={cn("w-4 h-4", scope.loop ? "text-accent" : "text-stone-600")} />
+                        </div>
+                        <span className="text-[11px] font-bold uppercase tracking-widest">{t('loop_playback', 'Loop Playback')}</span>
+                    </div>
+                    <Switch
+                        checked={Boolean(scope.loop)}
+                        onChange={(checked) => updateAudioScope(scope.id, { loop: checked })}
+                        size="sm"
+                    />
+                </div>
             </div>
 
             {/* Fades */}
@@ -254,7 +284,9 @@ export const AudioTabContent: React.FC<IAudioTabContentProps> = ({
             </div>
 
             <div className="pt-6 border-t border-white/5 px-1">
-                <button
+                <Button
+                    variant="danger"
+                    size="lg"
                     onClick={() => {
                         openModal(ModalType.CONFIRM, {
                             title: t('confirm_delete', 'Confirm Delete'),
@@ -268,11 +300,14 @@ export const AudioTabContent: React.FC<IAudioTabContentProps> = ({
                             }
                         });
                     }}
-                    className="w-full flex items-center justify-center gap-3 p-5 rounded-3xl bg-red-500/5 border border-red-500/10 text-red-500 hover:bg-red-500/10 hover:border-red-500/20 transition-all font-black uppercase tracking-[0.2em] text-[10px] cursor-pointer group"
+                    leftIcon={<Trash2 className="w-4 h-4" />}
+                    className="w-full uppercase tracking-[0.2em] font-black text-[10px]"
                 >
-                    <Trash2 className="w-4 h-4 group-hover:scale-110 transition-transform" />{t('remove_audio', 'Remove Audio')}
-                </button>
+                    {t('remove_audio', 'Remove Audio')}
+                </Button>
             </div>
         </div>
     );
 };
+
+export default AudioTabContent;

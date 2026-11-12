@@ -64,15 +64,15 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, onClose, children }) =>
         <div
             ref={menuRef}
             className={cn(
-                "fixed z-[1000000] min-w-[200px] bg-stone-900/80 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl py-2 overflow-hidden transition-opacity duration-200",
+                "fixed z-[1000000] min-w-[230px] bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-1.5 overflow-hidden transition-opacity duration-200",
                 isVisible ? "opacity-100" : "opacity-0",
-                "animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200"
+                "animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150"
             )}
             style={{ top: pos.top, left: pos.left }}
             onContextMenu={(e) => e.preventDefault()}
         >
             <div className="absolute inset-0 bg-linear-to-br from-white/5 to-transparent pointer-events-none" />
-            <div className="relative z-10">
+            <div className="relative z-10 flex flex-col gap-1">
                 {children}
             </div>
         </div>,
@@ -88,7 +88,8 @@ export const ContextMenuItem: React.FC<{
     danger?: boolean;
     disabled?: boolean;
     active?: boolean;
-}> = ({ icon, label, onClick, shortcut, danger, disabled, active }) => (
+    className?: string;
+}> = ({ icon, label, onClick, shortcut, danger, disabled, active, className }) => (
     <button
         onClick={(e) => {
             e.stopPropagation();
@@ -96,14 +97,15 @@ export const ContextMenuItem: React.FC<{
         }}
         disabled={disabled}
         className={cn(
-            "group w-full text-left px-4 py-2.5 text-xs font-bold transition-all duration-200 flex items-center gap-3 relative overflow-hidden",
+            "group w-full text-left px-3.5 h-12 min-h-[48px] text-xs font-semibold rounded-xl transition-all duration-150 flex items-center gap-3 relative overflow-hidden select-none cursor-pointer",
             disabled
                 ? "opacity-40 cursor-not-allowed text-stone-500"
                 : active
                     ? "text-accent bg-accent/10 pointer-events-auto"
                     : danger
                         ? "text-red-400 hover:bg-red-500/10 hover:text-red-300 pointer-events-auto"
-                        : "text-stone-300 hover:bg-accent/10 hover:text-accent pointer-events-auto"
+                        : "text-stone-300 hover:bg-white/10 hover:text-white pointer-events-auto",
+            className
         )}
     >
         {/* Hover Indicator */}
@@ -116,20 +118,20 @@ export const ContextMenuItem: React.FC<{
 
         {icon && (
             <span className={cn(
-                "w-4 h-4 transition-transform duration-200",
+                "w-5 h-5 flex items-center justify-center shrink-0 transition-transform duration-200 [&>svg]:w-4 [&>svg]:h-4",
                 !disabled && "group-hover:scale-110",
-                disabled ? "text-stone-600" : danger ? "text-red-400 opacity-80" : "text-stone-500 group-hover:text-accent"
+                disabled ? "text-stone-600" : danger ? "text-red-400 opacity-80" : "text-stone-400 group-hover:text-accent"
             )}>
                 {icon}
             </span>
         )}
-        <span className="flex-1 tracking-wide">{label}</span>
+        <span className="flex-1 tracking-wide truncate">{label}</span>
         {shortcut && (
             <span className={cn(
-                "text-[9px] font-black uppercase tracking-tighter px-1.5 py-0.5 rounded-md transition-colors",
+                "text-[10px] font-mono tracking-tight px-1.5 py-0.5 rounded-xl transition-colors",
                 disabled
-                    ? "text-stone-700 bg-white/2"
-                    : "text-stone-600 bg-white/5 group-hover:bg-accent/20 group-hover:text-accent"
+                    ? "text-stone-700 bg-white/5"
+                    : "text-stone-500 bg-white/5 group-hover:bg-accent/20 group-hover:text-accent"
             )}>
                 {shortcut}
             </span>

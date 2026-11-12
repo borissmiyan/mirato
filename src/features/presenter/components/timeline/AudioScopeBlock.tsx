@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { TFunction } from 'i18next';
 import { cn } from '@/core/utils/cn';
 import { IAudioScope, ISlide, ICanvasSlide } from '@/core/types';
 import { Music, Repeat, Trash2, ArrowRightLeft, AlertCircle, Copy, Layers } from 'lucide-react';
@@ -9,6 +10,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
 import ContextMenu, { ContextMenuItem } from '@/shared/ui/ContextMenu';
 import { gainToDb, dbToGain } from '@/core/utils/audioUtils';
+import { TimelineItem } from './hooks/useTimelineLayout';
 
 // Sub-components & Hooks
 import { AudioWaveform } from './AudioScopeBlock/AudioWaveform';
@@ -19,17 +21,23 @@ interface AudioScopeBlockProps {
     scope: IAudioScope;
     startIdx: number;
     endIdx: number;
-    visualTimeline: Array<{
-        id: string;
-        width: number;
-        x: number;
-        type: string;
-        slide?: ISlide;
-        presentationId?: string;
-        parentSlideId?: string;
-    }>;
+    visualTimeline: TimelineItem[];
     tileGap: number;
 }
+
+// Helper to identify technical IDs that need replacement with human-readable names
+const isTechnicalId = (val: string) => {
+    if (!val) return false;
+    const clean = val.trim().replace(/\.(mp3|wav|ogg|m4a|aac|flac|bin|mp4|webm)$/i, '');
+    // Check for SHA-256 (64 hex), UUID (36 chars), or MD5 (32 hex)
+    return /^[a-fA-F0-9]{64}$/.test(clean) || 
+           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean) ||
+           /^[0-9a-f]{32}$/i.test(clean) ||
+           clean.startsWith('imported_');
+};
+
+// Tracks already repaired in this session to prevent re-writes
+const sessionRepairedIds = new Set<string>();
 
 const AudioScopeBlock: React.FC<AudioScopeBlockProps> = ({
     scope,
@@ -53,6 +61,7 @@ const AudioScopeBlock: React.FC<AudioScopeBlockProps> = ({
     const settings = usePresenterStore(s => s.settings);
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+    const handleCloseContextMenu = useCallback(() => setContextMenu(null), []);
     const [isEditingVolume, setIsEditingVolume] = useState(false);
     const [volumeInputValue, setVolumeInputValue] = useState('');
 
@@ -67,20 +76,6 @@ const AudioScopeBlock: React.FC<AudioScopeBlockProps> = ({
         [scope.fileId]
     );
 
-// Helper to identify technical IDs that need replacement with human-readable names
-const isTechnicalId = (val: string) => {
-    if (!val) return false;
-    const clean = val.trim().replace(/\.(mp3|wav|ogg|m4a|aac|flac|bin|mp4|webm)$/i, '');
-    // Check for SHA-256 (64 hex), UUID (36 chars), or MD5 (32 hex)
-    return /^[a-fA-F0-9]{64}$/.test(clean) || 
-           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean) ||
-           /^[0-9a-f]{32}$/i.test(clean) ||
-           clean.startsWith('imported_');
-};
-
-// tracks already repaired in this session to prevent re-writes
-const sessionRepairedIds = new Set<string>();
-        
     // ─── Metadata Auto-Repair ──────────────────────────────────────────────
     useEffect(() => {
         if (!mediaItem || sessionRepairedIds.has(scope.id)) return;
@@ -170,7 +165,7 @@ const sessionRepairedIds = new Set<string>();
     }, [scope.id, scope.volume, updateAudioScope, isEditingVolume]);
 
     const isSelected = selectedAudioScopeId === scope.id;
-    const isMissing = !!mediaItem && 'isMissing' in mediaItem && (mediaItem as any).isMissing;
+    const isMissing = !!mediaItem && 'isMissing' in mediaItem && Boolean((mediaItem as { isMissing?: boolean }).isMissing);
 
     // ─── Render ─────────────────────────────────────────────────────────────
     const hasNextScope = useMemo(() => {
@@ -253,7 +248,7 @@ const sessionRepairedIds = new Set<string>();
             )}
 
             {contextMenu && (
-                <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={() => setContextMenu(null)}>
+                <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={handleCloseContextMenu}>
                     <ContextMenuItem icon={<Layers className="w-4 h-4" />} label={t('duplicate')} onClick={() => { duplicateAudioScope(scope.id); setContextMenu(null); }} />
                     <ContextMenuItem icon={<Copy className="w-4 h-4" />} label={t('copy')} onClick={() => { copyAudioScope(scope.id); setContextMenu(null); }} />
                     <div className="h-px bg-white/5 my-1" />
@@ -277,7 +272,7 @@ interface AudioScopeBlockContentProps {
     onFadeOutToggle: (e: React.PointerEvent) => void;
     onLeftHandleDown: (e: React.PointerEvent) => void;
     onRightHandleDown: (e: React.PointerEvent) => void;
-    t: any;
+    t: TFunction;
     isEditingVolume: boolean;
     volumeInputValue: string;
     onVolumeBadgeDown: (e: React.PointerEvent) => void;
@@ -310,7 +305,7 @@ const AudioScopeBlockContent = React.memo(({
 
         <div className="absolute top-1 right-1 flex items-center gap-1 z-20">
             {scope.loop && (
-                <div className="bg-stone-900/60 p-1 rounded-lg border border-white/5 backdrop-blur-xl shadow-lg">
+                <div className="bg-stone-900/60 p-1 rounded-xl border border-white/5 backdrop-blur-xl shadow-lg">
                     <Repeat className="w-3 h-3 text-purple-300" />
                 </div>
             )}
@@ -329,7 +324,7 @@ const AudioScopeBlockContent = React.memo(({
 
         <div className="absolute top-1 left-9 z-20 opacity-0 group-hover/scope:opacity-100 transition-opacity flex items-center gap-1">
             {hasNextScope && (
-                <div className="p-1 bg-amber-500/80 text-black border border-amber-500/30 rounded-md shadow-lg backdrop-blur-md animate-pulse">
+                <div className="p-1 bg-amber-500/80 text-black border border-amber-500/30 rounded-xl shadow-lg backdrop-blur-md animate-pulse">
                     <ArrowRightLeft className="w-3 h-3" />
                 </div>
             )}

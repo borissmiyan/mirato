@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { LayoutTemplate, RefreshCw, Download } from 'lucide-react';
+import { TFunction } from 'i18next';
 import { cn } from '@/core/utils/cn';
 import { ITemplate, IBlock, ISlide, ITemplateSlide, ICanvasItem, ICanvasSlide } from '@/core/types';
 import SlideContentRenderer from '@/features/presenter/components/slide-editor/SlideContentRenderer';
@@ -17,7 +18,7 @@ interface ITemplatePreviewItemProps {
     onOverride?: (template: ITemplate, layoutSlideId: string) => void;
     layoutSlide?: ITemplateSlide;
     blocks: IBlock[];
-    t: any;
+    t: TFunction;
 }
 
 /**
@@ -61,6 +62,7 @@ export const TemplatePreviewItem: React.FC<ITemplatePreviewItemProps> = React.me
 
     return (
         <button
+            type="button"
             onClick={(e) => {
                 const isBefore = e.metaKey || e.ctrlKey;
                 onClick(template, layoutSlide?.id, isBefore);
@@ -68,9 +70,9 @@ export const TemplatePreviewItem: React.FC<ITemplatePreviewItemProps> = React.me
             onContextMenu={(e) => onContextMenu?.(e, template, layoutSlide)}
             disabled={!activePresentationId}
             className={cn(
-                "aspect-video rounded-xl border transition-all cursor-pointer group flex flex-col items-center justify-center p-2 text-center relative overflow-hidden min-w-[140px] max-w-full shadow-lg shadow-black/20",
+                "aspect-video rounded-xl border transition-all cursor-pointer group flex flex-col items-center justify-center p-2 text-center relative overflow-hidden min-w-[140px] max-w-full shadow-lg shadow-black/20 apple-press",
                 activePresentationId
-                    ? "border-white/5 hover:border-accent/40 hover:scale-[1.02] active:scale-[0.98] bg-stone-900/60"
+                    ? "border-white/5 hover:border-accent/40 hover:scale-[1.02] bg-stone-900/60"
                     : "border-white/3 opacity-50 cursor-not-allowed"
             )}
         >
@@ -93,11 +95,12 @@ export const TemplatePreviewItem: React.FC<ITemplatePreviewItemProps> = React.me
                 <div className="flex items-center gap-2">
                     {onOverride && layoutSlide && (
                         <button
+                            type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onOverride(template, layoutSlide.id);
                             }}
-                            className="p-1.5 rounded-lg bg-accent/80 hover:bg-accent text-white shadow-xl transition-all border border-white/20 transform hover:scale-110 active:scale-95"
+                            className="p-1.5 rounded-xl bg-accent/80 hover:bg-accent text-white shadow-xl transition-all border border-white/20 transform hover:scale-110 apple-press cursor-pointer"
                             title={t('override_template_slide', "Override template's slide with current slide")}
                         >
                             <RefreshCw className="w-4 h-4" />
@@ -105,11 +108,12 @@ export const TemplatePreviewItem: React.FC<ITemplatePreviewItemProps> = React.me
                     )}
                     {onExport && (
                         <button
+                            type="button"
                             onClick={(e) => {
                                 e.stopPropagation();
                                 onExport();
                             }}
-                            className="p-1.5 rounded-lg bg-stone-800/80 hover:bg-stone-700 text-white shadow-xl transition-all border border-white/10 transform hover:scale-110 active:scale-95"
+                            className="p-1.5 rounded-xl bg-stone-800/80 hover:bg-stone-700 text-white shadow-xl transition-all border border-white/10 transform hover:scale-110 apple-press cursor-pointer"
                             title={t('export_template', "Export Template")}
                         >
                             <Download className="w-4 h-4" />

@@ -1,4 +1,6 @@
-export type MediaType = 'image' | 'video' | 'audio';
+export type MediaType = 'image' | 'video' | 'audio' | 'font';
+
+export type MediaColorTag = 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
 
 export interface IMediaItem {
   id: string;
@@ -7,6 +9,10 @@ export interface IMediaItem {
   type: MediaType;
   data?: Blob; // Optional binary data for imported/bundled media
   binId?: string; // Reference to IMediaBin (null = root)
+  colorTag?: MediaColorTag; // Apple-style color label
+  fileSize?: number; // Size in bytes
+  thumbnailUrl?: string; // Optional pre-rendered thumbnail data URL / blob URL
+  duration?: number; // Optional duration in seconds for video/audio
   isMissing?: boolean; // Track if the local file is missing from disk
   createdAt: number;
   updatedAt?: number;
@@ -15,6 +21,7 @@ export interface IMediaItem {
 export interface IMediaBin {
   id: string;
   name: string;
+  parentId?: string; // Reference to parent IMediaBin.id for nested folders
   createdAt: number;
 }
 

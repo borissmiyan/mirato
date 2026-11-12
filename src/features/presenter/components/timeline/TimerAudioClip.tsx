@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '@/core/utils/cn';
-import { ISlide, IMediaItem, ITimerSlide } from '@/core/types';
+import { ISlide, IMediaItem, ITimerSlide, ICanvasSlide } from '@/core/types';
 import { Music, Timer } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
@@ -13,7 +13,7 @@ interface TimerAudioClipProps {
 
 const TimerAudioClip: React.FC<TimerAudioClipProps> = ({ slide, x, width }) => {
     const timerSlide = slide.type === 'timer' ? slide as ITimerSlide : null;
-    const canvasSlideSettings = slide.type === 'normal' ? (slide as any).timerSettings : null;
+    const canvasSlideSettings = slide.type === 'normal' ? (slide as ICanvasSlide).timerSettings : null;
     const playlist = timerSlide?.playlist || canvasSlideSettings?.playlist || [];
 
     const playlistItems = useLiveQuery(
@@ -40,7 +40,7 @@ const TimerAudioClip: React.FC<TimerAudioClipProps> = ({ slide, x, width }) => {
                 "relative w-full h-full rounded-xl bg-orange-500/10 border-2 border-orange-500/20 flex flex-col justify-end p-2 overflow-hidden backdrop-blur-sm transition-all hover:bg-orange-500/15 hover:border-orange-500/30"
             )}>
                 {/* Badge with count */}
-                <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-md bg-orange-500/20 border border-orange-500/20 text-[8px] font-black text-orange-400 uppercase tracking-widest flex items-center gap-1 z-20">
+                <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-xl bg-orange-500/20 border border-orange-500/20 text-[8px] font-black text-orange-400 uppercase tracking-widest flex items-center gap-1 z-20">
                     <Music className="w-2.5 h-2.5" />
                     {playlist.length} {playlist.length === 1 ? 'Song' : 'Songs'}
                 </div>

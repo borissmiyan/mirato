@@ -1,281 +1,235 @@
 import express from 'express';
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocket } from 'ws';
 import { networkInterfaces } from 'os';
 import * as http from 'http';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { BrowserWindow, ipcMain } from 'electron';
-import crypto from 'crypto';
+import { selectBestLocalIp, getAvailableLocalIps } from '../src/core/utils/networkIpUtils';
+import { UdpDiscoveryService } from './remote/UdpDiscoveryService';
+import { MediaProxyHandler } from './remote/MediaProxyHandler';
+import { RemoteAuthManager } from './remote/RemoteAuthManager';
+import { WebSocketRelayHandler } from './remote/WebSocketRelayHandler';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class RemoteServer {
     private app = express();
     private server: http.Server | null = null;
-    private wss: WebSocketServer | null = null;
-    private clients: Set<WebSocket> = new Set();
-    private pendingMediaRequests: Map<string, express.Response> = new Map();
+    private lastStatePayload: unknown = null;
     
-    private port: number = 3211;
-    private currentIp: string = '127.0.0.1';
-    public currentPin: string = '0000';
+    private port = 3211;
+    private currentIp = '127.0.0.1';
+    private selectedIp: string | null = null;
 
     private mainWindow: BrowserWindow | null = null;
+    private isExpressSetup = false;
+    private isIpcSetup = false;
 
-    constructor() {}
+    private authManager: RemoteAuthManager;
+    private mediaProxy: MediaProxyHandler;
+    private wsHandler: WebSocketRelayHandler;
+    private udpDiscovery: UdpDiscoveryService;
 
-    private getLocalIp(): string {
-        const nets = networkInterfaces();
-        for (const name of Object.keys(nets)) {
-            for (const net of nets[name]!) {
-                // Return the first non-internal IPv4 address
-                if (net.family === 'IPv4' && !net.internal) {
-                    return net.address;
-                }
-            }
-        }
-        return '127.0.0.1';
+    constructor() {
+        this.authManager = new RemoteAuthManager();
+        this.mediaProxy = new MediaProxyHandler(
+            () => this.mainWindow,
+            (msg: object) => this.broadcast(msg),
+            (): number => this.wsHandler ? this.wsHandler.clientCount : 0
+        );
+        this.wsHandler = new WebSocketRelayHandler(
+            this.authManager,
+            this.mediaProxy,
+            () => this.mainWindow,
+            () => this.lastStatePayload
+        );
+        this.udpDiscovery = new UdpDiscoveryService(() => ({
+            ip: this.currentIp,
+            port: this.getDisplayPort()
+        }));
     }
 
-    private setupExpress() {
+    public get currentPin(): string {
+        return this.authManager.currentPin;
+    }
+
+    public getLocalIp(): string {
+        const available = getAvailableLocalIps(networkInterfaces());
+        if (this.selectedIp && available.some(a => a.ip === this.selectedIp)) {
+            return this.selectedIp;
+        }
+        return selectBestLocalIp(networkInterfaces());
+    }
+
+    public setSelectedIp(ip: string) {
+        this.selectedIp = ip;
+        this.currentIp = ip;
+        this.generateNewPin();
+        this.disconnectClients();
+        return this.getInfo();
+    }
+
+    private setupExpress(): void {
         this.app.use(express.json());
-        
-        // Disable CORS restrictions since it's a local utility server
-        this.app.use((req, res, next) => {
+        this.app.use((_req, res, next) => {
             res.header('Access-Control-Allow-Origin', '*');
             res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
             res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
             next();
         });
-        
-        // --- MEDIA PROXY ROUTE ---
-        // This allows the remote controller (mobile) to fetch images directly from the desktop's DB
-        this.app.get('/media/:id', (req, res) => {
-            if (!this.mainWindow || this.mainWindow.isDestroyed()) {
-                console.error('[RemoteServer] Media Proxy: Main window not available');
-                return res.status(503).send('Main window not available');
-            }
-
-            const mediaId = req.params.id;
-            const requestId = crypto.randomUUID();
-            
-            console.log(`[RemoteServer] Media Request: ${mediaId} (RID: ${requestId})`);
-            
-            // Register this request so we can respond when the renderer sends data back
-            this.pendingMediaRequests.set(requestId, res);
-
-            // Ask the renderer to fetch this blob from IndexedDB
-            this.mainWindow.webContents.send('remote:request-media', { id: mediaId, requestId });
-
-            // Safety timeout: cleanup if renderer doesn't respond
-            setTimeout(() => {
-                if (this.pendingMediaRequests.has(requestId)) {
-                    console.warn(`[RemoteServer] Media Request Timeout: ${mediaId}`);
-                    this.pendingMediaRequests.get(requestId)?.status(408).send('Media request timeout');
-                    this.pendingMediaRequests.delete(requestId);
-                }
-            }, 10000);
+        this.app.get('/airdeck/health', (_req, res) => {
+            res.json({
+                service: 'deck-ce-airdeck',
+                status: 'ok',
+                ip: this.currentIp,
+                port: this.getDisplayPort()
+            });
         });
 
-        const viteDevUrl = process.env['VITE_DEV_SERVER_URL'];
+        this.app.get('/media/:id', (req, res) => {
+            this.mediaProxy.handleRoute(req, res);
+        });
 
+        // audit-ignore: Node.js main process environment
+        const viteDevUrl = process.env['VITE_DEV_SERVER_URL'];
         if (viteDevUrl) {
-            // DEV MODE: Redirect to Vite dev server to prevent proxy/CORS issues
-            console.log(`[RemoteServer] Dev mode — redirecting HTTP to Vite server`);
+            console.log('[RemoteServer] Dev mode — redirecting HTTP to Vite server');
             this.app.use((req, res) => {
                 try {
                     const url = new URL(viteDevUrl);
                     const targetPort = url.port || 3210;
                     res.redirect(`http://${this.currentIp}:${targetPort}${req.url}`);
-                } catch(e) {
+                } catch {
                     res.status(500).send('Vite Dev URL error');
                 }
             });
         } else {
-            // PRODUCTION: Serve built files from dist/
+            // audit-ignore: Node.js main process environment
             const publicPath = path.join(process.env.DIST || path.join(__dirname, '../dist'));
             console.log(`[RemoteServer] Production mode — serving from ${publicPath}`);
             this.app.use(express.static(publicPath));
-            this.app.use((req, res) => {
+            this.app.use((_req, res) => {
                 res.sendFile(path.join(publicPath, 'remote.html'));
             });
         }
     }
 
-    private setupWebSocket() {
-        if (!this.server) {
-            console.error('[RemoteServer] Cannot setup WebSocket: HTTP server not created yet');
-            return;
-        }
-        this.wss = new WebSocketServer({ 
-            server: this.server
-        });
-
-        this.wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
-            console.log(`[RemoteServer] New WebSocket connection from ${req.socket.remoteAddress}`);
-            let isAuthenticated = false;
-
-            ws.on('message', (message: string) => {
-                try {
-                    const data = JSON.parse(message.toString());
-
-                    // Handshake Authentication
-                    if (data.type === 'AUTH') {
-                        if (data.pin === this.currentPin) {
-                            isAuthenticated = true;
-                            this.clients.add(ws);
-                            ws.send(JSON.stringify({ type: 'AUTH_SUCCESS', token: crypto.randomUUID() })); // Simple token for now
-                            console.log('[RemoteServer] Client authenticated');
-                        } else {
-                            ws.send(JSON.stringify({ type: 'AUTH_ERROR', message: 'Invalid PIN' }));
-                            ws.close();
-                        }
-                        return;
-                    }
-
-                    if (!isAuthenticated) {
-                        ws.send(JSON.stringify({ type: 'AUTH_ERROR', message: 'Not authenticated' }));
-                        return;
-                    }
-
-                    // Forward authorized commands to the Electron main window
-                    if (data.type === 'COMMAND') {
-                        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-                            this.mainWindow.webContents.send('remote:command-received', data.command, data.payload);
-                        }
-                    }
-
-                } catch (err) {
-                    console.error('[RemoteServer] WS Message Error:', err);
-                }
-            });
-
-            ws.on('close', () => {
-                this.clients.delete(ws);
-                console.log('[RemoteServer] Client disconnected');
-            });
-        });
-    }
-
-    private setupIpcListeners() {
-        // Allow Desktop app to push updates (current slide text, etc) to Remote clients
-        ipcMain.on('remote:update-state', (event, payload) => {
+    private setupIpcListeners(): void {
+        ipcMain.on('remote:update-state', (_e, payload) => {
+            this.lastStatePayload = payload;
             this.broadcast({ type: 'STATE_UPDATE', payload });
         });
-
-        // Handle Bible/Data query results from the desktop app
-        ipcMain.on('remote:bible-results', (event, { requestId, results }) => {
-            this.broadcast({ type: 'BIBLE_RESULTS', requestId, results });
-        });
-
-        // Handle Media data response from the desktop app (for the proxy route)
-        ipcMain.on('remote:media-response', (event, { requestId, data, mimeType, error }) => {
-            const res = this.pendingMediaRequests.get(requestId);
-            if (!res) return;
-
-            if (error) {
-                console.error(`[RemoteServer] Media Proxy Error for RID ${requestId}: ${error}`);
-                res.status(404).send(error);
-            } else if (data) {
-                // 'data' is expected to be a Buffer (sent from renderer via IPC)
-                const buffer = Buffer.from(data);
-                
-                if (mimeType) res.setHeader('Content-Type', mimeType);
-                res.setHeader('Cache-Control', 'public, max-age=3600');
-                res.setHeader('Accept-Ranges', 'bytes');
-
-                // Support partial content (streaming) for videos if client asks
-                const range = res.req.headers.range;
-                if (range) {
-                    const totalSize = buffer.length;
-                    const parts = range.replace(/bytes=/, "").split("-");
-                    const start = parseInt(parts[0], 10);
-                    const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
-                    const chunksize = (end - start) + 1;
-
-                    res.status(206).set({
-                        'Content-Range': `bytes ${start}-${end}/${totalSize}`,
-                        'Content-Length': chunksize,
-                    });
-                    res.send(buffer.slice(start, end + 1));
-                } else {
-                    res.setHeader('Content-Length', buffer.length);
-                    res.send(buffer);
-                }
-            } else {
-                res.status(404).send('Not found');
-            }
-
-            this.pendingMediaRequests.delete(requestId);
+        ipcMain.on('remote:send-relay-signal', (_e, signal) => this.broadcast({ type: 'RELAY_SIGNAL', signal }));
+        ipcMain.on('remote:bible-results', (_e, { requestId, results }) => this.broadcast({ type: 'BIBLE_RESULTS', requestId, results }));
+        ipcMain.on('remote:hymn-results', (_e, { requestId, results }) => this.broadcast({ type: 'HYMN_RESULTS', requestId, results }));
+        ipcMain.on('remote:media-response', (_e, { requestId, data, mimeType, error }) => {
+            this.mediaProxy.handleResponse(requestId, data ? Buffer.from(data) : null, mimeType, error, false);
         });
     }
 
-    public broadcast(message: object) {
-        const msgStr = JSON.stringify(message);
-        this.clients.forEach(client => {
-            if (client.readyState === WebSocket.OPEN) {
-                client.send(msgStr);
-            }
-        });
+    public broadcast(message: object): void {
+        this.wsHandler.broadcast(message);
     }
 
-    public start(mainWindow: BrowserWindow): Promise<{ ip: string; port: number; pin: string }> {
+    public broadcastExcept(excludeWs: WebSocket, message: object): void {
+        this.wsHandler.broadcastExcept(excludeWs, message);
+    }
+
+    public getDisplayPort(): number {
+        // audit-ignore: Node.js main process environment
+        const viteDevUrl = process.env['VITE_DEV_SERVER_URL'];
+        if (viteDevUrl) {
+            try { return parseInt(new URL(viteDevUrl).port) || 80; } catch { }
+        }
+        return this.port;
+    }
+
+    public generateNewPin(): string {
+        return this.authManager.generateNewPin();
+    }
+
+    public disconnectClients(): void {
+        this.wsHandler.disconnectClients();
+    }
+
+    public getInfo() {
+        const detectedIp = this.getLocalIp();
+        if (detectedIp !== this.currentIp && this.server) {
+            this.currentIp = detectedIp;
+            this.generateNewPin();
+            this.disconnectClients();
+        }
+        return {
+            success: this.server !== null && this.currentPin !== '0000',
+            ip: this.currentIp,
+            port: this.getDisplayPort(),
+            pin: this.currentPin,
+            availableIps: getAvailableLocalIps(networkInterfaces())
+        };
+    }
+
+    public async refresh(mainWindow?: BrowserWindow) {
+        if (mainWindow) this.mainWindow = mainWindow;
+        this.selectedIp = null;
+        this.currentIp = this.getLocalIp();
+        this.generateNewPin();
+        this.disconnectClients();
+
+        if (!this.server && this.mainWindow) {
+            const startRes = await this.start(this.mainWindow);
+            return { success: true, ...startRes, availableIps: getAvailableLocalIps(networkInterfaces()) };
+        }
+        return {
+            success: true,
+            ip: this.currentIp,
+            port: this.getDisplayPort(),
+            pin: this.currentPin,
+            availableIps: getAvailableLocalIps(networkInterfaces())
+        };
+    }
+
+    public start(mainWindow: BrowserWindow): Promise<{ ip: string; port: number; pin: string; availableIps: Array<{ name: string; ip: string }> }> {
         return new Promise((resolve, reject) => {
-            if (this.server) {
-                return resolve({ ip: this.currentIp, port: this.port, pin: this.currentPin });
-            }
-
             this.mainWindow = mainWindow;
-            this.currentIp = this.getLocalIp();
-            this.currentPin = Math.floor(1000 + Math.random() * 9000).toString(); // Generate 4-digit PIN
-
-            this.setupExpress();
+            const detectedIp = this.getLocalIp();
+            if (this.server) {
+                if (detectedIp !== this.currentIp) {
+                    this.currentIp = detectedIp;
+                    this.generateNewPin();
+                    this.disconnectClients();
+                }
+                return resolve({ ip: this.currentIp, port: this.getDisplayPort(), pin: this.currentPin, availableIps: getAvailableLocalIps(networkInterfaces()) });
+            }
+            this.currentIp = detectedIp;
+            if (this.currentPin === '0000') this.generateNewPin();
+            if (!this.isExpressSetup) { this.setupExpress(); this.isExpressSetup = true; }
             this.server = http.createServer(this.app);
-            this.setupIpcListeners();
+            if (!this.isIpcSetup) { this.setupIpcListeners(); this.isIpcSetup = true; }
 
             this.server.listen(this.port, '0.0.0.0', () => {
-                // Setup WebSocket AFTER server is listening
-                this.setupWebSocket();
-                const viteDevUrl = process.env['VITE_DEV_SERVER_URL'];
-                let displayPort = this.port;
-                
-                if (viteDevUrl) {
-                    try {
-                        const url = new URL(viteDevUrl);
-                        displayPort = parseInt(url.port) || 80;
-                    } catch (e) {}
-                }
-
-                console.log(`[RemoteServer] Started on http://${this.currentIp}:${this.port}`);
-                console.log(`[RemoteServer] Display URL Port: ${displayPort}`);
-                console.log(`[RemoteServer] Active PIN: ${this.currentPin}`);
-                resolve({ ip: this.currentIp, port: displayPort, pin: this.currentPin });
+                if (this.server) this.wsHandler.setup(this.server);
+                this.udpDiscovery.start();
+                resolve({ ip: this.currentIp, port: this.getDisplayPort(), pin: this.currentPin, availableIps: getAvailableLocalIps(networkInterfaces()) });
             });
-
-            this.server.on('error', (err: any) => {
+            this.server.on('error', (err: NodeJS.ErrnoException) => {
                 if (err.code === 'EADDRINUSE') {
-                    // Try next port if 3000 is occupied
                     this.port++;
                     this.server?.listen(this.port, '0.0.0.0');
                 } else {
-                    console.error('[RemoteServer] Startup Error:', err);
                     reject(err);
                 }
             });
         });
     }
 
-    public stop() {
-        if (this.wss) {
-            this.wss.clients.forEach(c => c.close());
-            this.wss.close();
-            this.wss = null;
-        }
-        if (this.server) {
-            this.server.close();
-            this.server = null;
-        }
-        this.clients.clear();
-        console.log('[RemoteServer] Stopped');
+    public stop(): void {
+        this.udpDiscovery.stop();
+        this.wsHandler.stop();
+        if (this.server) { this.server.close(); this.server = null; }
+        this.mediaProxy.clear();
+        this.authManager.clear();
     }
 }
 
-// Export singleton instance
 export const remoteServerInfo = new RemoteServer();

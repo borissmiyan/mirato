@@ -1,12 +1,15 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAtom } from 'jotai';
-import { themeAccentAtom, devModeAtom, isDevAuthenticatedAtom } from '@/core/store/uiAtoms';
+import { themeAccentAtom, devModeAtom, isDevAuthenticatedAtom, clipSlideContentAtom } from '@/core/store/uiAtoms';
 import { useHistoryStore } from '@/core/store/historyStore';
-import { Globe, Palette, Clock, Code } from 'lucide-react';
+import { Globe, Palette, Clock, Code, Crop } from 'lucide-react';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { toast } from '@/core/utils/toast';
 import { cn } from '@/core/utils/cn';
+import { Card, DropdownSelector, Switch, SegmentedControl } from '@/shared/ui';
+import { getSupportedLanguages } from '@/core/i18n';
+import Flag from 'react-world-flags';
 
 const GeneralSettings: React.FC = () => {
     const { t, i18n } = useTranslation();
@@ -14,11 +17,12 @@ const GeneralSettings: React.FC = () => {
     const [themeAccent, setThemeAccent] = useAtom(themeAccentAtom);
     const [devMode, setDevMode] = useAtom(devModeAtom);
     const [isDevAuthenticated, setIsDevAuthenticated] = useAtom(isDevAuthenticatedAtom);
+    const [clipContent, setClipContent] = useAtom(clipSlideContentAtom);
 
-    const languages = [
-        { code: 'en', label: 'English', native: 'English' },
-        { code: 'ru', label: 'Русский', native: 'Russian' },
-    ];
+    const historyLimit = useHistoryStore(state => state.limit);
+    const setHistoryLimit = useHistoryStore(state => state.setLimit);
+
+    const languages = getSupportedLanguages();
 
     const themes = [
         { id: 'amber', label: t('theme_amber'), color: 'bg-amber-500', glow: 'shadow-amber-500/20' },
@@ -27,15 +31,39 @@ const GeneralSettings: React.FC = () => {
         { id: 'stone', label: t('theme_stone'), color: 'bg-stone-500', glow: 'shadow-stone-500/20' },
     ];
 
+    const handleDevModeToggle = (nextVal: boolean) => {
+        if (nextVal) {
+            if (!isDevAuthenticated) {
+                openModal(ModalType.PROMPT, {
+                    title: t('enter_dev_password', 'Enter Developer Password'),
+                    type: 'password',
+                    onSelection: (pass: string | null) => {
+                        if (pass === 'GLUE') {
+                            setIsDevAuthenticated(true);
+                            setDevMode(true);
+                            toast.success(t('dev_mode_unlocked', 'Developer Mode Unlocked'), t('system_templates_accessible', 'System templates are now editable'));
+                        } else if (pass !== null) {
+                            toast.error(t('incorrect_password', 'Incorrect Password'), t('check_password_try_again', 'Please check the password and try again'));
+                        }
+                    }
+                });
+            } else {
+                setDevMode(true);
+            }
+        } else {
+            setDevMode(false);
+        }
+    };
+
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
 
             {/* Language Selection Card */}
-            <div className="col-span-1 md:col-span-2 bg-stone-900/40 border border-white/5 rounded-3xl p-6 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 blur-3xl rounded-full translate-x-10 -translate-y-10 group-hover:bg-accent/10 transition-colors" />
+            <Card padding="md" rounded="xl" className="col-span-1 md:col-span-2 relative overflow-hidden group">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-accent/5 blur-3xl rounded-full translate-x-10 -translate-y-10 group-hover:bg-accent/10 transition-colors pointer-events-none" />
 
                 <div className="flex items-center gap-3 mb-6 relative z-10">
-                    <div className="p-2 bg-stone-800 rounded-xl">
+                    <div className="w-10 h-10 bg-stone-800 rounded-xl flex items-center justify-center">
                         <Globe className="w-5 h-5 text-accent" />
                     </div>
                     <div>
@@ -44,36 +72,41 @@ const GeneralSettings: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative z-10">
-                    {languages.map((lang) => {
-                        const isSelected = i18n.language.startsWith(lang.code);
-                        return (
-                            <button
-                                key={lang.code}
-                                onClick={() => i18n.changeLanguage(lang.code)}
-                                className={cn(
-                                    "flex items-center justify-between px-6 py-4 rounded-2xl transition-all duration-300 group/btn border",
-                                    isSelected
-                                        ? "bg-white/10 border-white/20 text-white shadow-xl scale-[1.02]"
-                                        : "bg-stone-950/50 border-white/5 text-stone-500 hover:text-stone-300 hover:bg-stone-800/40"
-                                )}
-                            >
-                                <div className="flex flex-col items-start leading-none">
-                                    <span className="text-sm font-bold">{lang.label}</span>
-                                    <span className="text-[10px] mt-1 opacity-50 font-mono tracking-widest uppercase">{lang.native}</span>
+                <div className="max-w-xs relative z-10">
+                    <DropdownSelector
+                        size="md"
+                        value={i18n.language.split('-')[0]}
+                        options={languages.map(lang => ({
+                            value: lang.code,
+                            label: lang.label,
+                            icon: <Flag code={lang.flag} className="w-6 h-4 rounded-xs object-cover" />
+                        }))}
+                        onChange={(val) => i18n.changeLanguage(val)}
+                        renderSelected={(selected) => {
+                            if (!selected) return null;
+                            const lang = languages.find(l => l.code === selected.value);
+                            return (
+                                <div className="flex items-center gap-3">
+                                    {selected.icon}
+                                    <div className="flex flex-col items-start leading-none text-left">
+                                        <span className="text-sm font-bold">{selected.label}</span>
+                                        {lang && (
+                                            <span className="text-[10px] mt-0.5 opacity-50 font-mono tracking-widest uppercase">{lang.native}</span>
+                                        )}
+                                    </div>
                                 </div>
-                            </button>
-                        );
-                    })}
+                            );
+                        }}
+                    />
                 </div>
-            </div>
+            </Card>
 
             {/* Theme / Appearance Card */}
-            <div className="col-span-1 md:col-span-2 bg-stone-900/40 border border-white/5 rounded-3xl p-6 relative overflow-hidden group">
-                <div className="absolute bottom-0 left-0 w-48 h-48 bg-accent/5 blur-3xl rounded-full -translate-x-20 translate-y-20 group-hover:bg-accent/10 transition-colors" />
+            <Card padding="md" rounded="xl" className="col-span-1 md:col-span-2 relative overflow-hidden group">
+                <div className="absolute bottom-0 left-0 w-48 h-48 bg-accent/5 blur-3xl rounded-full -translate-x-20 translate-y-20 group-hover:bg-accent/10 transition-colors pointer-events-none" />
 
                 <div className="flex items-center gap-3 mb-6 relative z-10">
-                    <div className="p-2 bg-stone-800 rounded-xl">
+                    <div className="w-10 h-10 bg-stone-800 rounded-xl flex items-center justify-center">
                         <Palette className="w-5 h-5 text-accent" />
                     </div>
                     <div>
@@ -88,24 +121,24 @@ const GeneralSettings: React.FC = () => {
                         return (
                             <button
                                 key={theme.id}
+                                type="button"
                                 onClick={() => setThemeAccent(theme.id)}
                                 className={cn(
-                                    "flex flex-col items-center gap-3 p-4 rounded-2xl transition-all duration-300 border",
+                                    "flex flex-col items-center gap-3 p-4 rounded-2xl transition-all duration-300 border cursor-pointer select-none apple-press will-change-transform",
                                     isSelected
-                                        ? "bg-white/10 border-white/20 shadow-xl scale-[1.05]"
+                                        ? "bg-white/10 border-white/20 shadow-xl scale-[1.03]"
                                         : "bg-stone-950/50 border-white/5 hover:bg-stone-800/40"
                                 )}
                             >
                                 <div className={cn(
-                                    "w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-500",
+                                    "w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-300",
                                     theme.color,
                                     isSelected ? "scale-110 shadow-[0_0_20px_currentColor]" : "opacity-60",
                                     theme.glow
-                                )}>
-                                </div>
+                                )} />
                                 <span className={cn(
-                                    "text-[10px] font-bold uppercase tracking-widest",
-                                    isSelected ? "text-white" : "text-stone-600"
+                                    "text-xs font-bold uppercase tracking-widest",
+                                    isSelected ? "text-white" : "text-stone-500"
                                 )}>
                                     {theme.label}
                                 </span>
@@ -113,12 +146,12 @@ const GeneralSettings: React.FC = () => {
                         );
                     })}
                 </div>
-            </div>
+            </Card>
 
             {/* History Settings Card */}
-            <div className="col-span-1 md:col-span-2 bg-stone-900/40 border border-white/5 rounded-3xl p-6 relative overflow-hidden group">
+            <Card padding="md" rounded="xl" className="col-span-1 md:col-span-2 relative overflow-hidden group">
                 <div className="flex items-center gap-3 mb-6 relative z-10">
-                    <div className="p-2 bg-stone-800 rounded-xl">
+                    <div className="w-10 h-10 bg-stone-800 rounded-xl flex items-center justify-center">
                         <Clock className="w-5 h-5 text-accent" />
                     </div>
                     <div>
@@ -127,34 +160,25 @@ const GeneralSettings: React.FC = () => {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 relative z-10">
-                    {[10, 30, 50].map((num) => {
-                        const limit = useHistoryStore(state => state.limit);
-                        const setLimit = useHistoryStore(state => state.setLimit);
-                        const isSelected = limit === num;
-                        return (
-                            <button
-                                key={num}
-                                onClick={() => setLimit(num)}
-                                className={cn(
-                                    "px-6 py-3 rounded-2xl font-bold transition-all border",
-                                    isSelected
-                                        ? "bg-white/10 border-white/20 text-white shadow-xl scale-[1.05]"
-                                        : "bg-stone-950/50 border-white/5 text-stone-500 hover:text-stone-300 hover:bg-stone-800/40"
-                                )}
-                            >
-                                {num}
-                            </button>
-                        );
-                    })}
+                <div className="relative z-10">
+                    <SegmentedControl
+                        value={historyLimit}
+                        onChange={(val) => setHistoryLimit(Number(val))}
+                        options={[
+                            { value: 10, label: '10 шагов' },
+                            { value: 30, label: '30 шагов' },
+                            { value: 50, label: '50 шагов' },
+                        ]}
+                        size="sm"
+                    />
                 </div>
-            </div>
+            </Card>
 
             {/* Developer Mode Card */}
-            <div className="col-span-1 md:col-span-2 bg-stone-900/40 border border-white/5 rounded-3xl p-6 relative overflow-hidden group">
+            <Card padding="md" rounded="xl" className="col-span-1 md:col-span-2 relative overflow-hidden group">
                 <div className="flex items-center justify-between relative z-10">
                     <div className="flex items-center gap-3">
-                        <div className="p-2 bg-stone-800 rounded-xl">
+                        <div className="w-10 h-10 bg-stone-800 rounded-xl flex items-center justify-center">
                             <Code className="w-5 h-5 text-accent" />
                         </div>
                         <div>
@@ -163,46 +187,34 @@ const GeneralSettings: React.FC = () => {
                         </div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-2">
-                        <button
-                            onClick={() => {
-                                if (!devMode) {
-                                    if (!isDevAuthenticated) {
-                                        openModal(ModalType.PROMPT, {
-                                            title: t('enter_dev_password', 'Enter Developer Password'),
-                                            type: 'password',
-                                            onSelection: (pass: string | null) => {
-                                                if (pass === 'GLUE') {
-                                                    setIsDevAuthenticated(true);
-                                                    setDevMode(true);
-                                                    toast.success(t('dev_mode_unlocked', 'Developer Mode Unlocked'), t('system_templates_accessible', 'System templates are now editable'));
-                                                } else if (pass !== null) {
-                                                    toast.error(t('incorrect_password', 'Incorrect Password'), t('check_password_try_again', 'Please check the password and try again'));
-                                                }
-                                            }
-                                        });
-                                    } else {
-                                        setDevMode(true);
-                                    }
-                                } else {
-                                    setDevMode(false);
-                                }
-                            }}
-                            className={cn(
-                                "w-12 h-6 rounded-full transition-all relative",
-                                devMode ? "bg-accent" : "bg-stone-800"
-                            )}
-                        >
-                            <div className={cn(
-                                "absolute top-1 w-4 h-4 rounded-full bg-white transition-all shadow-md",
-                                devMode ? "left-7" : "left-1"
-                            )} />
-                        </button>
-                    </div>
+                    <Switch
+                        checked={devMode}
+                        onChange={handleDevModeToggle}
+                        size="md"
+                    />
                 </div>
+            </Card>
 
-                {/* Password input removed in favor of global PromptModal */}
-            </div>
+            {/* Clipping Content Card */}
+            <Card padding="md" rounded="xl" className="col-span-1 md:col-span-2 relative overflow-hidden group">
+                <div className="flex items-center justify-between relative z-10">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-stone-800 rounded-xl flex items-center justify-center">
+                            <Crop className="w-5 h-5 text-accent" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-bold text-white tracking-tight">{t('clip_content', 'Clip Content')}</h3>
+                            <p className="text-xs text-stone-500 font-medium">{t('clip_content_desc', 'Hide elements that extend outside the slide boundaries')}</p>
+                        </div>
+                    </div>
+
+                    <Switch
+                        checked={clipContent}
+                        onChange={(val) => setClipContent(val)}
+                        size="md"
+                    />
+                </div>
+            </Card>
 
         </div>
     );

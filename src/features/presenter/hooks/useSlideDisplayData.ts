@@ -8,10 +8,10 @@ import { useMetadata } from './useMetadata';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { useShallow } from 'zustand/react/shallow';
 import { appModeAtom, previewFontSizeAtom, showReferenceAtom, activeOverrideAtom } from '@/core/store/uiAtoms';
-import { Verse, ISlide, ICanvasSlide, PresenterSettings, SlideDisplayProps, IBlock, ITemplate, IPresentationFile } from '@/core/types';
+import { AppMode, Verse, ISlide, ICanvasSlide, PresenterSettings, SlideDisplayProps, IBlock, ITemplate, IPresentationFile } from '@/core/types';
 
 export interface UseSlideDisplayDataReturn {
-  appMode: 'scripture' | 'presentation';
+  appMode: AppMode;
   settings: PresenterSettings;
   activeVerse: Verse | null;
   isMultiVerseMode: boolean;

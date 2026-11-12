@@ -13,6 +13,27 @@
 
 ---
 
+## ⚠️ Read This First: DRY and WET Can Conflict on the Same Code
+
+The DRY section below says "3+ occurrences → extract." The WET section says
+"extracting composition-level logic (not primitives) creates a Tight-Coupling
+Trap." Applied mechanically in isolation, these can tell you to do opposite
+things to the same block of code. **When they conflict, WET wins:**
+
+- If the repeated block is a **primitive** (formatCurrency, formatDate, a
+  single pure calculation) → DRY applies, extract it.
+- If the repeated block is a **composition** — it would need >3 parameters,
+  internal `if (type === ...)` branching to handle different callers, or
+  merges two different business/UI contexts (e.g. Mobile vs Desktop layout)
+  → WET applies even at 3+ occurrences. Do not extract; flag the duplication
+  as *acceptable* and note why in the audit report, rather than "fixing" it
+  into a God function.
+
+When in doubt, ask: "if one caller's requirement changes next month, does
+extracting this make that change easier or harder?" If harder → WET wins.
+
+---
+
 ## YAGNI
 
 ### Constraint
@@ -59,7 +80,7 @@ For each interface/type: search the codebase for every field usage. If a field i
 
 ### Constraint
 
-Logic that appears in 3+ places MUST be extracted into a shared utility, hook, or component. But see WET below — premature extraction is also bad.
+Logic that appears in 3+ places MUST be extracted into a shared utility, hook, or component — **provided it's a primitive, not a composition; see the conflict note at the top of this file before applying this rule.**
 
 ### Common DRY Violations
 
@@ -77,7 +98,10 @@ Identical try/catch/finally blocks repeated across many actions or components.
 
 ### Self-Correction Rule
 
-Search for identical multi-line blocks (3+ lines, 3+ occurrences). If found → **WARNING — DRY violation**.
+Search for identical multi-line blocks (3+ lines, 3+ occurrences). If found,
+**first classify it as primitive or composition** (see conflict note above).
+Primitive → **WARNING — DRY violation**, extract it. Composition → do NOT
+flag as a DRY violation; evaluate under WET instead.
 
 ### ⚠️ Tight-Coupling DRY Trap
 
@@ -88,7 +112,7 @@ Extracting shared code creates coupling. If one consumer needs a special case, t
 **Never use DRY to merge Mobile and Desktop visual layouts.**
 AI often tries to merge `<MobileTransactionForm />` (Bottom Sheet) and `<DesktopTransactionForm />` (Centered Modal) into a single `<TransactionForm />` filled with `if (isMobile)` ternaries.
 
-* **Fix (WET):** Business logic (Zustand, validation) stays DRY. Visual components must be rigidly separated. A little duplicated JSX is better than a component that handles two completely different layout paradigms.
+- **Fix (WET):** Business logic (Zustand, validation) stays DRY. Visual components must be rigidly separated. A little duplicated JSX is better than a component that handles two completely different layout paradigms.
 
 ---
 
@@ -96,7 +120,7 @@ AI often tries to merge `<MobileTransactionForm />` (Bottom Sheet) and `<Desktop
 
 ### Constraint (Rule of Three)
 
-Do NOT extract shared code UNTIL you see the pattern 3 times. Two occurrences = acceptable duplication. Premature abstraction creates coupling that's harder to change than duplication.
+Do NOT extract shared code UNTIL you see the pattern 3 times **and** the pattern is a primitive, not a composition — a 3rd occurrence of a composition-level pattern is still WET territory, not a DRY trigger. Two occurrences = acceptable duplication regardless. Premature abstraction creates coupling that's harder to change than duplication.
 
 ### Bad — Premature Abstraction
 
@@ -147,10 +171,11 @@ Instead, use the **Adapter Pattern**:
 
 ### Self-Correction Rule
 
-* If a "helper" or "utility" is used in only 1-2 places → **WARNING — premature abstraction**. Exception: complex logic (>15 lines).
+- If a "helper" or "utility" is used in only 1-2 places → **WARNING — premature abstraction**. Exception: complex logic (>15 lines).
 
-* If a store action uses `if (method/provider === ...)` branching for different business contexts → **WARNING — God function**. Split into separate actions. See `references/state_management.md` → God Login Functions.
-* If a UI component contains `if (window.Telegram?.WebApp)` or `isDesktop ? <A> : <B>` layout switching → **WARNING — Platform Coupling**. Use an Adapter (for logic) or separate components (for UI).
+- If a store action uses `if (method/provider === ...)` branching for different business contexts → **WARNING — God function**. Split into separate actions. See `references/state_management.md` → God Login Functions.
+- If a UI component contains `if (window.Telegram?.WebApp)` or `isDesktop ? <A> : <B>` layout switching → **WARNING — Platform Coupling**. Use an Adapter (for logic) or separate components (for UI).
+- **If this WET rule and the DRY rule above both fire on the same block, log only the WET finding.** Do not report the same code as both a DRY violation to fix and a WET pattern to preserve — that's a contradictory instruction to whoever reads the report.
 
 ---
 
@@ -206,21 +231,31 @@ return data.type === 'income' ? <Income /> : <Expense />;
 
 ### Self-Correction Rule
 
-* If a component has > 3 conditional render paths in a single expression → **WARNING — KISS violation**.
+- If a component has > 3 conditional render paths in a single expression → **WARNING — KISS violation**.
 
-* If a Zustand store field can be computed from another field in the same store → **CRITICAL — derived flag**.
+- If a Zustand store field can be computed from another field in the same store → **CRITICAL — derived flag**.
 
 ---
 
-## 5. Single Responsibility & File Size
+## 5. Single Responsibility & File Size (.TSX Component Size Budget)
 
 ### Constraint
 
-Each file (Component, Hook, Utility) should have one primary responsibility. Large files are harder to test, audit, and maintain.
+Each file (Component, Hook, Utility) should have one primary responsibility. Large files degrade LLM attention windows, cause merge conflicts, and trigger re-render storms.
+
+**Industry Standard for `.tsx` / `.ts` files:**
+- **50–150 lines (UI-kit):** Presentational components (buttons, inputs, cards).
+- **150–250 lines (Enterprise Gold Standard):** Smart / Container components, screens, widgets, services, stores.
+- **251–500 lines (Yellow Zone / Warning Threshold):** Linter warning (`WARN`). Mandatory refactoring & decomposition signal.
+- **> 500 lines (Red Zone / Emergency Hard Ceiling):** Critical blocker (`CRITICAL`). Hard ceiling violation in CI & pre-commit.
 
 ### Self-Correction Rule
 
-If a file exceeds **500 lines** → **CRITICAL — SRP Violation**. Automatically recommend splitting logic into custom hooks, sub-components, or utilities.
+- If a file exceeds **250 lines** → **WARNING — File Size Threshold Exceeded**. Proactively apply the 3 decomposition rules:
+  1. Extract state & effects into `hooks/use<Feature>.ts` (cuts 30-50% volume).
+  2. Evict pure helpers and static configs to `utils.ts`, `constants.ts`, `types.ts`.
+  3. Isolate heavy JSX blocks (> 40-50 lines) into sub-components (`FeatureHeader.tsx`, `FeatureFilter.tsx`).
+- If a file exceeds **500 lines** → **CRITICAL — Hard Ceiling Violation**. Code must be blocked until decomposed.
 
 ---
 
@@ -240,11 +275,11 @@ If the project uses Vite, search for `process.env` → **CRITICAL — Bundler Co
 
 ### Constraint (per workspace rules)
 
-* `src/components/` — Presentational (dumb) components only
+- `src/components/` — Presentational (dumb) components only
 
-* `src/features/` — Smart components, business logic, API
-* `src/core/` — Singletons, stores, constants
-* `src/shared/` — Reusable hooks, UI atoms, providers
+- `src/features/` — Smart components, business logic, API
+- `src/core/` — Singletons, stores, constants
+- `src/shared/` — Reusable hooks, UI atoms, providers
 
 ### Self-Correction Rule
 
@@ -265,7 +300,7 @@ If the project uses Vite, search for `process.env` → **CRITICAL — Bundler Co
 
 ### Self-Correction Rule
 
-If a grep for a function name returns ONLY its definition (no usages), flag as **WARNING — dead code**. Exception: exported from index/barrel files for external consumers.
+If a grep for a function name returns ONLY its definition (no usages), flag as **WARNING — dead code**. Exception: exported from index/barrel files for external consumers. Prefer `ts-prune` (see Step 0.5 in SKILL.md) over a manual grep — it correctly handles barrel re-exports and dynamic imports that a grep count will false-positive on.
 
 ---
 
@@ -289,7 +324,7 @@ Features should be isolated and modular. A feature should never import component
 
 ### Self-Correction Rule
 
-If a file in `src/features/X` imports from `../../features/Y` → **CRITICAL: Domain Boundary Leak**.
+If a file in `src/features/X` imports from `../../features/Y` → **CRITICAL: Domain Boundary Leak**. Confirm with `madge --circular` (Step 0.5) whether this import is also part of an actual cycle — a one-way dependency between features is a smaller issue than a circular one, and the report should distinguish the two.
 
 ---
 

@@ -1,8 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Presentation, ChevronDown, Settings, Search, X } from 'lucide-react';
+import { BookOpen, Presentation, Music, ChevronDown, Settings } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { AppMode } from '@/core/types';
+import { Button, SearchInput } from '@/shared/ui';
 
 interface NavigationHeaderProps {
   appMode: AppMode;
@@ -26,20 +27,24 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = React.memo(({
   onSearchChange
 }) => {
   const { t } = useTranslation();
-  const modeLabel = appMode === 'scripture' ? t('scripture') : t('presentation', 'Presentation');
+  const modeLabel = appMode === 'scripture' ? t('scripture') : appMode === 'hymns' ? t('hymns.title', 'Hymns') : t('presentation', 'Presentation');
+  const searchPlaceholder = appMode === 'hymns' ? t('hymns.search_placeholder', 'Search hymns...') : t('search.placeholder');
 
   return (
     <div className="p-4 border-b border-white/5 space-y-3 shrink-0">
       <div className="flex items-center justify-between">
         <div className="relative">
           <button
+            type="button"
             onClick={(e) => onToggleModePicker(e.currentTarget)}
             aria-label={modeLabel}
-            className="group flex items-center gap-2 px-2 py-1.5 -ml-2 rounded-xl hover:bg-white/5 transition-all text-left"
+            className="group flex items-center gap-2 px-2.5 py-1.5 -ml-2 rounded-xl hover:bg-white/5 transition-all text-left cursor-pointer"
           >
             <div className="p-1.5 bg-accent/20 rounded-xl group-hover:bg-accent/30 transition-colors">
               {appMode === 'scripture' ? (
                 <BookOpen className="w-4 h-4 text-accent" />
+              ) : appMode === 'hymns' ? (
+                <Music className="w-4 h-4 text-accent" />
               ) : (
                 <Presentation className="w-4 h-4 text-accent" />
               )}
@@ -54,38 +59,31 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = React.memo(({
             </div>
           </button>
         </div>
-        <button
+        
+        <Button
+          size="sm"
+          square
+          variant="ghost"
           onClick={onOpenSettings}
-          className="p-1.5 text-stone-500 hover:text-stone-200 hover:bg-white/5 rounded-xl transition-all"
           title={t('settings')}
           aria-label={t('settings')}
+          className="text-stone-400 hover:text-white"
         >
           <Settings className="w-4 h-4" />
-        </button>
+        </Button>
       </div>
 
-      <div className="relative group">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-600 group-focus-within:text-accent transition-colors" />
-        <input
-          type="text"
-          placeholder={t('search.placeholder')}
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full bg-stone-950/40 border border-white/5 rounded-xl py-2 pl-10 pr-10 text-sm text-stone-200 focus:outline-none focus:border-accent/40 focus:ring-4 focus:ring-accent/5 transition-all placeholder:text-stone-700"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => onSearchChange('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-stone-600 hover:text-stone-300 transition-colors"
-            title={t('search.clear', 'Clear Search')}
-            aria-label={t('search.clear', 'Clear Search')}
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
+      <SearchInput
+        size="sm"
+        placeholder={searchPlaceholder}
+        value={searchQuery}
+        onChange={(e) => onSearchChange(e.target.value)}
+        onClear={() => onSearchChange('')}
+      />
     </div>
   );
 });
 
 NavigationHeader.displayName = 'NavigationHeader';
+
+export default NavigationHeader;

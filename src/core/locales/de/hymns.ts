@@ -1,0 +1,32 @@
+const hymns = {
+    title: 'Hymnen',
+    search_placeholder: 'Hymnen suchen...',
+    select_hymnal: 'Liederbuch wählen',
+    select_hymnal_prompt: 'Wählen Sie ein Liederbuch',
+    no_results: 'Keine Ergebnisse',
+    library_empty_desc: 'Dieses Liederbuch hat keine Hymnen',
+    add_to_timeline: 'Hinzufügen',
+    about_hymnal: 'Über das Liederbuch',
+    thematic_index: 'Thematisches Inhaltsverzeichnis',
+    no_thematic_index: 'Kein thematisches Inhaltsverzeichnis vorhanden',
+    publisher: 'Verlag',
+    year: 'Erscheinungsjahr',
+    description: 'Beschreibung',
+    count: 'Anzahl der Hymnen',
+    delete_modal_title: 'Liederbuch löschen',
+    delete_confirm_text: 'Möchten Sie das Liederbuch {{name}} wirklich löschen?',
+    removed_title: 'Liederbuch gelöscht',
+    removed_desc: 'Das Liederbuch {{name}} wurde erfolgreich gelöscht.',
+    remove_error_title: 'Fehler beim Löschen des Liederbuchs',
+    remove_error_desc: 'Vorgang konnte nicht abgeschlossen werden. Details in der Konsole.',
+    checking_usage: 'Verwendung wird geprüft...',
+    check_error_title: 'Prüffehler',
+    check_error_desc: 'Konnte nicht prüfen, ob dieses Liederbuch in Gottesdiensten verwendet wird.',
+    warning_title: 'Achtung',
+    remove_warning_count: 'Dieses Liederbuch wird in {{services}} Gottesdiensten ({{slides}} Folien) verwendet.',
+    remove_warning_unlinked: 'Beim Löschen werden diese Hymnen automatisch von den Gottesdiensten getrennt.',
+    retry_check: 'Erneut prüfen',
+    delete_hymnal_btn: 'Liederbuch löschen'
+};
+
+export default hymns;

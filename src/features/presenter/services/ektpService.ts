@@ -1,8 +1,15 @@
 import JSZip from 'jszip';
 import { db } from '@/core/db';
-import { IPresentationFile, ISlide, IStyleLayer, INestedSlide, ICanvasSlide, ITimerSlide, IVerseSlide, SlideType } from '@/core/types';
+import { IPresentationFile, ISlide, IStyleLayer, INestedSlide, ICanvasSlide, ITimerSlide, IVerseSlide, SlideType, IAudioScope } from '@/core/types';
 import { ThumbnailService } from './ThumbnailService';
+import { packSlideThumbnails, unpackSlideThumbnails } from './ektpThumbnailHelpers';
 import { APP_VERSION, EKT_SCHEMA_VERSION } from '@/core/constants';
+import { fontInstallerService } from '@/core/services/fontInstallerService';
+
+interface FileSystemHandleWithPermissions extends FileSystemFileHandle {
+    queryPermission: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+    requestPermission: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+}
 
 import { sha256, collectMediaRefs, patchMediaIds, readLocalFileSafe, getMediaBlob, MediaManifest, mimeToExt } from './mediaPackingUtils';
 
@@ -31,6 +38,9 @@ export const EktpService = {
             zip.file('preview.png', thumbnailBlob);
             presentation.hasPreview = true;
         }
+
+        // 1.1 Generate pre-baked slide thumbnails
+        await packSlideThumbnails(zip, presentation.slides);
 
         // 2. Prep metadata and mode
         presentation.version = EKT_SCHEMA_VERSION;
@@ -96,7 +106,7 @@ export const EktpService = {
         // 4. Handle Nested Presentations recursively
         const nestedFolder = zip.folder('nested');
         for (const slide of presentation.slides) {
-            const ns = slide as any;
+            const ns = slide as ISlide & { presentationId?: string; masterPresentationId?: string; linkedPresentationId?: string; localNestedPresentationId?: string; ektpHash?: string };
             const nestedId = slide.type === 'nested' ? ns.presentationId : (ns.masterPresentationId || ns.linkedPresentationId || ns.localNestedPresentationId);
             
             if (nestedId) {
@@ -155,15 +165,16 @@ export const EktpService = {
         if (!presentation || !presentation.fileHandle) return;
 
         try {
-            const options = { mode: 'readwrite' };
-            if (await (presentation.fileHandle as any).queryPermission(options) !== 'granted') {
-                if (await (presentation.fileHandle as any).requestPermission(options) !== 'granted') {
+            const handle = presentation.fileHandle as FileSystemHandleWithPermissions;
+            const options = { mode: 'readwrite' as const };
+            if (await handle.queryPermission(options) !== 'granted') {
+                if (await handle.requestPermission(options) !== 'granted') {
                     throw new Error('Permission to write to file denied');
                 }
             }
 
             const { blob } = await this.pack(presentationId);
-            const writable = await (presentation.fileHandle as any).createWritable();
+            const writable = await handle.createWritable();
             await writable.write(blob);
             await writable.close();
 
@@ -202,7 +213,7 @@ export const EktpService = {
      */
     async unpack(blob: Blob | File, depth: number = 0, importStack: Set<string> = new Set(), binId?: string): Promise<string> {
         // Deep recursive circuit breaker limits depth tracking
-        if (depth > 2) throw new Error('Nested EKTP depth limit exceeded (configured max 2 levels).');
+        if (depth > 5) throw new Error('Nested EKTP depth limit exceeded (configured max 5 levels).');
 
         const fileHash = await sha256(blob);
 
@@ -274,8 +285,8 @@ export const EktpService = {
         }
 
         // Restore file system handle link binding hook
-        if ('name' in blob && (blob as any).handle) {
-            presentation.fileHandle = (blob as any).handle;
+        if ('name' in blob && (blob as Blob & { handle?: FileSystemFileHandle }).handle) {
+            presentation.fileHandle = (blob as Blob & { handle?: FileSystemFileHandle }).handle;
         }
 
         // Reconstitute slides from partial split payload directory lazily parsing when 100+ blocks exist
@@ -292,8 +303,8 @@ export const EktpService = {
 
         // Regenerate slide-level audio scopes as well
         presentation.slides.forEach(slide => {
-            if ('audioScopes' in slide && Array.isArray((slide as any).audioScopes)) {
-                (slide as any).audioScopes = (slide as any).audioScopes.map((scope: any) => ({
+            if ('audioScopes' in slide && Array.isArray((slide as ICanvasSlide).audioScopes)) {
+                (slide as ICanvasSlide).audioScopes = ((slide as ICanvasSlide).audioScopes ?? []).map((scope: IAudioScope) => ({
                     ...scope,
                     id: crypto.randomUUID(),
                     presentationId: newPresentationId
@@ -302,10 +313,10 @@ export const EktpService = {
         });
 
         // Recurse into Nested blocks independently triggering downstream dedup evaluation before unpacking memory
-        const nestedSlides = presentation.slides.filter(s => (s as any).ektpHash);
+        const nestedSlides = presentation.slides.filter(s => (s as INestedSlide & { ektpHash?: string }).ektpHash);
 
         await Promise.all(nestedSlides.map(async (slide) => {
-            const ns = slide as any;
+            const ns = slide as INestedSlide & { ektpHash?: string; masterPresentationId?: string };
             if (!ns.ektpHash) return;
             try {
                 const nestedBlob = await zip.file(`nested/${ns.ektpHash}.ektp`)?.async('blob');
@@ -343,6 +354,9 @@ export const EktpService = {
             if (!s.type) s.type = 'normal';
         });
 
+        // Unpack pre-baked slide thumbnails for sub-50ms opening
+        await unpackSlideThumbnails(zip, presentation.slides);
+
         // Setup Media Replacement mapping...
         const hashToLocalId = new Map<string, string>();
         const mediaFolder = zip.folder('media');
@@ -367,14 +381,16 @@ export const EktpService = {
                         inferredMime = `video/${ext === 'mov' ? 'quicktime' : ext}`;
                     } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
                         inferredMime = `audio/${ext === 'mp3' ? 'mpeg' : ext}`;
+                    } else if (['ttf', 'otf', 'woff', 'woff2'].includes(ext)) {
+                        inferredMime = `font/${ext}`;
                     }
                     meta = { 
                         filename: hashExt, 
                         mimeType: inferredMime, 
                         originalName: hashExt, 
                         size: 0, 
-                        role: 'media' 
-                    } as any;
+                        role: (['ttf', 'otf', 'woff', 'woff2'].includes(ext) ? 'font' : 'media') as 'font' | 'media' 
+                    };
                 }
 
                 const data = await zip.file(path)!.async('blob');
@@ -385,15 +401,33 @@ export const EktpService = {
 
                 const type = meta.mimeType;
                 const mediaName = meta.originalName || `Imported Media (${localId})`;
+                const isFont = meta.role === 'font' || type.startsWith('font/') || ['ttf', 'otf', 'woff', 'woff2'].includes(ext);
 
                 // Determine organized path based on presentation name and media type
                 const presName = presentation.name || 'Imported';
-                const mediaCategory = type.startsWith('audio/') ? 'audio'
+                const mediaCategory = isFont ? 'fonts'
+                    : type.startsWith('audio/') ? 'audio'
                     : type.startsWith('video/') ? 'video'
                     : 'images';
                 const organizedPath = `${presName}/${mediaCategory}`;
 
-                if (type.startsWith('image/') && !type.includes('svg')) {
+                if (isFont) {
+                    const existingPool = await db.mediaPool.get(localId);
+                    if (!existingPool) {
+                        await db.mediaPool.add({
+                            id: localId,
+                            name: mediaName,
+                            path: organizedPath,
+                            type: 'font',
+                            data,
+                            createdAt: Date.now()
+                        });
+                    }
+                    // Immediately activate font in document and install to OS
+                    const fontFam = meta.fontFamily || mediaName.replace(/\.[^/.]+$/, '');
+                    fontInstallerService.registerFontFace(fontFam, data).catch(() => {});
+                    fontInstallerService.installFontToSystem(mediaName, data, fontFam).catch(() => {});
+                } else if (type.startsWith('image/') && !type.includes('svg')) {
                     // Store in backgrounds table (used by SlideBackground renderer)
                     const existingBg = await db.backgrounds.get(localId);
                     if (!existingBg) {
@@ -431,6 +465,19 @@ export const EktpService = {
 
         // Terminate into state store tracking
         await db.presentationFiles.add(presentation);
+
+        // Persist audio scopes into relational db.audioScopes table
+        if (Array.isArray(presentation.audioScopes) && presentation.audioScopes.length > 0) {
+            for (const scope of presentation.audioScopes) {
+                const existingScope = await db.audioScopes.get(scope.id);
+                if (!existingScope) {
+                    await db.audioScopes.add({
+                        ...scope,
+                        presentationId: newPresentationId
+                    });
+                }
+            }
+        }
 
         // Remove tracking lock for branch pathing on the cycle graph
         importStack.delete(fileHash);

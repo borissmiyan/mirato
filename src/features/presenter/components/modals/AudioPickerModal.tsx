@@ -1,28 +1,30 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
-import { useModalStore, ModalType } from '@/core/store/modalStore';
+import { useModalStore, ModalType, ModalState } from '@/core/store/modalStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
-import { X, Music, Search, Plus, Import } from 'lucide-react';
+import { X, Music, Plus, Import } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
-import { IMediaItem, IAudioScope, ISlide } from '@/core/types';
+import { IMediaItem } from '@/core/types';
 import { findOverlappingScopes } from '../../utils/timelineUtils';
 import { IpcService } from '@/core/services/ipcService';
-import { MediaPersistenceService } from '../../services/MediaPersistenceService';
+import { Button, IconButton, SearchInput } from '@/shared/ui';
 
-const AudioPickerModal: React.FC = () => {
+interface AudioPickerModalContentProps {
+    modalData: ModalState;
+}
+
+const AudioPickerModalContent: React.FC<AudioPickerModalContentProps> = ({ modalData }) => {
     const { t } = useTranslation();
-    const { closeModal, stack } = useModalStore();
-    // Find the LAST instance to correctly support nested modals
-    const modalData = [...stack].reverse().find(m => m.id === ModalType.AUDIO_PICKER);
-    const isOpen = !!modalData;
+    const closeModal = useModalStore(s => s.closeModal);
     const targetSlideId = modalData?.props?.targetSlideId as string | undefined;
     const onSelect = modalData?.props?.onSelect as ((ids: string[]) => void) | undefined;
     const multi = modalData?.props?.multi as boolean | undefined;
 
-    const { addAudioScope } = usePresentationStore();
+    const addAudioScope = usePresentationStore(s => s.addAudioScope);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
@@ -39,8 +41,6 @@ const AudioPickerModal: React.FC = () => {
         },
         [searchQuery]
     ) || [];
-
-    if (!isOpen) return null;
 
     const handleSelect = async (item: IMediaItem) => {
         const { MediaPersistenceService } = await import('../../services/MediaPersistenceService');
@@ -60,7 +60,6 @@ const AudioPickerModal: React.FC = () => {
         }
 
         if (targetSlideId) {
-
             const { activePresentation } = usePresentationStore.getState();
             if (activePresentation) {
                 const slides = activePresentation.slides;
@@ -96,7 +95,6 @@ const AudioPickerModal: React.FC = () => {
     const handleImport = async () => {
         const { MediaPersistenceService } = await import('../../services/MediaPersistenceService');
 
-        // Use Electron's native file picker if available for persistent absolute paths
         if (IpcService.isElectron()) {
             try {
                 const filePath = await IpcService.selectFile({
@@ -117,7 +115,6 @@ const AudioPickerModal: React.FC = () => {
             }
         }
 
-        // Fallback for web/dev or if bridge fails
         const input = document.createElement('input');
         input.type = 'file';
         input.multiple = true;
@@ -129,7 +126,7 @@ const AudioPickerModal: React.FC = () => {
 
             const batchItems = Array.from(files).map(file => ({
                 file,
-                path: (file as any).path || null,
+                path: (file as File & { path?: string }).path || null,
                 type: 'audio' as const
             }));
 
@@ -140,16 +137,16 @@ const AudioPickerModal: React.FC = () => {
     };
 
     return createPortal(
-        <div className="fixed inset-0 z-10001 flex items-center justify-center bg-black/80 backdrop-blur-xl animate-in fade-in duration-300">
-            <div className="bg-stone-900 border border-white/10 rounded-[32px] w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500">
+        <div className="fixed inset-0 z-10001 flex items-center justify-center apple-backdrop bg-stone-950/75 backdrop-blur-xl p-6">
+            <div className="bg-stone-900 border border-white/10 ring-1 ring-white/5 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl apple-modal">
                 {/* Header */}
                 <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-stone-900/50 backdrop-blur-md">
                     <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-2xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
+                        <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
                             <Music className="w-5 h-5 text-purple-500" />
                         </div>
                         <div>
-                            <h2 className="text-lg font-black text-white tracking-tight uppercase">
+                            <h2 className="text-lg font-bold text-white tracking-tight uppercase">
                                 {t('select_audio', 'Select Audio')}
                             </h2>
                             <p className="text-[10px] text-stone-500 font-bold uppercase tracking-[0.2em] mt-0.5">
@@ -157,40 +154,40 @@ const AudioPickerModal: React.FC = () => {
                             </p>
                         </div>
                     </div>
-                    <button
+                    <IconButton
+                        icon={<X className="w-5 h-5" />}
+                        label={t('close', 'Close')}
+                        variant="surface"
+                        size="xs"
                         onClick={() => closeModal(ModalType.AUDIO_PICKER)}
-                        className="p-2.5 bg-white/5 hover:bg-white/10 rounded-2xl text-stone-400 hover:text-white transition-all border border-white/5"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
+                    />
                 </div>
 
                 {/* Search & Actions */}
-                <div className="p-4 border-b border-white/5 bg-stone-950/20 flex gap-2">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-600" />
-                        <input
-                            type="text"
+                <div className="p-4 border-b border-white/5 bg-stone-950/20 flex gap-2 items-center">
+                    <div className="flex-1">
+                        <SearchInput
                             placeholder={t('search_audio_placeholder', 'Search audio...')}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full bg-stone-900/50 border border-white/5 rounded-xl py-2 pl-10 pr-4 text-sm text-stone-200 focus:outline-none focus:border-purple-500/40 transition-all placeholder:text-stone-700 font-bold"
+                            size="sm"
                         />
                     </div>
-                    <button
+                    <Button
+                        size="xs"
+                        variant="secondary"
                         onClick={handleImport}
-                        className="px-4 py-2 bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-xl hover:bg-purple-500/30 transition-all flex items-center gap-2 font-black text-[10px] uppercase tracking-widest whitespace-nowrap"
+                        leftIcon={<Import className="w-3.5 h-3.5" />}
                     >
-                        <Import className="w-3.5 h-3.5" />
                         {t('import', 'Import')}
-                    </button>
+                    </Button>
                 </div>
 
                 {/* Audio Grid */}
                 <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
                     {audioItems.length === 0 ? (
                         <div className="h-64 flex flex-col items-center justify-center text-center p-6 space-y-4">
-                            <div className="w-16 h-16 rounded-3xl bg-white/5 border border-white/5 flex items-center justify-center">
+                            <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-center">
                                 <Music className="w-8 h-8 text-stone-700" strokeWidth={1} />
                             </div>
                             <div>
@@ -207,9 +204,10 @@ const AudioPickerModal: React.FC = () => {
                             {audioItems.map(item => (
                                 <button
                                     key={item.id}
+                                    type="button"
                                     onClick={() => handleSelect(item)}
                                     className={cn(
-                                        "group w-full flex items-center gap-3 p-3 rounded-2xl bg-stone-900/40 border border-white/5 hover:border-purple-500/40 transition-all text-left",
+                                        "group w-full flex items-center gap-3 p-3 rounded-2xl bg-stone-900/40 border border-white/5 hover:border-purple-500/40 active:scale-[0.98] transition-all text-left cursor-pointer will-change-transform select-none",
                                         selectedIds.includes(item.id) ? "border-purple-500/50 bg-purple-500/5" : "hover:bg-purple-500/5"
                                     )}
                                 >
@@ -217,7 +215,7 @@ const AudioPickerModal: React.FC = () => {
                                         "w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 transition-transform",
                                         selectedIds.includes(item.id)
                                             ? "bg-purple-500 text-white border-purple-400"
-                                            : "bg-purple-500/20 text-purple-500 border-purple-500/20 group-hover:scale-110"
+                                            : "bg-purple-500/20 text-purple-500 border-purple-500/20 group-hover:scale-105"
                                     )}>
                                         <Music className="w-5 h-5" />
                                     </div>
@@ -234,7 +232,7 @@ const AudioPickerModal: React.FC = () => {
                                     </div>
                                     {multi ? (
                                         <div className={cn(
-                                            "w-5 h-5 rounded-lg border transition-all flex items-center justify-center",
+                                            "w-5 h-5 rounded-xl border transition-all flex items-center justify-center",
                                             selectedIds.includes(item.id)
                                                 ? "bg-purple-500 border-purple-400 shadow-lg shadow-purple-500/20"
                                                 : "border-white/10 group-hover:border-purple-500/40"
@@ -252,26 +250,36 @@ const AudioPickerModal: React.FC = () => {
 
                 {/* Footer */}
                 <div className="px-6 py-4 border-t border-white/5 bg-stone-950/50 backdrop-blur-xl flex justify-end gap-3 shrink-0">
-                    <button
+                    <Button
+                        size="xs"
+                        variant="secondary"
                         onClick={() => closeModal(ModalType.AUDIO_PICKER)}
-                        className="px-6 py-2 bg-white/5 hover:bg-white/10 text-stone-400 font-bold rounded-xl transition-all border border-white/5 text-[10px] uppercase tracking-widest"
                     >
                         {t('cancel', 'Cancel')}
-                    </button>
+                    </Button>
                     {multi && (
-                        <button
-                            onClick={handleConfirm}
+                        <Button
+                            size="xs"
+                            variant="primary"
                             disabled={selectedIds.length === 0}
-                            className="px-8 py-2 bg-purple-500 hover:bg-purple-400 disabled:opacity-50 disabled:bg-stone-800 text-white font-black rounded-xl transition-all shadow-lg shadow-purple-500/20 border border-purple-400/30 text-[10px] uppercase tracking-widest"
+                            onClick={handleConfirm}
                         >
                             {t('add_selected', 'Add Selected')} ({selectedIds.length})
-                        </button>
+                        </Button>
                     )}
                 </div>
             </div>
         </div>,
         document.body
     );
+};
+
+const AudioPickerModal: React.FC = () => {
+    const modalData = useModalStore(
+        useShallow(s => [...s.stack].reverse().find(m => m.id === ModalType.AUDIO_PICKER))
+    );
+    if (!modalData) return null;
+    return <AudioPickerModalContent modalData={modalData} />;
 };
 
 export default AudioPickerModal;

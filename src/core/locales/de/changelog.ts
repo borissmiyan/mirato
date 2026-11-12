@@ -2,6 +2,39 @@ export default {
     "changelog": "Änderungsprotokoll",
     "changelog_entries": [
         {
+            "version": "v2.2.6",
+            "title": "Große Leistungssteigerung, Speicheroptimierung & Intelligente Schriftarten",
+            "date": "18. September 2026",
+            "description": "Ein umfassendes Leistungs- und Stabilitätsupdate: Die App startet spürbar schneller, öffnet Präsentationen ohne Verzögerungen und installiert Schriftarten automatisch unter Windows und macOS.",
+            "features": [
+                "Intelligente Schriftarten: Schriftarten aus Präsentationen werden sofort auf allen Bildschirmen aktiviert und automatisch im System installiert",
+                "Verzögerungsfreies Öffnen: Schnelleres Öffnen von Präsentationen und flüssiges Abspielen lokaler Medien",
+                "Hardwarebeschleunigte Audiokompression: Spart Speicherplatz bei voller Klangqualität",
+                "Blitzschnelles natives Zuschneiden: Video- und Audiozuschnitt in 0,1s komplett offline",
+                "Flüssige Bibelsuche: Schnelle und ruckelfreie Anzeige von Suchergebnissen",
+                "Geringerer Arbeitsspeicherverbrauch: Erhöhte Stabilität auch bei stundenlangen Gottesdiensten",
+                "Schnelle Cache-Bereinigung: 1-Klick-Bereinigung temporärer Dateien in den Dateneinstellungen"
+            ]
+        },
+        {
+            "version": "v2.2.5",
+            "title": "Fernsteuerung unterstützt die Bibel",
+            "date": "10. Juli 2026",
+            "description": "Bibelunterstützung für die Fernsteuerung hinzugefügt.",
+            "features": [
+                "Die Fernsteuerung unterstützt jetzt die Bibelpräsentation"
+            ]
+        },
+        {
+            "version": "v2.2.4",
+            "title": "Deutsche Sprachunterstützung",
+            "date": "15. Juni 2026",
+            "description": "Wartungsupdate zur Unterstützung der deutschen Sprache.",
+            "features": [
+                "Deutsche Sprachunterstützung hinzugefügt"
+            ]
+        },
+        {
             "version": "v2.2.3",
             "title": "Fernsteuerung & Canvas-Shortcuts",
             "date": "12. Juni 2026",
@@ -75,7 +108,7 @@ export default {
             "date": "28. Februar 2026",
             "description": "Großes Update mit dem umfassenden Präsentationsmodus und dem professionellen Canvas-Motor.",
             "features": [
-                "Vollständiger „Präsentations"-Arbeitsbereich für das Service-Management",
+                "Vollständiger „Präsentations“-Arbeitsbereich für das Service-Management",
                 "Erweiterte Zeitlinie mit Unterstützung für verschachtelte Präsentationen und Stapel",
                 "Geschichteter Canvas-Motor mit Rich-Text, Medienebenen und Z-Index-Steuerung",
                 "Integriertes Audio-Ökosystem mit Überblendung und Überlappungserkennung",

@@ -25,4 +25,5 @@ export interface IAudioScope {
   strategy?: 'auto' | 'delay' | 'manual';
   delaySeconds?: number;
   onEnded?: () => void;
+  needsManualReview?: boolean;
 }

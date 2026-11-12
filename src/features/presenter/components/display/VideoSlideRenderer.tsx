@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { useAtomValue } from 'jotai';
 import { Play, Pause, Volume2, VolumeX, Gauge } from 'lucide-react';
 import { IVideoSettings } from '@/core/types';
+import { canvasResolutionAtom } from '@/core/store/uiAtoms';
 import { useVideoPlayback } from '@/features/presenter/hooks/useVideoPlayback';
 import { mediaCache } from '@/core/utils/mediaCache';
 import { cn } from '@/core/utils/cn';
 import { LiveSyncService } from '@/core/services/liveSyncService';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
+import { Slider } from '@/shared/ui';
 
 interface VideoSlideRendererProps {
   slideId: string;
@@ -17,6 +20,7 @@ interface VideoSlideRendererProps {
   isLive?: boolean;
   isPreloading?: boolean;
   isRemote?: boolean;
+  isMuted?: boolean;
 }
 
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4];
@@ -37,19 +41,12 @@ const formatTime = (seconds: number): string => {
  * VideoSlideRenderer – Full-screen video player for video slides.
  * Shows floating overlay controls on hover in preview mode only.
  * On the projector, renders a clean, frameless video.
- *
- * NOTE: This component renders inside a 1920×1080 logical canvas that gets
- * CSS-scaled down (~0.3–0.5×). All sizes must be proportioned for 1920×1080.
  */
 const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
-  slideId,
-  settings,
-  isPreview = false,
-  isLive = false,
-  isPreloading = false,
-  isRemote = false,
+  slideId, settings, isPreview = false, isLive = false, isPreloading = false, isRemote = false, isMuted = false,
 }) => {
   const { t } = useTranslation();
+  const canvasResolution = useAtomValue(canvasResolutionAtom);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [showControls, setShowControls] = useState(false);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
@@ -60,7 +57,6 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
   const [isDraggingScrubber, setIsDraggingScrubber] = useState(false);
 
   // Local display state polled from the video element directly
-  // to guarantee updates even if hook events lag behind
   const [localPlaying, setLocalPlaying] = useState(false);
   const [localCurrentTime, setLocalCurrentTime] = useState(0);
   const [localDuration, setLocalDuration] = useState(0);
@@ -78,6 +74,7 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
     isPreloading,
     slideId,
     isRemote,
+    isMuted,
   });
 
 
@@ -124,18 +121,21 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
     };
   }, [isPreview, handleActivity]);
 
-  // Resolve video URL from media pool
+  // Resolve video URL from media pool (serves proxy in editor preview when downsampled)
   useEffect(() => {
     if (!settings.mediaId) {
       setVideoUrl(null);
       return;
     }
     let cancelled = false;
-    mediaCache.getBackgroundUrl(settings.mediaId).then((url) => {
+    mediaCache.getBackgroundUrl(settings.mediaId, {
+      resolution: isPreview ? canvasResolution : 'full',
+      isProjector: !isPreview,
+    }).then((url) => {
       if (!cancelled) setVideoUrl(url);
     });
     return () => { cancelled = true; };
-  }, [settings.mediaId]);
+  }, [settings.mediaId, isPreview, canvasResolution]);
 
   // Listen for video commands from the editor (projector side)
   useEffect(() => {
@@ -150,22 +150,21 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
       switch (data.command) {
         case 'play':
           if (typeof data.value === 'number') {
-            const clampedValue = Math.max(trimStart, Math.min(data.value, trimEnd > 0 ? trimEnd : video.duration));
-            const drift = Math.abs(video.currentTime - clampedValue);
-            if (drift > 0.2) video.currentTime = clampedValue;
+            const clamped = Math.max(trimStart, Math.min(data.value, trimEnd > 0 ? trimEnd : video.duration));
+            if (Math.abs(video.currentTime - clamped) > 0.2) video.currentTime = clamped;
           }
           video.play().catch(() => {});
           break;
         case 'pause':
           if (typeof data.value === 'number') {
-            const clampedValue = Math.max(trimStart, Math.min(data.value, trimEnd > 0 ? trimEnd : video.duration));
-            const drift = Math.abs(video.currentTime - clampedValue);
-            if (drift > 0.2) video.currentTime = clampedValue;
+            const clamped = Math.max(trimStart, Math.min(data.value, trimEnd > 0 ? trimEnd : video.duration));
+            if (Math.abs(video.currentTime - clamped) > 0.2) video.currentTime = clamped;
           }
           video.pause();
           break;
         case 'toggle':
           if (video.paused) {
+            if (video.ended || (trimEnd > 0 && video.currentTime >= trimEnd - 0.1)) video.currentTime = trimStart;
             video.play().catch(() => {});
           } else {
             video.pause();
@@ -173,9 +172,7 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
           break;
         case 'seek':
           if (typeof data.value === 'number') {
-            const clampedValue = Math.max(trimStart, Math.min(data.value, trimEnd > 0 ? trimEnd : video.duration));
-            const drift = Math.abs(video.currentTime - clampedValue);
-            if (drift > 0.2) video.currentTime = clampedValue;
+            video.currentTime = Math.max(trimStart, Math.min(data.value, trimEnd > 0 ? trimEnd : video.duration));
           }
           break;
         case 'speed':
@@ -199,80 +196,52 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
       }
     });
     return () => { unsub?.(); };
-  }, [isPreview, slideId, videoRef]);
+  }, [isPreview, slideId, videoRef, settings.trimStart, settings.trimEnd]);
 
   // Projector heartbeat: Send actual playback status back to the controller
   // This provides the "ground truth" for the LiveMediaToolbar.
-    const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
+  const sendStatus = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !isLive) return;
 
-    const sendStatus = useCallback(() => {
-        const video = videoElement || videoRef.current;
-        if (!video || !isLive) return;
+    LiveSyncService.sendVideoStatus(
+      slideId,
+      video.currentTime,
+      !video.paused,
+      (isFinite(video.duration) && video.duration > 0) ? video.duration : 0
+    );
+  }, [slideId, isLive, videoRef]);
 
-        const status = {
-            slideId,
-            currentTime: video.currentTime,
-            isPlaying: !video.paused,
-            duration: (isFinite(video.duration) && video.duration > 0) ? video.duration : 0
-        };
+  useEffect(() => {
+    if (isPreview || !isLive || isPreloading) return;
 
-        if (status.duration > 0 || Math.random() < 0.05) {
-            console.info('📽️ [Projector] Sending status:', status);
-        }
+    const video = videoRef.current;
+    if (video) {
+      video.addEventListener('play', sendStatus);
+      video.addEventListener('pause', sendStatus);
+      video.addEventListener('seeked', sendStatus);
+      video.addEventListener('loadedmetadata', sendStatus);
+      video.addEventListener('durationchange', sendStatus);
+      video.addEventListener('canplay', sendStatus);
+      
+      const interval = setInterval(sendStatus, 150);
+      const unsubRequest = LiveSyncService.onVideoStatusRequest(() => { sendStatus(); });
+      if (video.readyState >= 1) sendStatus();
 
-        LiveSyncService.sendVideoStatus(
-            status.slideId,
-            status.currentTime,
-            status.isPlaying,
-            status.duration
-        );
-    }, [slideId, isLive, videoElement, videoRef]);
-
-    // Projector heartbeat: Send actual playback status back to the controller
-    // This provides the "ground truth" for the LiveMediaToolbar.
-    useEffect(() => {
-        if (isPreview || !isLive || isPreloading) return;
-
-        const video = videoElement || videoRef.current;
-        if (video) {
-            video.addEventListener('play', sendStatus);
-            video.addEventListener('pause', sendStatus);
-            video.addEventListener('seeked', sendStatus);
-            video.addEventListener('loadedmetadata', sendStatus);
-            video.addEventListener('durationchange', sendStatus);
-            video.addEventListener('canplay', sendStatus);
-            
-            // Periodic heartbeat - Increased frequency for diagnostics
-            const interval = setInterval(sendStatus, 150);
-            
-            // Listen for manual pull requests from the controller
-            const unsubRequest = LiveSyncService.onVideoStatusRequest(() => {
-                sendStatus();
-            });
-
-            // Immediate report in case metadata is already loaded
-            if (video.readyState >= 1) sendStatus();
-
-            return () => {
-                video.removeEventListener('play', sendStatus);
-                video.removeEventListener('pause', sendStatus);
-                video.removeEventListener('seeked', sendStatus);
-                video.removeEventListener('loadedmetadata', sendStatus);
-                video.removeEventListener('durationchange', sendStatus);
-                video.removeEventListener('canplay', sendStatus);
-                if (interval) clearInterval(interval);
-                unsubRequest();
-                
-                // Final status report to clear playing state on master/remote
-                LiveSyncService.sendVideoStatus(
-                    slideId, 
-                    video.currentTime, 
-                    false, 
-                    video.duration || 0
-                );
-            };
-        }
-    }, [isPreview, isLive, isPreloading, slideId, videoElement, videoRef, sendStatus]);
+      return () => {
+        video.removeEventListener('play', sendStatus);
+        video.removeEventListener('pause', sendStatus);
+        video.removeEventListener('seeked', sendStatus);
+        video.removeEventListener('loadedmetadata', sendStatus);
+        video.removeEventListener('durationchange', sendStatus);
+        video.removeEventListener('canplay', sendStatus);
+        if (interval) clearInterval(interval);
+        unsubRequest();
+        
+        LiveSyncService.sendVideoStatus(slideId, video.currentTime, false, video.duration || 0);
+      };
+    }
+  }, [isPreview, isLive, isPreloading, slideId, videoRef, sendStatus, videoUrl]);
 
   // Scrubber seek helper
   const seekFromScrubber = useCallback((clientX: number) => {
@@ -366,20 +335,10 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
       onMouseMove={handleActivity}
     >
       <video
-        ref={(el) => {
-            // Bridge to the hook's ref
-            if (typeof videoRef === 'object' && videoRef) {
-                (videoRef as any).current = el;
-            }
-            // Trigger local state for heartbeat setup
-            if (el !== videoElement) setVideoElement(el);
-        }}
+        ref={videoRef}
         src={videoUrl}
         data-preview-slide-id={slideId}
-        className={cn(
-          "w-full h-full",
-          settings.scaling === 'contain' ? 'object-contain' : 'object-cover'
-        )}
+        className={cn("w-full h-full", settings.scaling === 'contain' ? 'object-contain' : 'object-cover')}
         playsInline
         preload="auto"
         onClick={() => isPreview && !isRemote && actions.togglePlayPause()}
@@ -400,48 +359,27 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
             <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/25 to-transparent pointer-events-none h-80 mt-auto" />
 
             {/* Floating Control Bar — sized for 1920×1080 canvas */}
-            <div className={cn(
-              "relative w-full max-w-5xl flex flex-col gap-8 px-12 py-8 rounded-3xl shadow-2xl",
-              "bg-stone-900/40 backdrop-blur-2xl border border-white/10 ring-1 ring-white/5"
-            )}>
+            <div className="relative w-full max-w-5xl flex flex-col gap-8 px-12 py-8 rounded-3xl shadow-2xl bg-stone-900/40 backdrop-blur-2xl border border-white/10 ring-1 ring-white/5">
               {/* Media Info / Name */}
               {mediaMetadata?.name && (
                 <div className="flex items-center gap-4 -mb-2">
-                  <div className="px-3 py-1 rounded-lg bg-accent/20 border border-accent/30 text-accent text-[12px] font-black uppercase tracking-wider">
-                    Video
-                  </div>
-                  <span className="text-2xl font-bold text-stone-100 truncate flex-1 uppercase tracking-tight font-mono">
-                    {mediaMetadata.name}
-                  </span>
+                  <div className="px-3 py-1 rounded-xl bg-accent/20 border border-accent/30 text-accent text-[12px] font-black uppercase tracking-wider">Video</div>
+                  <span className="text-2xl font-bold text-stone-100 truncate flex-1 uppercase tracking-tight font-mono">{mediaMetadata.name}</span>
                 </div>
               )}
 
               {/* Scrubber — large hit area */}
               <div
                 ref={scrubberRef}
-                className={cn(
-                  "group w-full h-3 bg-white/10 rounded-full cursor-pointer relative overflow-visible transition-all",
-                  isDraggingScrubber ? "h-4" : "hover:h-4"
-                )}
+                className={cn("group w-full h-3 bg-white/10 rounded-full cursor-pointer relative overflow-visible transition-all", isDraggingScrubber ? "h-4" : "hover:h-4")}
                 onMouseDown={handleScrubberMouseDown}
               >
-                {/* Buffered */}
-                <div
-                  className="absolute inset-y-0 left-0 bg-white/15 rounded-full transition-[width] duration-300 ease-out"
-                  style={{ width: `${bufferedFraction * 100}%` }}
-                />
-                {/* Progress */}
-                <div
-                  className="absolute inset-y-0 left-0 bg-accent rounded-full transition-[width] duration-150 ease-out"
-                  style={{ width: `${progressFraction * 100}%` }}
-                />
-                {/* Knob */}
+                <div className="absolute inset-y-0 left-0 bg-white/15 rounded-full transition-[width] duration-300 ease-out" style={{ width: `${bufferedFraction * 100}%` }} />
+                <div className="absolute inset-y-0 left-0 bg-accent rounded-full transition-[width] duration-150 ease-out" style={{ width: `${progressFraction * 100}%` }} />
                 <div
                   className={cn(
                     "absolute top-1/2 -translate-y-1/2 w-6 h-6 bg-accent rounded-full shadow-lg ring-2 ring-black/30 transition-all z-10",
-                    isDraggingScrubber
-                      ? "opacity-100 scale-110"
-                      : "opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100"
+                    isDraggingScrubber ? "opacity-100 scale-110" : "opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100"
                   )}
                   style={{ left: `calc(${progressFraction * 100}% - 12px)` }}
                 />
@@ -449,24 +387,13 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
 
               {/* Controls Row */}
               <div className="flex items-center gap-6">
-                {/* Play/Pause — Accent themed, large */}
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    actions.togglePlayPause();
-                  }}
-                  className={cn(
-                    "w-20 h-20 flex items-center justify-center rounded-2xl transition-all active:scale-90 cursor-pointer shrink-0",
-                    "bg-accent/20 text-accent ring-1 ring-accent/30 hover:bg-accent/30"
-                  )}
+                  onClick={(e) => { e.stopPropagation(); actions.togglePlayPause(); }}
+                  className="w-20 h-20 flex items-center justify-center rounded-2xl transition-all active:scale-90 cursor-pointer shrink-0 bg-accent/20 text-accent ring-1 ring-accent/30 hover:bg-accent/30"
                   aria-label={isPlaying ? t('pause', 'Pause') : t('play', 'Play')}
                 >
-                  {isPlaying ? (
-                    <Pause className="w-10 h-10" />
-                  ) : (
-                    <Play className="w-10 h-10 ml-1" />
-                  )}
+                  {isPlaying ? <Pause className="w-10 h-10" /> : <Play className="w-10 h-10 ml-1" />}
                 </button>
 
                 {/* Time display — large mono text */}
@@ -476,7 +403,6 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
                   <span className="text-xl text-stone-400">{formatTime(effectiveDuration)}</span>
                 </div>
 
-                {/* Spacer */}
                 <div className="flex-1" />
 
                 {/* Speed */}
@@ -487,20 +413,13 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
                     onClick={(e) => {
                       e.stopPropagation();
                       const rect = speedButtonRef.current?.getBoundingClientRect();
-                      if (rect) {
-                        setMenuPosition({
-                          bottom: window.innerHeight - rect.top + 8,
-                          right: window.innerWidth - rect.right,
-                        });
-                      }
+                      if (rect) setMenuPosition({ bottom: window.innerHeight - rect.top + 8, right: window.innerWidth - rect.right });
                       setShowSpeedMenu(prev => !prev);
                       handleActivity();
                     }}
                     className={cn(
                       "h-16 px-6 flex items-center gap-3 rounded-2xl transition-all font-bold cursor-pointer",
-                      showSpeedMenu
-                        ? "bg-accent/20 text-accent ring-1 ring-accent/30"
-                        : "text-stone-400 hover:text-stone-100 hover:bg-white/5"
+                      showSpeedMenu ? "bg-accent/20 text-accent ring-1 ring-accent/30" : "text-stone-400 hover:text-stone-100 hover:bg-white/5"
                     )}
                   >
                     <Gauge className="w-7 h-7" />
@@ -508,38 +427,29 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
                   </button>
                 </div>
 
-                {/* Divider */}
                 <div className="w-px h-10 bg-white/10 shrink-0" />
 
                 {/* Volume */}
                 <div className="flex items-center gap-4">
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      actions.setVolume(settings.muted ? settings.volume : 0);
-                    }}
-                    className="w-16 h-16 flex items-center justify-center rounded-2xl text-stone-400 hover:text-stone-100 hover:bg-white/5 transition-all cursor-pointer"
+                    onClick={(e) => { e.stopPropagation(); actions.setVolume(settings.muted ? settings.volume : 0); }}
+                    className="w-16 h-16 flex items-center justify-center rounded-2xl text-stone-400 hover:text-stone-100 hover:bg-white/5 transition-all apple-press cursor-pointer"
                     aria-label={settings.muted ? t('unmute', 'Unmute') : t('mute', 'Mute')}
                   >
-                    {settings.muted || settings.volume === 0 ? (
-                      <VolumeX className="w-8 h-8 text-red-400" />
-                    ) : (
-                      <Volume2 className="w-8 h-8" />
-                    )}
+                    {settings.muted || settings.volume === 0 ? <VolumeX className="w-8 h-8 text-red-400" /> : <Volume2 className="w-8 h-8" />}
                   </button>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={settings.muted ? 0 : settings.volume}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      actions.setVolume(parseFloat(e.target.value));
-                    }}
-                    className="w-32 h-2 bg-white/10 rounded-full appearance-none cursor-pointer accent-accent hover:bg-white/20 transition-colors"
-                  />
+                  {/* audit-ignore: event propagation boundary */}
+                  <div className="w-32" onClick={(e) => e.stopPropagation()}>
+                    <Slider
+                      mode="track"
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      value={settings.muted ? 0 : settings.volume}
+                      onChange={(val) => actions.setVolume(val)}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -549,25 +459,17 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
           {showSpeedMenu && createPortal(
             <div
               className="fixed bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl py-2 min-w-[140px] z-9999 animate-in fade-in zoom-in-95 duration-150"
-              style={{
-                bottom: menuPosition.bottom,
-                right: menuPosition.right,
-              }}
+              style={{ bottom: menuPosition.bottom, right: menuPosition.right }}
             >
               <div className="px-4 py-2 border-b border-white/5 mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-500">
-                  {t('playback_speed', 'Speed')}
-                </span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-stone-500">{t('playback_speed', 'Speed')}</span>
               </div>
               {SPEED_OPTIONS.map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => { actions.setSpeed(s); setShowSpeedMenu(false); }}
-                  className={cn(
-                    "w-full px-4 py-2 text-left text-sm font-medium transition-colors cursor-pointer block",
-                    s === settings.speed ? "text-accent bg-accent/10" : "text-stone-400 hover:text-white hover:bg-white/5"
-                  )}
+                  className={cn("w-full px-4 py-2 text-left text-sm font-medium transition-colors cursor-pointer block", s === settings.speed ? "text-accent bg-accent/10" : "text-stone-400 hover:text-white hover:bg-white/5")}
                 >
                   {s}x
                 </button>
@@ -579,7 +481,6 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
       )}
 
       {/* Center play icon when paused and controls hidden */}
-      {/* Play Icon - Persistently shown on remote or when paused in preview */}
       {isPreview && (isRemote || (!isPlaying && !showControls)) && videoUrl && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 animate-in fade-in duration-500">
           <div className="w-40 h-40 rounded-3xl bg-stone-900/40 backdrop-blur-2xl border border-white/10 ring-1 ring-white/5 flex items-center justify-center shadow-2xl">

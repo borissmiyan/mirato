@@ -135,8 +135,9 @@ const ShortcutsSettings: React.FC = () => {
                 <ShortcutItem label={t('next_slide', 'Next Slide')} keys={['→', '/', '↓', '/', 'Space']} />
                 <ShortcutItem label={t('prev_slide', 'Previous Slide')} keys={['←', '/', '↑']} />
                 <ShortcutItem label={t('go_live', 'Go Live / Project')} keys={['Enter']} description={t('context_aware', 'Context Aware')} />
+                <ShortcutItem label={t('toggle_live_media', 'Play / Pause Live Media')} keys={['Space']} description={t('outside_canvas', 'Outside Canvas')} />
                 <ShortcutItem label={t('close_projector', 'Close Projector')} keys={['Esc']} />
-                <ShortcutItem label={t('search', 'Search')} keys={[mod, 'F']} />
+                <ShortcutItem label={t('search_label', 'Search')} keys={[mod, 'F']} />
                 <ShortcutItem label={t('history', 'History')} keys={[mod, 'H']} />
                 <ShortcutItem label={t('sync_live', 'Sync Preview to Live')} keys={['H']} />
             </div>
@@ -176,6 +177,10 @@ const ShortcutsSettings: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <ShortcutItem label={t('select_tool', 'Select Tool')} keys={['V']} />
                 <ShortcutItem label={t('hand_tool', 'Hand (Pan) Tool')} keys={['H']} />
+                <ShortcutItem label={t('canvas_pan', 'Pan Canvas')} keys={['Space', 'Click']} description={t('viewport_hover', 'Canvas Hovered')} />
+                <ShortcutItem label={t('nudge_selection', 'Nudge Selection')} keys={['↑', '↓', '←', '→']} description={t('nudge_1_percent', '1% step')} />
+                <ShortcutItem label={t('fast_nudge_selection', 'Fast Nudge')} keys={['Shift', 'Arrows']} description={t('nudge_5_percent', '5% step')} />
+                <ShortcutItem label={t('duplicate_element', 'Duplicate Element')} keys={[mod, 'D']} />
                 <ShortcutItem label={t('add_text', 'Add Text')} keys={['T']} />
                 <ShortcutItem label={t('add_rectangle', 'Add Rectangle')} keys={['R']} />
                 <ShortcutItem label={t('add_circle', 'Add Circle')} keys={['O']} />
@@ -185,10 +190,24 @@ const ShortcutsSettings: React.FC = () => {
                 <ShortcutItem label={t('delete_element', 'Delete Element')} keys={['Del', '/', '⌫']} description={t('viewport_hover', 'Viewport Hovered')} />
                 <ShortcutItem label={t('zoom_in', 'Zoom In')} keys={[mod, '+']} />
                 <ShortcutItem label={t('zoom_out', 'Zoom Out')} keys={[mod, '-']} />
-                <ShortcutItem label={t('reset_zoom', 'Reset Zoom (Fit)')} keys={[mod, '0']} />
+                <ShortcutItem label={t('reset_zoom', 'Reset Zoom (Fit)')} keys={[mod, '0', '/', 'Shift', '1']} />
+                <ShortcutItem label={t('zoom_selection', 'Zoom to Selection')} keys={['Shift', '2']} />
+                <ShortcutItem label={t('zoom_100', 'Zoom 100%')} keys={[mod, '1']} />
+                <ShortcutItem label={t('flip_horizontal', 'Flip Horizontal')} keys={['Shift', 'H']} />
+                <ShortcutItem label={t('flip_vertical', 'Flip Vertical')} keys={['Shift', 'V']} />
                 <ShortcutItem label={t('exit_editing', 'Exit Editing')} keys={['Esc']} />
                 <ShortcutItem label={t('multi_select', 'Multi-select')} keys={['Shift', 'Click', '/', mod, 'Click']} />
                 <ShortcutItem label={t('direct_edit', 'Direct Edit')} keys={['Double Click']} />
+                <ShortcutItem label={t('copy_style', 'Copy Style')} keys={[mod, 'Alt / ⌥', 'C']} />
+                <ShortcutItem label={t('paste_style', 'Paste Style')} keys={[mod, 'Alt / ⌥', 'V']} />
+                <ShortcutItem label={t('group_selection', 'Group Selection')} keys={[mod, 'G']} />
+                <ShortcutItem label={t('ungroup_selection', 'Ungroup Selection')} keys={[mod, 'Shift', 'G']} />
+                <ShortcutItem label={t('toggle_lock', 'Lock / Unlock')} keys={[mod, 'Shift', 'L']} />
+                <ShortcutItem label={t('toggle_visibility', 'Hide / Show')} keys={[mod, 'Shift', 'H']} />
+                <ShortcutItem label={t('bring_forward_front', 'Bring Forward / Front')} keys={[mod, ']', '/', mod, 'Shift', ']']} />
+                <ShortcutItem label={t('send_backward_back', 'Send Backward / Back')} keys={[mod, '[', '/', mod, 'Shift', '[']} />
+                <ShortcutItem label={t('toggle_rulers', 'Toggle Rulers')} keys={['Shift', 'R']} />
+                <ShortcutItem label={t('measure_distances', 'Measure Distances')} keys={['Alt / ⌥', 'Hover']} description={t('measure_desc', 'Hold Alt while element selected')} />
             </div>
 
             {/* Media Pool */}

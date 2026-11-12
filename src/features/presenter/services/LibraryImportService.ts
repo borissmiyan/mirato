@@ -1,3 +1,4 @@
+import type { TFunction } from 'i18next';
 import { db } from '@/core/db/index';
 import { EktpService } from './ektpService';
 import { EktmpService } from './ektmpService';
@@ -8,7 +9,7 @@ import { toast } from 'sonner';
 import { IpcService } from '@/core/services/ipcService';
 
 interface ILibraryImportOptions {
-    t: any;
+    t: TFunction;
     currentBinId: string | undefined;
 }
 
@@ -27,7 +28,7 @@ export class LibraryImportService {
     static async importFiles(
         filesOrPaths: File[] | string[], 
         currentBinId: string | undefined, 
-        t: any
+        t: TFunction
     ): Promise<void> {
         if (!filesOrPaths || filesOrPaths.length === 0) return;
 
@@ -50,7 +51,7 @@ export class LibraryImportService {
                     if (item.type.startsWith('video/')) type = 'video';
                     else if (item.type.startsWith('audio/')) type = 'audio';
                 }
-                mediaItems.push(isFile ? { file: item, path: (item as any).path, type } : { path: item as string, type });
+                mediaItems.push(isFile ? { file: item, path: (item as File & { path?: string }).path, type } : { path: item as string, type });
             }
         }
 
@@ -82,7 +83,7 @@ export class LibraryImportService {
     private static async importFileObject(
         file: File, 
         currentBinId: string | undefined, 
-        t: any
+        t: TFunction
     ): Promise<void> {
         const name = file.name.toLowerCase();
         
@@ -130,7 +131,7 @@ export class LibraryImportService {
             if (file.type.startsWith('audio/')) type = 'audio';
 
             const { MediaPersistenceService } = await import('./MediaPersistenceService');
-            await MediaPersistenceService.importMediaBlob(file, (file as any).path || null, type);
+            await MediaPersistenceService.importMediaBlob(file, (file as File & { path?: string }).path || null, type);
             toast.success(t('media_imported', 'Media imported: {{name}}', { name: file.name }));
         }
     }
@@ -141,7 +142,7 @@ export class LibraryImportService {
     private static async importFilePath(
         path: string, 
         currentBinId: string | undefined, 
-        t: any
+        t: TFunction
     ): Promise<void> {
         const nameStr = path.split(/[/\\]/).pop() || 'Untitled';
         const name = nameStr.toLowerCase();
@@ -249,7 +250,7 @@ export class LibraryImportService {
     static async selectAndImportSlides(
         targetPresentationId: string,
         targetIndex: number,
-        t: any
+        t: TFunction
     ): Promise<void> {
         let file: File | null = null;
 

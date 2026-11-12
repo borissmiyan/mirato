@@ -23,6 +23,10 @@ export default defineConfig(({ mode }) => {
           vite: {
             build: {
               rollupOptions: {
+                output: {
+                  format: 'cjs',
+                  entryFileNames: '[name].cjs',
+                },
                 external: ['bufferutil', 'utf-8-validate']
               }
             }
@@ -55,6 +59,24 @@ export default defineConfig(({ mode }) => {
           projector: path.resolve(__dirname, 'projector.html'),
           remote: path.resolve(__dirname, 'remote.html'),
           stage: path.resolve(__dirname, 'stage.html'),
+        },
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('lucide-react')) {
+                return 'vendor-icons';
+              }
+              if (id.includes('@ffmpeg') || id.includes('jszip')) {
+                return 'vendor-media';
+              }
+              if (id.includes('i18next')) {
+                return 'vendor-i18n';
+              }
+              if (id.includes('react') || id.includes('jotai') || id.includes('zustand') || id.includes('dexie')) {
+                return 'vendor-core';
+              }
+            }
+          },
         },
       },
     },

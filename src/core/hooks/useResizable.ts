@@ -22,11 +22,13 @@ export function useResizable(
   }, [storageKey, defaultSize]);
 
   const isDragging = useRef(false);
+  const [isDraggingState, setIsDraggingState] = useState(false);
   const startPos = useRef(0);
   const startSize = useRef(0);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     isDragging.current = true;
+    setIsDraggingState(true);
     startPos.current = orientation === 'horizontal' ? e.clientX : e.clientY;
     startSize.current = size;
     document.body.style.cursor = orientation === 'horizontal' ? 'col-resize' : 'row-resize';
@@ -45,6 +47,7 @@ export function useResizable(
     const handleMouseUp = () => {
       if (isDragging.current) {
         isDragging.current = false;
+        setIsDraggingState(false);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         localStorage.setItem(storageKey, String(size));
@@ -59,5 +62,5 @@ export function useResizable(
     };
   }, [storageKey, size, minSize, maxSize, orientation]);
 
-  return { size, handleMouseDown };
+  return { size, handleMouseDown, isDragging: isDraggingState };
 }

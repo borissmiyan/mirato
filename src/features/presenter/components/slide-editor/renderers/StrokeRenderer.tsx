@@ -1,6 +1,8 @@
 import React from 'react';
 import { ICanvasItem, IStyleLayer } from '@/core/types';
 import { RoundedRect } from './ShapeRenderer';
+import { getNormalizedShapePath } from './shapeGeometry';
+import { nodesToNormalizedSVGPath } from './vectorGeometry';
 import { SlideBackground } from '../../display/SlideBackground';
 
 interface StrokeRendererProps {
@@ -13,6 +15,41 @@ interface StrokeRendererProps {
 export const StrokeRenderer: React.FC<StrokeRendererProps> = ({ item, strokes, align, idPrefix }) => {
   const borderWidth = item.borderWidth || 0;
   const maskId = `stroke-mask-${idPrefix}-${item.id}`;
+  const isNonRect = item.type === 'shape' && item.shape?.shapeType && item.shape.shapeType !== 'rect';
+  const isSquircle = item.type === 'shape' && item.shape?.shapeType === 'rect' && Boolean(item.shape?.cornerSmoothing && item.shape.cornerSmoothing > 0);
+
+  const strokeJoin = item.strokeJoin || 'round';
+  const dashArray = item.strokeDashArray || undefined;
+  const isPath = item.type === 'path' && Boolean(item.path);
+
+  if ((isNonRect && item.shape) || isSquircle || isPath) {
+    const strokeColor = strokes.find(s => s.visible !== false)?.color || item.borderColor || '#ffffff';
+    const strokeOpacity = strokes.find(s => s.visible !== false)?.opacity ?? 1;
+    const pathD = isPath && item.path
+      ? nodesToNormalizedSVGPath(item.path.nodes, item.path.isClosed)
+      : getNormalizedShapePath(item.shape!.shapeType, item.shape);
+    return (
+      <div className="absolute inset-0 pointer-events-none overflow-visible">
+        <svg
+          className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
+          viewBox="0 0 1 1"
+          preserveAspectRatio="none"
+        >
+          <path
+            d={pathD}
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth={borderWidth}
+            vectorEffect="non-scaling-stroke"
+            strokeLinejoin={strokeJoin}
+            strokeLinecap={item.strokeLinecap}
+            strokeDasharray={dashArray}
+            opacity={strokeOpacity}
+          />
+        </svg>
+      </div>
+    );
+  }
 
   const getRadii = (offset = 0) => {
     if (item.lockBorderRadius !== false) {
@@ -29,8 +66,6 @@ export const StrokeRenderer: React.FC<StrokeRendererProps> = ({ item, strokes, a
 
   const radii = getRadii();
   const expansion = align === 'outside' ? borderWidth : align === 'center' ? borderWidth / 2 : 0;
-  const strokeJoin = item.strokeJoin || 'round';
-  const dashArray = item.strokeDashArray || undefined;
 
   return (
     <div className="absolute overflow-visible pointer-events-none" style={{

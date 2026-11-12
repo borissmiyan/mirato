@@ -1,4 +1,4 @@
-import { ISlide, PresenterSettings, ITemplate, IBlock } from '@/core/types';
+import { ISlide, PresenterSettings, ITemplate, IBlock, Verse } from '@/core/types';
 
 export interface RemoteSlideState {
     slideData?: ISlide | null;
@@ -19,4 +19,20 @@ export interface RemoteSlideState {
     active?: boolean;
     slidePreviewText?: string;
     timelineSlides?: ISlide[];
+    bibleState?: {
+        currentTranslationId: string;
+        secondTranslationId: string | null;
+        currentBookId: string;
+        currentChapter: number;
+        activeVerse: Verse | null;
+    };
+}
+
+export interface RemoteSocketOptions {
+    host?: string;
+    port?: number;
+    role?: 'remote' | 'transmitter';
+    speakerName?: string;
+    onSignal?: (signal: unknown) => void;
+    onPrivacyChange?: (active: boolean) => void;
 }

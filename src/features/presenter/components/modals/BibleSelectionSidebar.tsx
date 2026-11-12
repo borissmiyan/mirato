@@ -3,10 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { getBookName } from '@/core/data/bookData';
+import { Translation, Book } from '@/core/types';
 
 interface BibleSelectionSidebarProps {
-  translations: any[];
-  sortedBooks: any[];
+  translations: Translation[];
+  sortedBooks: Book[];
   selectedTranslationId: string;
   selectedBookId: string;
   setSelectedTranslationId: (id: string) => void;

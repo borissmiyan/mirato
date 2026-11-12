@@ -1,26 +1,32 @@
-import { ISlide } from '@/core/types';
+import { ISlide, ITemplate, IMediaItem, IPresentationFile, IStyleLayer, ICanvasSlide } from '@/core/types';
 import { toast } from '@/core/utils/toast';
 import { TFunction } from 'i18next';
-import { ITemplate } from '@/core/types';
 import { ModalType } from '@/core/store/modalStore';
+import { createSlideFromMediaItem } from '../../../utils/mediaSlideUtils';
+import {
+    calculateSlideInsertionIndex,
+    insertSlidesIntoTimeline,
+    createTimerSlide,
+    createVideoSlide
+} from '../utils/timelineSlideInsertion';
 
 interface UseTimelineOperationsProps {
     activePresentationId: string | null;
-    presentation: any;
+    presentation: IPresentationFile | null;
     slides: ISlide[];
     previewSlideId: string | null;
     templatesMap: Map<string, ITemplate>;
-    blocksMap: Map<string, any>;
+    blocksMap: Map<string, unknown>;
     templates: ITemplate[];
     t: TFunction;
     updatePresentationSlides: (id: string, slides: ISlide[]) => Promise<void>;
     setPreviewSlide: (id: string | null, pid?: string, rootId?: string, parentId?: string | null) => void;
-    updateSlideBackground: (sid: string, bg: any) => Promise<void>;
-    openModal: (type: ModalType, props?: any) => void;
+    updateSlideBackground: (sid: string, bg: IStyleLayer[]) => Promise<void>;
+    openModal: (type: ModalType, props?: Record<string, unknown>) => void;
 }
 
 /**
- * Hook to handle CRUD operations for slides and timers.
+ * Hook to handle CRUD operations for slides and timers on the timeline.
  */
 export const useTimelineOperations = ({
     activePresentationId,
@@ -74,24 +80,12 @@ export const useTimelineOperations = ({
         };
 
         try {
-            const insertBefore = e && (e.metaKey || e.ctrlKey);
-            const selectedIdx = previewSlideId ? slides.findIndex(s => s.id === previewSlideId) : -1;
-            let insertionIndex: number;
-            if (selectedIdx !== -1) {
-                insertionIndex = insertBefore ? selectedIdx : selectedIdx + 1;
-            } else {
-                insertionIndex = slides.length;
-            }
-
-            const newSlides = [
-                ...slides.slice(0, insertionIndex),
-                newSlide,
-                ...slides.slice(insertionIndex),
-            ].map((s, i) => ({ ...s, order: i }));
+            const insertBefore = !!(e && (e.metaKey || e.ctrlKey));
+            const insertionIndex = calculateSlideInsertionIndex({ slides, previewSlideId, insertBefore });
+            const newSlides = insertSlidesIntoTimeline(slides, [newSlide], insertionIndex);
 
             await updatePresentationSlides(activePresentationId, newSlides);
             setPreviewSlide(newSlide.id, activePresentationId);
-            toast.success(t('slide_added', 'Slide added'));
         } catch (error) {
             console.error('[SlideTimeline] Failed to add slide:', error);
             toast.error(t('error_add_slide_failed', 'Failed to add slide'));
@@ -101,83 +95,37 @@ export const useTimelineOperations = ({
     const handleAddTimer = async (e?: React.MouseEvent) => {
         if (!activePresentationId || !presentation) return;
 
-        const newSlide: ISlide = {
-            id: crypto.randomUUID(),
-            type: 'normal',
-            order: 0,
-            blockId: 'default',
-            templateId: 'blank-dark',
-            content: { variables: {} },
-            timerSettings: {
-                duration: 300,
-                style: 'minimal_ring',
-                endAction: 'none',
-            }
-        };
+        const newSlide = createTimerSlide();
 
         try {
-            const insertBefore = e && (e.metaKey || e.ctrlKey);
-            const selectedIdx = previewSlideId ? slides.findIndex(s => s.id === previewSlideId) : -1;
-            let insertionIndex: number;
-            if (selectedIdx !== -1) {
-                insertionIndex = insertBefore ? selectedIdx : selectedIdx + 1;
-            } else {
-                insertionIndex = slides.length;
-            }
-
-            const newSlides = [
-                ...slides.slice(0, insertionIndex),
-                newSlide,
-                ...slides.slice(insertionIndex),
-            ].map((s, i) => ({ ...s, order: i }));
+            const insertBefore = !!(e && (e.metaKey || e.ctrlKey));
+            const insertionIndex = calculateSlideInsertionIndex({ slides, previewSlideId, insertBefore });
+            const newSlides = insertSlidesIntoTimeline(slides, [newSlide], insertionIndex);
 
             await updatePresentationSlides(activePresentationId, newSlides);
             setPreviewSlide(newSlide.id, activePresentationId);
-            toast.success(t('timer_added', 'Timer added'));
         } catch (error) {
             console.error('[SlideTimeline] Failed to add timer:', error);
             toast.error(t('error_add_timer_failed', 'Failed to add timer'));
         }
     };
 
-    const handleAddVideo = async (e?: React.MouseEvent) => {
+    const handleAddVideo = async (eOrMedia?: React.MouseEvent | IMediaItem, customIndex?: number) => {
         if (!activePresentationId || !presentation) return;
 
-        const newSlide: any = {
-            id: crypto.randomUUID(),
-            type: 'video',
-            order: 0,
-            blockId: 'default',
-            templateId: 'blank-dark',
-            videoSettings: {
-                strategy: 'manual',
-                scaling: 'contain',
-                speed: 1,
-                volume: 1,
-                loop: false,
-                muted: false
-            }
-        };
+        const isMediaItem = eOrMedia && typeof eOrMedia === 'object' && 'type' in eOrMedia && eOrMedia.type === 'video';
+        const media = isMediaItem ? (eOrMedia as IMediaItem) : null;
+        const e = !isMediaItem && eOrMedia && 'nativeEvent' in eOrMedia ? (eOrMedia as React.MouseEvent) : undefined;
+
+        const newSlide = createVideoSlide(media);
 
         try {
-            const insertBefore = e && (e.metaKey || e.ctrlKey);
-            const selectedIdx = previewSlideId ? slides.findIndex(s => s.id === previewSlideId) : -1;
-            let insertionIndex: number;
-            if (selectedIdx !== -1) {
-                insertionIndex = insertBefore ? selectedIdx : selectedIdx + 1;
-            } else {
-                insertionIndex = slides.length;
-            }
-
-            const newSlides = [
-                ...slides.slice(0, insertionIndex),
-                newSlide,
-                ...slides.slice(insertionIndex),
-            ].map((s, i) => ({ ...s, order: i }));
+            const insertBefore = !!(e && (e.metaKey || e.ctrlKey));
+            const insertionIndex = calculateSlideInsertionIndex({ slides, previewSlideId, insertBefore, customIndex });
+            const newSlides = insertSlidesIntoTimeline(slides, [newSlide], insertionIndex);
 
             await updatePresentationSlides(activePresentationId, newSlides);
             setPreviewSlide(newSlide.id, activePresentationId);
-            toast.success(t('video_slide_added', 'Video slide added'));
         } catch (error) {
             console.error('[SlideTimeline] Failed to add video:', error);
             toast.error(t('error_add_video_failed', 'Failed to add video slide'));
@@ -194,18 +142,34 @@ export const useTimelineOperations = ({
         if (!slide) return;
 
         const template = slide?.templateId ? templatesMap.get(slide.templateId) : undefined;
-        const bgToApply = (slide.type === 'normal' ? (slide as any).backgroundOverride : undefined) || template?.background;
+        const bgToApply = (slide.type === 'normal' ? (slide as ICanvasSlide).backgroundOverride : undefined) || template?.background;
         if (!bgToApply) return;
+    };
 
-        // Note: applyBackgroundToAll is not passed in props but we can import it or use a callback
-        // For now, let's assume it's passed or available from another store.
-        // Actually, we should pass it.
+    const handleAddMediaSlides = async (items: IMediaItem[], index?: number) => {
+        if (!activePresentationId) {
+            toast.error(t('error_no_active_presentation', 'No active presentation'));
+            return;
+        }
+
+        const insertionIndex = typeof index === 'number' && index >= 0 && index <= slides.length
+            ? index
+            : slides.length;
+
+        const newSlides = items.map((item, idx) => createSlideFromMediaItem(item, insertionIndex + idx));
+        const updatedSlides = insertSlidesIntoTimeline(slides, newSlides, insertionIndex);
+
+        await updatePresentationSlides(activePresentationId, updatedSlides);
+        if (newSlides.length > 0) {
+            setPreviewSlide(newSlides[0].id, activePresentationId);
+        }
     };
 
     return {
         handleAddSlide,
         handleAddTimer,
         handleAddVideo,
+        handleAddMediaSlides,
         handleRestoreTemplateBg,
         handleApplyBgToAll
     };

@@ -7,15 +7,15 @@ import { useCallback, useRef } from 'react';
  * @param delay The throttle delay in milliseconds
  * @returns A throttled version of the callback
  */
-export function useThrottle<T extends (...args: any[]) => any>(
+export function useThrottle<T extends (...args: unknown[]) => unknown>(
     callback: T,
     delay: number
 ): T {
     const lastRun = useRef(0);
     const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const lastArgs = useRef<any[]>([]);
+    const lastArgs = useRef<Parameters<T> | unknown[]>([]);
 
-    return useCallback(((...args: any[]) => {
+    return useCallback(((...args: Parameters<T>) => {
         const now = Date.now();
         lastArgs.current = args;
 

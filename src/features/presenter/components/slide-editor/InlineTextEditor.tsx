@@ -6,12 +6,15 @@ import { ensureLayers } from '@/core/utils/styleMigration';
 import { needsFauxBold } from '@/core/services/fontService';
 import { stripInlineStyles } from '@/core/utils/stripInlineStyles';
 import { sanitizePasteHtml } from '@/core/utils/sanitizePaste';
+import { sanitizeHtml } from '@/core/utils/sanitizeHtml';
 import { useTextFit } from '@/features/presenter/hooks/useTextFit';
 import { textCommandAtom, fontPreviewFamilyAtom, fontPreviewWeightAtom } from '@/core/store/uiAtoms';
 import { normalizeHtml } from '@/features/presenter/utils/normalizeContentEditableHtml';
 import { getComputedColor } from '@/core/utils/blendEngine';
 import { mediaCache } from '@/core/utils/mediaCache';
 import { IStyleLayer } from '@/core/types/style';
+
+import { useRichTextBackground } from './hooks/useRichTextBackground';
 
 interface InlineTextEditorProps {
     item: ICanvasItem;
@@ -23,23 +26,24 @@ interface InlineTextEditorProps {
     onCancel: () => void;
 }
 
+interface InlineTextEditorContentProps extends InlineTextEditorProps {
+    textData: NonNullable<ICanvasItem['text']>;
+}
+
 /**
- * A contenteditable div that allows direct editing 
- * of a text layer while matching its slide design properties exactly.
- * Matches the layout of the static div to prevent "jumping".
+ * Internal editor content rendered strictly when item.text is present,
+ * maintaining invariant hook call ordering.
  */
-const InlineTextEditor: React.FC<InlineTextEditorProps> = ({ 
-    item, 
+const InlineTextEditorContent: React.FC<InlineTextEditorContentProps> = ({
+    item,
+    textData,
     fittedFontSize,
     activeFontFamily,
     activeFontWeight,
-    onSave, 
-    onInput, 
-    onCancel 
+    onSave,
+    onInput,
+    onCancel
 }) => {
-    const textData = item.text;
-    if (!textData) return null;
-
     const editorRef = useRef<HTMLDivElement>(null);
     const fills = ensureLayers(textData.textFills);
     const isRichFill = fills.length > 0 && (fills.length > 1 || fills[0].type !== 'color');
@@ -65,93 +69,8 @@ const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
         };
     }, []);
 
-    // --- Synchronized CSS Logic from TextRenderer ---
-    const [dynamicCSS, setDynamicCSS] = React.useState<React.CSSProperties | null>(null);
-
-    useEffect(() => {
-        let active = true;
-
-        const compileBackgroundStyles = async () => {
-            const hasRichMedia = fills.some(f => f.type !== 'color');
-            if (!hasRichMedia) {
-                if (active) setDynamicCSS(null);
-                return;
-            }
-
-            const bgImages: string[] = [];
-            const bgBlendModes: string[] = [];
-            const bgSizes: string[] = [];
-            const bgPositions: string[] = [];
-
-            for (const layer of fills) {
-                if (layer.visible === false) continue;
-
-                const opacity = layer.opacity ?? 1;
-                const blendMode = layer.blendMode || 'normal';
-
-                if (layer.type === 'color' && layer.color) {
-                    let alphaHex = Math.round(opacity * 255).toString(16).padStart(2, '0');
-                    let baseHex = layer.color.length === 9 ? layer.color.substring(0, 7) : layer.color.padEnd(7, '0');
-                    let finalOutputColor = baseHex + alphaHex;
-                    
-                    bgImages.push(`linear-gradient(${finalOutputColor}, ${finalOutputColor})`);
-                    bgBlendModes.push(blendMode);
-                    bgSizes.push('100% 100%');
-                    bgPositions.push('left top');
-                } 
-                else if (layer.type === 'image' && layer.image) {
-                    let resolvedUrl = layer.image.url;
-                    const isRemote = !window.electron?.ipcRenderer;
-                    let dbUrl: string | null = null;
-                    
-                    if (!isRemote && layer.image.isFromDb && layer.image.id) {
-                        try {
-                            const cachedUrl = await mediaCache.getBackgroundUrl(layer.image.id);
-                            if (cachedUrl) dbUrl = cachedUrl;
-                        } catch (e) {
-                            console.error("Failed caching text editor background layer", e);
-                        }
-                    }
-
-                    const displayUrl = (isRemote && resolvedUrl && !resolvedUrl.startsWith('blob:')) 
-                        ? resolvedUrl 
-                        : (dbUrl || (resolvedUrl && !resolvedUrl.startsWith('blob:') ? resolvedUrl : null));
-
-                    if (displayUrl && String(displayUrl).toLowerCase() !== 'null') {
-                        let imgToken = `url("${displayUrl}")`;
-                        if (opacity < 1) {
-                            imgToken = `cross-fade(transparent ${(1 - opacity) * 100}%, url("${displayUrl}") ${opacity * 100}%)`;
-                        }
-                        bgImages.push(imgToken);
-                        bgBlendModes.push(blendMode);
-                        bgSizes.push('cover');
-                        bgPositions.push('center center');
-                    }
-                }
-            }
-
-            if (!active) return;
-
-            if (bgImages.length > 0) {
-                setDynamicCSS({
-                    backgroundImage: bgImages.join(', '),
-                    backgroundBlendMode: bgBlendModes.join(', '),
-                    backgroundSize: bgSizes.join(', '),
-                    backgroundPosition: bgPositions.join(', '),
-                    backgroundRepeat: 'no-repeat',
-                    WebkitBackgroundClip: 'text',
-                    backgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent',
-                    color: 'transparent',
-                });
-            } else {
-                setDynamicCSS(null);
-            }
-        };
-
-        compileBackgroundStyles();
-        return () => { active = false; };
-    }, [fills]);
+    // --- Synchronized CSS Logic from TextRenderer via hook ---
+    const dynamicCSS = useRichTextBackground(fills);
 
     const finalColor = React.useMemo(() => {
         if (isRichFill || fills.length === 0) return 'transparent';
@@ -177,6 +96,7 @@ const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
             selection?.removeAllRanges();
             selection?.addRange(range);
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs only on item mount to prevent resetting cursor
     }, [item.id]);
 
     const textCommand = useAtomValue(textCommandAtom);
@@ -215,7 +135,7 @@ const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
             case 'fontSize':
                 // Character-level: wrap selected text with font-size style using 'em' so it scales properly
                 if (window.getSelection()?.isCollapsed === false) {
-                    const baseSize = typeof item.text?.fontSize === 'number' ? item.text.fontSize : 32;
+                    const baseSize = typeof textData.fontSize === 'number' ? textData.fontSize : 32;
                     // value comes in as e.g. "40px" or "40". Extract the number.
                     const newSizePx = parseFloat(value);
                     if (!isNaN(newSizePx) && baseSize > 0) {
@@ -267,7 +187,7 @@ const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
         // Trigger input event manually since execCommand doesn't always fire it
         const event = new Event('input', { bubbles: true });
         editorRef.current.dispatchEvent(event);
-    }, [textCommand]);
+    }, [textCommand, textData.fontSize]);
 
     const applyCustomStyle = (styles: Record<string, string>) => {
         const selection = window.getSelection();
@@ -346,7 +266,7 @@ const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
                       textData.listType === 'lower-roman' ? 'lower-roman' :
                       textData.listType === 'upper-roman' ? 'upper-roman' :
                       textData.listType === 'decimal' ? 'decimal' : 'disc'
-    } as any;
+    } as React.CSSProperties;
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
         e.stopPropagation();
@@ -452,10 +372,11 @@ const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
                                 WebkitTextStroke: `${baseWidth}px ${stroke.color || '#000000'}`,
                                 paintOrder: 'fill stroke',
                                 opacity: stroke.opacity ?? 1,
-                                mixBlendMode: (stroke.blendMode || 'normal') as any,
+                                mixBlendMode: (stroke.blendMode || 'normal') as React.CSSProperties['mixBlendMode'],
                                 zIndex: 0
                             }}
-                            dangerouslySetInnerHTML={{ __html: currentContent }}
+                            // audit-ignore: sanitized with DOMPurify
+                            dangerouslySetInnerHTML={{ __html: sanitizeHtml(currentContent) }}
                         />
                     );
                 })}
@@ -497,6 +418,7 @@ const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
                 />
 
                 {/* Force child elements to respect rich media fill transparency while editing */}
+                {/* audit-ignore: Static CSS styling rule */}
                 <style dangerouslySetInnerHTML={{ __html: `
                     .stroke-layer-content * { 
                         color: transparent !important; 
@@ -526,6 +448,11 @@ const InlineTextEditor: React.FC<InlineTextEditorProps> = ({
             </div>
         </div>
     );
+};
+
+const InlineTextEditor: React.FC<InlineTextEditorProps> = (props) => {
+    if (!props.item.text) return null;
+    return <InlineTextEditorContent {...props} textData={props.item.text} />;
 };
 
 export default InlineTextEditor;

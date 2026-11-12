@@ -1,7 +1,7 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { useAtom } from 'jotai';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useAtom, useSetAtom } from 'jotai';
 import { AppMode } from '@/core/types';
-import { appModeAtom } from '@/core/store/uiAtoms';
+import { appModeAtom, hymnModalReturnStateAtom } from '@/core/store/uiAtoms';
 import { useBibleStore } from '@/features/bible-browser/store/bibleStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -24,15 +24,26 @@ export function useNavigationState(): {
   closePicker: () => void;
 } {
   const [appMode, setAppMode] = useAtom(appModeAtom);
+  const clearHymnReturnState = useSetAtom(hymnModalReturnStateAtom);
   const [isModePickerOpen, setIsModePickerOpen] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+
+  // When the user switches away from hymns mode, discard the "Return" button context
+  const prevModeRef = useRef<AppMode>(appMode);
+  useEffect(() => {
+    if (prevModeRef.current === 'hymns' && appMode !== 'hymns') {
+      clearHymnReturnState(null);
+    }
+    prevModeRef.current = appMode;
+  }, [appMode, clearHymnReturnState]);
   
   const { currentTranslationId, setTranslation } = useBibleStore(useShallow(s => ({
     currentTranslationId: s.currentTranslationId,
     setTranslation: s.setTranslation
   })));
-  const translations = useLiveQuery(() => db.translations.toArray()) || [];
+  const liveTranslations = useLiveQuery(() => db.translations.toArray());
+  const translations = useMemo(() => liveTranslations || [], [liveTranslations]);
 
   // Multi-click logic for translation switching
   const clickCountRef = useRef(0);
@@ -65,14 +76,16 @@ export function useNavigationState(): {
           setTriggerRect(triggerElement.getBoundingClientRect());
         }
         setIsPickerOpen(true);
-      } else if (clickCountRef.current === 2) {
-        cycleTranslation(1);
-      } else if (clickCountRef.current >= 3) {
-        cycleTranslation(-1);
+      } else if (appMode === 'scripture') {
+        if (clickCountRef.current === 2) {
+          cycleTranslation(1);
+        } else if (clickCountRef.current >= 3) {
+          cycleTranslation(-1);
+        }
       }
       clickCountRef.current = 0;
     }, 250);
-  }, [cycleTranslation]);
+  }, [cycleTranslation, appMode]);
 
   const toggleModePicker = useCallback((triggerElement: HTMLElement | null) => {
     if (triggerElement) {

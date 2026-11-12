@@ -1,14 +1,16 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, ChevronDown as ChevronDownIcon, RotateCcw } from 'lucide-react';
+import { ChevronRight, ChevronDown as ChevronDownIcon, RotateCcw, Music } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
-import { ISlide, ICanvasSlide, INestedSlide, IBlock, ITemplate, IPresentationFile } from '@/core/types';
+import { ISlide, ICanvasSlide, INestedSlide, IBlock, ITemplate, IPresentationFile, IVideoSlide } from '@/core/types';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import SlideContentRenderer from '../slide-editor/SlideContentRenderer';
 import SmartBadge from './SmartBadge';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
 import { useIntersection } from '@/core/hooks/useIntersection';
+import { extractPosterFrame } from '@/core/utils/videoUtils';
+import { mediaCache } from '@/core/utils/mediaCache';
 import type { DraggableSyntheticListeners, DraggableAttributes } from '@dnd-kit/core';
 
 export interface SlideTileProps {
@@ -29,6 +31,7 @@ export interface SlideTileProps {
     isMultiSelect?: boolean;
     isSubItemSelected?: boolean;
     isMultiDragHidden?: boolean;
+    isNew?: boolean;
     presentationsMap: Map<string, IPresentationFile>;
     navigationParentSlideId: string | null;
     listeners?: DraggableSyntheticListeners;
@@ -57,16 +60,20 @@ export const SlideTile: React.FC<SlideTileProps> = ({
     isMultiSelect,
     isSubItemSelected,
     isMultiDragHidden,
+    isNew,
     presentationsMap,
     navigationParentSlideId,
     listeners,
     attributes
 }) => {
     const { t } = useTranslation();
-    const { syncNestedPresentation, setCachedNestedPresentation, nestedPresentationsCache } = usePresentationStore();
-    const containerRef = React.useRef<HTMLDivElement>(null);
     const isMaster = slide.blockId === 'master-presentation';
     const masterPresId = slide.type === 'normal' ? (slide as ICanvasSlide).masterPresentationId : (slide.type === 'nested' ? (slide as INestedSlide).presentationId : undefined);
+    const syncNestedPresentation = usePresentationStore(s => s.syncNestedPresentation);
+    const setCachedNestedPresentation = usePresentationStore(s => s.setCachedNestedPresentation);
+    const cachedPres = usePresentationStore(s => masterPresId ? s.nestedPresentationsCache[masterPresId] : null);
+
+    const containerRef = React.useRef<HTMLDivElement>(null);
     const isNestedActive = isMaster && navigationParentSlideId === slide.id;
 
     // Viewport-aware lazy loading
@@ -79,9 +86,6 @@ export const SlideTile: React.FC<SlideTileProps> = ({
     // Only fetch if it's a master slide, we're not inside it (which would be handled by the parent), 
     // and it's visible in the viewport.
     const shouldFetch = isMaster && masterPresId && isVisible;
-
-    // Try to resolve from store cache first (instant)
-    const cachedPres = masterPresId ? nestedPresentationsCache[masterPresId] : null;
 
     // Isolated lazy fetch for this specific master thumbnail
     const liveNestedPres = useLiveQuery(
@@ -114,17 +118,73 @@ export const SlideTile: React.FC<SlideTileProps> = ({
 
     const isPreview = previewSlideId === slide.id && selectedPresentationId === activePresentationId;
     const isEffectivelyPreviewed = isPreview || isNestedActive;
-    const isLive = liveSlideId === slide.id;
+    
+    // The tile is live if it is the live slide itself, OR if it's the master container of the live nested presentation
+    const isLive = liveSlideId === slide.id || 
+                   (isMaster && usePresentationStore.getState().liveNavigationParentSlideId === slide.id);
 
-    const mediaId = displaySlide.type === 'video' ? (displaySlide as any).videoSettings?.mediaId : null;
+    const isVideo = displaySlide.type === 'video';
+    const videoSettings = isVideo ? (displaySlide as IVideoSlide).videoSettings : undefined;
+    const mediaId = isVideo ? videoSettings?.mediaId : null;
+    const posterFrame = videoSettings?.posterFrame;
+
+    const [extractedPoster, setExtractedPoster] = React.useState<string | null>(null);
+    const extractionAttemptedRef = React.useRef(false);
+    const prevMediaIdRef = React.useRef(mediaId);
+
+    React.useEffect(() => {
+        if (prevMediaIdRef.current !== mediaId) {
+            prevMediaIdRef.current = mediaId;
+            extractionAttemptedRef.current = false;
+            setExtractedPoster(null);
+        }
+    }, [mediaId]);
+
+    React.useEffect(() => {
+        if (!isVideo || !mediaId || posterFrame || !isVisible || extractionAttemptedRef.current) {
+            return;
+        }
+
+        extractionAttemptedRef.current = true;
+        let cancelled = false;
+
+        (async () => {
+            try {
+                const videoUrl = await mediaCache.getBackgroundUrl(mediaId);
+                if (cancelled || !videoUrl) return;
+
+                const frame = await extractPosterFrame(videoUrl);
+                if (cancelled || !frame) return;
+
+                setExtractedPoster(frame);
+
+                const targetPresId = activeNestedSlide ? masterPresId : (activePresentationId || selectedPresentationId);
+                if (targetPresId) {
+                    usePresentationStore.getState().updateVideoSettings(
+                        displaySlide.id,
+                        { posterFrame: frame },
+                        targetPresId
+                    );
+                }
+            } catch (err) {
+                console.warn('[SlideTile] Failed to extract video poster frame:', err);
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [isVideo, mediaId, posterFrame, isVisible, displaySlide.id, activeNestedSlide, masterPresId, activePresentationId, selectedPresentationId]);
+
+    const currentPoster = posterFrame || extractedPoster;
+
+    const isVideoSlide = displaySlide.type === 'video';
     const mediaMetadata = useLiveQuery(async () => {
-        if (!mediaId) return null;
+        if (!isVideoSlide || !mediaId) return null;
         const item = await db.mediaPool.get(mediaId);
         if (item) return { name: item.name };
         const bg = await db.backgrounds.get(mediaId);
         if (bg) return { name: bg.name };
         return null;
-    }, [mediaId]);
+    }, [isVideoSlide, mediaId]);
 
     return (
         <div
@@ -146,6 +206,7 @@ export const SlideTile: React.FC<SlideTileProps> = ({
             }}
             className={cn(
                 "group relative shrink-0 w-32 aspect-video rounded-xl border-2 cursor-grab active:cursor-grabbing overflow-hidden leading-none transition-all duration-300 touch-none bg-stone-900",
+                isNew && !isMultiDragHidden && "animate-timeline-slide-in z-20",
                 isSelected && isEffectivelyPreviewed && isMultiSelect && "ring-2 ring-accent ring-offset-2 ring-offset-stone-900 border-accent",
                 isSelected && (!isEffectivelyPreviewed || !isMultiSelect) && "ring-2 ring-accent border-transparent",
                 isMultiDragHidden && "opacity-0 pointer-events-none transition-opacity",
@@ -163,10 +224,17 @@ export const SlideTile: React.FC<SlideTileProps> = ({
                 style={{ transform: `scale(${128 / 1920})` }}
             >
                 {displaySlide && (
-                    displaySlide.type === 'video' ? (
+                    displaySlide.thumbnailUrl && !isEffectivelyPreviewed ? (
+                        <img 
+                            src={displaySlide.thumbnailUrl} 
+                            className="w-full h-full object-cover" 
+                            alt="" 
+                            loading="lazy" 
+                        />
+                    ) : displaySlide.type === 'video' ? (
                         <div className="w-full h-full bg-stone-950 flex items-center justify-center relative">
-                            {((displaySlide as any).videoSettings?.posterFrame) ? (
-                                <img src={(displaySlide as any).videoSettings.posterFrame} className="w-full h-full object-cover" alt="Video poster" />
+                            {currentPoster ? (
+                                <img src={currentPoster} className="w-full h-full object-cover" alt="Video poster" />
                             ) : (
                                 <div className="w-[1920px] h-[1080px] flex items-center justify-center bg-stone-900 border border-white/5">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-stone-700"><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M7 3v18" /><path d="M17 3v18" /><path d="M3 7.5h4" /><path d="M3 12h18" /><path d="M3 16.5h4" /><path d="M17 7.5h4" /><path d="M17 16.5h4" /></svg>
@@ -203,27 +271,38 @@ export const SlideTile: React.FC<SlideTileProps> = ({
             <div className="absolute z-20"><SmartBadge slide={slide} /></div>
             {isMaster && (
                 <button
+                    type="button"
                     onClick={(e) => { e.stopPropagation(); onToggleExpansion(slide.id); }}
-                    className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-orange-500/30 text-white/60 hover:text-orange-400 rounded-md transition-all border border-white/10 z-20 cursor-pointer"
+                    className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-orange-500/30 text-white/60 hover:text-orange-400 rounded-xl transition-all border border-white/10 z-20 cursor-pointer apple-press"
+                    aria-label={slide.isExpanded ? "Collapse" : "Expand"}
                 >
                     {slide.isExpanded ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 </button>
             )}
             <div 
-                className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md bg-black/40 backdrop-blur-md border border-white/5 text-[8px] font-black text-stone-400 z-50 pointer-events-none"
+                className="absolute top-1 left-1 px-1.5 py-0.5 rounded-xl bg-black/40 backdrop-blur-md border border-white/5 text-[8px] font-black text-stone-400 z-50 pointer-events-none"
             >
                 {slide.order + 1}
             </div>
             
             {/* Nested Progress Badge */}
             {isNestedActive && nestedPres && (
-                <div className="absolute top-1 left-7 px-1.5 py-0.5 rounded-md bg-accent border border-accent/50 text-[8px] font-black text-white z-30 shadow-lg animate-in fade-in slide-in-from-left-2 duration-300">
+                <div className="absolute top-1 left-7 px-1.5 py-0.5 rounded-xl bg-accent border border-accent/50 text-[8px] font-black text-white z-30 shadow-lg animate-in fade-in slide-in-from-left-2 duration-300">
                     {nestedPres.slides.findIndex(s => s.id === previewSlideId) + 1} / {nestedPres.slides.length}
                 </div>
             )}
 
-            {isLive && <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-md bg-red-500/30 backdrop-blur-md border border-red-500/30 text-[7px] font-black text-red-300 uppercase tracking-wider animate-pulse z-20">LIVE</div>}
-            {isMaster && <div className="absolute bottom-1 left-1 px-1 py-0.5 rounded bg-orange-500/20 border border-orange-500/20 text-[6px] font-black text-orange-400 uppercase tracking-tighter z-20">{t('nested', 'Nested')}</div>}
+            {isLive && <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-xl bg-red-500/30 backdrop-blur-md border border-red-500/30 text-[7px] font-black text-red-300 uppercase tracking-wider animate-pulse z-20">LIVE</div>}
+            {isMaster && (
+                (nestedPres?.hymnalId || nestedPres?.metadata?.isHymn || nestedPres?.metadata?.hymnOrder) ? (
+                    <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-[6px] font-black text-amber-400 uppercase tracking-tighter z-20 flex items-center gap-1">
+                        <Music className="w-2.5 h-2.5" />
+                        <span>{t('hymn', 'Гимн')}</span>
+                    </div>
+                ) : (
+                    <div className="absolute bottom-1 left-1 px-1 py-0.5 rounded bg-orange-500/20 border border-orange-500/20 text-[6px] font-black text-orange-400 uppercase tracking-tighter z-20">{t('nested', 'Nested')}</div>
+                )
+            )}
             
             {/* Sync Badge */}
             {(() => {
@@ -241,11 +320,12 @@ export const SlideTile: React.FC<SlideTileProps> = ({
 
                 return (
                     <button
+                        type="button"
                         onClick={(e) => {
                             e.stopPropagation();
                             syncNestedPresentation(slide.id);
                         }}
-                        className="absolute bottom-1 right-1 px-2 py-0.5 rounded bg-blue-500 hover:bg-blue-400 border border-blue-400/50 text-[7px] font-black text-white uppercase tracking-wider z-30 shadow-lg shadow-blue-500/20 animate-in fade-in zoom-in-50 duration-300 flex items-center gap-1 cursor-pointer"
+                        className="absolute bottom-1 right-1 px-2 py-0.5 rounded bg-blue-500 hover:bg-blue-400 border border-blue-400/50 text-[7px] font-black text-white uppercase tracking-wider z-30 shadow-lg shadow-blue-500/20 animate-in fade-in zoom-in-50 duration-300 flex items-center gap-1 cursor-pointer apple-press"
                         title={t('sync_library_update', 'Sync Library Update')}
                     >
                         <RotateCcw className="w-2.5 h-2.5" />

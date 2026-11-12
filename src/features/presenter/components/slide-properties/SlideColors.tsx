@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { ICanvasItem, IStyleLayer } from '@/core/types';
 import { Palette } from 'lucide-react';
 
+import { EmptyState } from '@/shared/ui';
+
 export interface ISlideColorsProps {
     items: ICanvasItem[];
     onColorClick: (layer: IStyleLayer) => void;
@@ -28,14 +30,12 @@ export const SlideColors: React.FC<ISlideColorsProps> = ({ items, onColorClick }
 
     if (allColors.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-white/3 border border-white/5 flex items-center justify-center">
-                    <Palette className="w-5 h-5 text-stone-700" />
-                </div>
-                <p className="text-[10px] text-stone-600 font-bold uppercase tracking-widest text-center">
-                    {t('no_elements_on_slide')}
-                </p>
-            </div>
+            <EmptyState
+                icon={Palette}
+                title={t('no_elements_on_slide')}
+                borderStyle="none"
+                size="sm"
+            />
         );
     }
 
@@ -48,11 +48,13 @@ export const SlideColors: React.FC<ISlideColorsProps> = ({ items, onColorClick }
             <div className="grid grid-cols-8 gap-1.5 bg-black/20 p-3 rounded-2xl border border-white/5">
                 {allColors.map((layer, idx) => (
                     <button
+                        type="button"
                         key={layer.id || idx}
                         onClick={() => onColorClick(layer)}
-                        className="group relative aspect-square rounded-lg border border-white/10 hover:border-white/30 hover:scale-110 transition-all shadow-sm cursor-pointer"
+                        className="group relative aspect-square rounded-xl border border-white/10 hover:border-white/30 hover:scale-110 active:scale-95 transition-all shadow-sm cursor-pointer apple-press"
                         style={{ backgroundColor: layer.color }}
                         title={layer.color}
+                        aria-label={layer.color}
                     />
                 ))}
             </div>

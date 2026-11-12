@@ -74,17 +74,18 @@ export async function searchVerses(
  * Optimized indexed search for a set of words in a specific translation
  */
 async function performKeywordSearch(words: string[], translationId: string, limit: number): Promise<Verse[]> {
-    // Multi-entry index search: query for the first (likely rarest or just first) word
+    if (words.length === 0) return [];
+    // Multi-entry index search: query for the first word prefix
     // and then filter results for the rest of the words.
     const firstWord = words[0];
     const otherWords = words.slice(1);
 
     return await db.verses
         .where('words')
-        .equals(firstWord)
+        .startsWith(firstWord)
         .and(v => {
             if (v.translationId !== translationId) return false;
-            return otherWords.every(w => v.words?.includes(w));
+            return otherWords.every(w => v.words?.some(vw => vw.startsWith(w)));
         })
         .limit(limit)
         .toArray();

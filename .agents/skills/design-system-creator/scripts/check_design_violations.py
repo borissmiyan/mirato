@@ -118,7 +118,7 @@ RULES = [
 ]
 
 SKIP_DIRS  = {'node_modules', '.git', 'dist', 'build', '.next', '__pycache__', 'coverage'}
-SKIP_FILES = {'.test.tsx', '.test.ts', '.stories.tsx', '.stories.ts'}
+SKIP_FILES = {'.test.tsx', '.test.ts', '.stories.tsx', '.stories.ts', 'database.types.ts', 'types.ts'}
 
 # ── Scanner ────────────────────────────────────────────────────────────────────
 

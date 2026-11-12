@@ -26,35 +26,56 @@ export const TimelineDragOverlayContent: React.FC<TimelineDragOverlayContentProp
     blocksMap,
     lang
 }) => {
-    if (!activeId) return null;
+    // Preserve the last active slide so during the drop animation flight,
+    // the card doesn't vanish into thin air before landing in the slot
+    const lastActiveSlideRef = React.useRef<ISlide | null>(null);
+    const lastSelectedIdsRef = React.useRef<string[]>(selectedSlideIds);
 
-    const activeSlide = localSlides.find(s => s.id === activeId);
-    if (!activeSlide) return null;
+    const activeSlide = activeId ? localSlides.find(s => s.id === activeId) : null;
+    if (activeSlide) {
+        lastActiveSlideRef.current = activeSlide;
+        lastSelectedIdsRef.current = selectedSlideIds;
+    }
 
-    const isSelected = selectedSlideIds.includes(activeId);
+    const currentSlide = activeSlide || lastActiveSlideRef.current;
+    if (!currentSlide) return null;
+
+    const currentSelectedIds = activeSlide ? selectedSlideIds : lastSelectedIdsRef.current;
+    const isSelected = currentSelectedIds.includes(currentSlide.id);
     const draggedSlides = isSelected 
-        ? localSlides.filter(s => selectedSlideIds.includes(s.id))
-        : [activeSlide];
+        ? localSlides.filter(s => currentSelectedIds.includes(s.id))
+        : [currentSlide];
 
     // Show max 3 stacked cards for performance
     const maxVisible = Math.min(draggedSlides.length, 3);
     const visibleSlides = draggedSlides.slice(0, maxVisible);
 
+    // Track dropping flight when activeId becomes null but overlay is animating back to slot
+    const isDropping = !activeId && Boolean(lastActiveSlideRef.current);
+
     return (
-        <div className="relative pointer-events-none" style={{ width: 128, height: 72, transform: 'scale(0.85)', transformOrigin: 'center' }}>
+        <div 
+            className={cn(
+                "relative pointer-events-none",
+                isDropping ? "animate-apple-drag-drop" : "animate-apple-drag-lift"
+            )} 
+            style={{ width: 128, height: 72, transformOrigin: '50% 50%' }}
+        >
             {/* Render back-to-front so the first card is on top */}
             {visibleSlides.map((s, idx) => {
                 const reverseIdx = maxVisible - 1 - idx;
                 const offsetX = reverseIdx * 6;
                 const offsetY = reverseIdx * 6;
                 const scale = 1 - reverseIdx * 0.04;
-                const opacity = idx === 0 ? 1 : 0.7 - reverseIdx * 0.15;
+                const baseOpacity = idx === 0 ? 1 : 0.7 - reverseIdx * 0.15;
+                const opacity = isDropping && idx > 0 ? 0 : baseOpacity;
 
                 return (
                     <div
                         key={s.id}
                         className={cn(
-                            "w-32 aspect-video rounded-xl overflow-hidden border-2 border-accent shadow-2xl absolute top-0 left-0 bg-stone-900",
+                            "w-32 aspect-video rounded-xl overflow-hidden border-2 border-accent shadow-2xl absolute top-0 left-0 bg-stone-900 ring-2 ring-accent/30",
+                            isDropping && idx > 0 && "transition-opacity duration-180 ease-out"
                         )}
                         style={{
                             transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
@@ -87,7 +108,10 @@ export const TimelineDragOverlayContent: React.FC<TimelineDragOverlayContentProp
             {/* Count badge */}
             {draggedSlides.length > 1 && (
                 <div
-                    className="absolute w-6 h-6 bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg border-2 border-white/30"
+                    className={cn(
+                        "absolute w-6 h-6 bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg border-2 border-white/30 transition-all duration-180",
+                        isDropping ? "opacity-0 scale-75" : "opacity-100 scale-100"
+                    )}
                     style={{ top: -8, right: -8, zIndex: maxVisible + 1 }}
                 >
                     {draggedSlides.length}

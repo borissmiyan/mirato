@@ -1,26 +1,24 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { Play, Pause, Volume2, VolumeX, Gauge, Monitor, Music, SkipBack, SkipForward, Circle, QrCode } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Gauge, Monitor, Music, SkipBack, SkipForward } from 'lucide-react';
 import { usePresentationStore } from '../../store/presentationStore';
-import { usePresenterStore } from '../../store/presenterStore';
-import { IVideoSlide, ISlide } from '@/core/types/presentation';
+import { IVideoSlide, ISlide, ITimerSlide, ICanvasSlide } from '@/core/types/presentation';
 import { LiveSyncService } from '@/core/services/liveSyncService';
 import { cn } from '@/core/utils/cn';
 import { db } from '@/core/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { audioService } from '../../services/AudioService';
+import { presentationService } from '@/core/services/presentationService';
+import { Slider } from '@/shared/ui';
 
 /**
  * Formats seconds into MM:SS or HH:MM:SS display.
  */
 const formatTime = (seconds: number): string => {
   if (!isFinite(seconds) || seconds < 0) return '0:00';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${m}:${String(s).padStart(2, '0')}`;
+  const h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60), s = Math.floor(seconds % 60);
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
 };
 
 /**
@@ -39,35 +37,25 @@ export const LiveMediaToolbar: React.FC<LiveMediaToolbarProps> = ({
 }) => {
   const { t } = useTranslation();
   const liveSlideId = usePresentationStore(s => s.liveSlideId);
-  const toggleStageQr = usePresenterStore(s => s.toggleStageQr);
-  const showStageQr = usePresenterStore(s => s.settings.stage?.showRemoteQr ?? false);
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const speedButtonRef = useRef<HTMLButtonElement>(null);
   const [menuPosition, setMenuPosition] = useState({ bottom: 0, right: 0 });
-  const scrubberRef = useRef<HTMLDivElement>(null);
-  const [isDraggingScrubber, setIsDraggingScrubber] = useState(false);
-  const lastInteractionRef = useRef<number>(0);
+  const [currentVolume, setCurrentVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+  const currentVolumeRef = useRef(1);
+  const isMutedRef = useRef(false);
+  const lastInteractionRef = useRef(0);
+  const lastVolumeInteractionRef = useRef(0);
+  const lastInitializedSlideIdRef = useRef<string | null>(null);
+  const prevSlideIdRef = useRef<string | null>(null);
 
   // Polled playback state from the actual preview video element
   const [playState, setPlayState] = useState<{
-    isPlaying: boolean;
-    currentTime: number;
-    duration: number;
-    buffered: number;
-    timestampAtPlay?: number;
-  }>({
-    isPlaying: false,
-    currentTime: 0,
-    duration: 0,
-    buffered: 0,
-  });
+    isPlaying: boolean; currentTime: number; duration: number; buffered: number; timestampAtPlay?: number;
+  }>({ isPlaying: false, currentTime: 0, duration: 0, buffered: 0 });
   
   const [audioStatus, setAudioStatus] = useState<{
-    scopeId: string;
-    currentTime: number;
-    duration: number;
-    isPlaying: boolean;
-    fileId: string;
+    scopeId: string; currentTime: number; duration: number; isPlaying: boolean; fileId: string;
   } | null>(null);
 
   // Optimization: Prefer passed props if available, otherwise fallback to DB query
@@ -76,50 +64,77 @@ export const LiveMediaToolbar: React.FC<LiveMediaToolbarProps> = ({
     if (!liveSlideId) return null;
     const presentations = await db.presentationFiles.toArray();
     for (const p of presentations) {
-        const slide = p.slides.find(s => s.id === liveSlideId);
-        if (slide) return { slide, presentationId: p.id };
+      const slide = p.slides.find(s => s.id === liveSlideId);
+      if (slide) return { slide, presentationId: p.id };
     }
     return null;
   }, [liveSlideId, propLiveSlide?.id, propPresentationId]);
 
   const liveSlideInfo = liveSlideData?.slide || propLiveSlide;
   const presentationId = liveSlideData?.presentationId || propPresentationId;
-
   const settings = liveSlideInfo?.type === 'video' ? (liveSlideInfo as IVideoSlide).videoSettings : null;
 
   // Keep a ref to the latest settings so the high-frequency poll loop always has up-to-date
   // trim boundaries without requiring the effect to restart on every reference change.
   const settingsRef = useRef(settings);
-  useEffect(() => {
-    settingsRef.current = settings;
-  }, [settings]);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   // Sync playState.currentTime with settings.trimStart when slide changes or trim changes
+  const trimStart = settings?.trimStart;
+  const trimEnd = settings?.trimEnd;
   useEffect(() => {
     if (!settings) return;
-    const trimStart = settings.trimStart || 0;
+    const start = trimStart || 0;
     setPlayState(prev => {
-      // If we are significantly outside the trim boundaries, reset to trimStart
-      // Safety: Only reset if we actually have a duration, or if we are at 0 when trimStart is > 0
-      const trimEnd = settings.trimEnd || prev.duration || 0;
-      if (prev.currentTime < trimStart || (trimEnd > 0 && prev.currentTime > trimEnd)) {
-        return { ...prev, currentTime: trimStart };
+      const end = trimEnd || prev.duration || 0;
+      if (prev.currentTime < start || (end > 0 && prev.currentTime > end)) {
+        return { ...prev, currentTime: start };
       }
       return prev;
     });
-  }, [settings?.trimStart, settings?.trimEnd, liveSlideId]);
+  }, [trimStart, trimEnd, liveSlideId, settings]);
 
-  // Reset playState completely when the live slide ID changes to avoid stale data
+  // Reset playState ONLY when switching to a different live slide
   useEffect(() => {
-    if (liveSlideId) {
+    if (liveSlideId && liveSlideId !== prevSlideIdRef.current) {
+      prevSlideIdRef.current = liveSlideId;
       setPlayState({
         isPlaying: false,
-        currentTime: settings?.trimStart || 0,
+        currentTime: settingsRef.current?.trimStart || 0,
         duration: 0,
         buffered: 0,
       });
     }
   }, [liveSlideId]);
+
+  // Initialize volume once when a new slide becomes live
+  useEffect(() => {
+    if (liveSlideId && settings && lastInitializedSlideIdRef.current !== liveSlideId) {
+      lastInitializedSlideIdRef.current = liveSlideId;
+      const vol = typeof settings.volume === 'number' ? settings.volume : 1;
+      currentVolumeRef.current = vol;
+      setCurrentVolume(vol);
+      const muted = Boolean(settings.muted);
+      isMutedRef.current = muted;
+      setIsMuted(muted);
+    }
+  }, [liveSlideId, settings]);
+
+  // Sync external volume updates, but never within 2s of user interaction
+  const volume = settings?.volume;
+  const muted = settings?.muted;
+  useEffect(() => {
+    if (!settings) return;
+    if (performance.now() - lastVolumeInteractionRef.current < 2000) return;
+    if (typeof volume === 'number' && Math.abs(volume - currentVolumeRef.current) > 0.02) {
+      currentVolumeRef.current = volume;
+      setCurrentVolume(volume);
+    }
+    if (typeof muted === 'boolean' && muted !== isMutedRef.current) {
+      isMutedRef.current = muted;
+      setIsMuted(muted);
+    }
+  }, [volume, muted, settings]);
 
   // Audio Status Listener (Local Polling)
   useEffect(() => {
@@ -148,133 +163,40 @@ export const LiveMediaToolbar: React.FC<LiveMediaToolbarProps> = ({
   }, []);
 
   const isAudioMode = !settings && !!audioStatus;
-  const activePlayState = isAudioMode ? {
-    isPlaying: audioStatus!.isPlaying,
-    currentTime: audioStatus!.currentTime,
-    duration: audioStatus!.duration,
+  const activePlayState = (isAudioMode && audioStatus) ? {
+    isPlaying: audioStatus.isPlaying,
+    currentTime: audioStatus.currentTime,
+    duration: audioStatus.duration,
     buffered: 0
   } : playState;
 
-
-
   // ── Actions that control the projector virtually ───
   const handleTogglePlayPause = useCallback(() => {
-    // 1. TIMER SLIDE: Redirect toggle to the timer core (which syncs audio automatically)
-    const isTimerSlide = liveSlideInfo?.type === 'timer';
-    if (isTimerSlide && liveSlideId) {
-        lastInteractionRef.current = performance.now();
-        LiveSyncService.sendTimerCommand(liveSlideId, 'toggle');
-        return;
-    }
-
-    if (isAudioMode && audioStatus) {
-        lastInteractionRef.current = performance.now();
-        setAudioStatus(prev => prev ? { ...prev, isPlaying: !prev.isPlaying } : null);
-        
-        const progress = audioService.getTrackProgress(audioStatus.scopeId);
-        if (progress?.isPlaying) audioService.pauseTrack(audioStatus.scopeId);
-        else audioService.playTrack(audioStatus.scopeId);
-        return;
-    }
-
-    if (!liveSlideId) return;
-    
     lastInteractionRef.current = performance.now();
-    setPlayState(prev => {
-      const s = settingsRef.current;
-      const trimStart = s?.trimStart || 0;
-      const trimEnd = s?.trimEnd || prev.duration || 0;
-      
-      const isCurrentlyPlaying = prev.isPlaying;
-
-      if (isCurrentlyPlaying) {
-        // Pausing
-        LiveSyncService.sendVideoCommand(liveSlideId, 'pause', prev.currentTime);
-        return { ...prev, isPlaying: false };
-      } else {
-        // Playing
-        // If at the end, restart from trimStart
-        const isNearEnd = trimEnd > 0 && prev.currentTime >= trimEnd - 0.2;
-        const startTime = isNearEnd ? trimStart : prev.currentTime;
-        
-        LiveSyncService.sendVideoCommand(liveSlideId, 'play', startTime);
-        return { ...prev, isPlaying: true, currentTime: startTime };
-      }
-    });
-  }, [liveSlideId, isAudioMode, audioStatus, liveSlideInfo?.type]);
+    presentationService.toggleLiveMedia();
+  }, []);
 
   // ── Sync playState with Projector Heartbeat (ground truth) ──
   // The LiveMediaToolbar is fully independent from the preview viewport.
   // It reads state ONLY from the projector's periodic heartbeat.
+  const hasSettings = Boolean(settings);
   useEffect(() => {
     if (!liveSlideId) return;
-
     const unsubStatus = LiveSyncService.onVideoStatus((data) => {
-        // Optimistic UI: Ignore status if we've interacted recently
         if (performance.now() - lastInteractionRef.current < 1000) return;
-
-        // Diagnostic Log
-        if (data.duration > 0 || Math.random() < 0.05) { // Log every valid duration, of 5% of all heartbeats
-          console.info('🎛️ [Toolbar] Received status:', data);
-        }
-
-        // Relaxed ID check: If we have a liveSlideId, we expect a match,
-        // but since only the 'live' project slide sends status (isLive=true),
-        // we can be more permissive.
         if (data.slideId && liveSlideId && data.slideId !== liveSlideId) {
-            const shortDataId = String(data.slideId).substring(0, 8);
-            const shortLiveId = String(liveSlideId).substring(0, 8);
-            
-            if (shortDataId !== shortLiveId) {
-                return;
-            }
+            if (String(data.slideId).substring(0, 8) !== String(liveSlideId).substring(0, 8)) return;
         }
-        
-        setPlayState(prev => {
-            const hasNewDuration = data.duration && isFinite(data.duration) && data.duration > 0;
-            return {
-                ...prev,
-                isPlaying: data.isPlaying,
-                currentTime: data.currentTime,
-                duration: hasNewDuration ? data.duration : prev.duration
-            };
-        });
+        setPlayState(prev => ({
+            ...prev,
+            isPlaying: data.isPlaying,
+            currentTime: data.currentTime,
+            duration: (data.duration && isFinite(data.duration) && data.duration > 0) ? data.duration : prev.duration
+        }));
     });
-
-    // Request initial status immediately on mount
     LiveSyncService.requestVideoStatus();
-
-    return () => {
-        unsubStatus?.();
-    };
-  }, [!!settings, liveSlideId]);
-
-  // Keyboard Shortcuts: Space to Play/Pause (Interceptor)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in an input
-      const active = document.activeElement;
-      if (active && (
-        active.tagName === 'INPUT' ||
-        active.tagName === 'TEXTAREA' ||
-        active.getAttribute('contenteditable') === 'true'
-      )) {
-        return;
-      }
-
-      // Spacebar toggles whatever media is currently active (Video or Audio)
-      if (e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space') {
-        if (!!settings || isAudioMode) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleTogglePlayPause();
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [settings, isAudioMode, handleTogglePlayPause]);
+    return () => { unsubStatus?.(); };
+  }, [hasSettings, liveSlideId]);
 
   const updateVideoSettings = usePresentationStore(s => s.updateVideoSettings);
 
@@ -284,6 +206,7 @@ export const LiveMediaToolbar: React.FC<LiveMediaToolbarProps> = ({
     if (isAudioMode && audioStatus) {
         setAudioStatus(prev => prev ? { ...prev, currentTime: time } : null);
         audioService.seekTrack(audioStatus.scopeId, time);
+        LiveSyncService.sendAudioCommand(audioStatus.scopeId, 'seek', time);
         return;
     }
 
@@ -301,102 +224,38 @@ export const LiveMediaToolbar: React.FC<LiveMediaToolbarProps> = ({
     });
   }, [liveSlideId, settings, isAudioMode, audioStatus]);
 
-  const seekFromScrubber = useCallback((clientX: number) => {
-    const el = scrubberRef.current;
-    if (!el) return;
-    
-    // Safety: we Need either a video slide with settings OR an active audio clip
-    if (!settings && !isAudioMode) return;
-
-    const rect = el.getBoundingClientRect();
-    const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    
-    if (isAudioMode && audioStatus) {
-        const time = fraction * audioStatus.duration;
-        handleSeek(time);
-    } else if (settings) {
-        const trimStart = settings.trimStart || 0;
-        const trimEnd = settings.trimEnd || playState.duration || 1;
-        handleSeek(trimStart + fraction * (trimEnd - trimStart));
-    }
-  }, [settings, isAudioMode, audioStatus, playState.duration, handleSeek]);
-
-  const handleScrubberMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingScrubber(true);
-    seekFromScrubber(e.clientX);
-  }, [seekFromScrubber]);
-
-  useEffect(() => {
-    if (!isDraggingScrubber) return;
-    const handleMouseMove = (e: MouseEvent) => seekFromScrubber(e.clientX);
-    const handleMouseUp = () => setIsDraggingScrubber(false);
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDraggingScrubber, seekFromScrubber]);
-
-  // Note: We no longer return null here to keep the toolbar always visible in the layout
-  // if (!settings && !isAudioMode) return null;
-
-  const hasPlaylist = (liveSlideInfo?.type === 'timer' && !!(liveSlideInfo as any).playlist?.length) || 
-                     (liveSlideInfo?.type === 'normal' && !!(liveSlideInfo as any).timerSettings?.playlist?.length);
-
+  const hasPlaylist = (liveSlideInfo?.type === 'timer' && !!(liveSlideInfo as ITimerSlide).playlist?.length) || 
+                     (liveSlideInfo?.type === 'normal' && !!(liveSlideInfo as ICanvasSlide).timerSettings?.playlist?.length);
   const hasMedia = !!settings || isAudioMode || hasPlaylist || liveSlideInfo?.type === 'timer';
+  const handlePlaylistNext = useCallback(() => { if (liveSlideId) LiveSyncService.sendPlaylistCommand(liveSlideId, 'next'); }, [liveSlideId]);
+  const handlePlaylistPrev = useCallback(() => { if (liveSlideId) LiveSyncService.sendPlaylistCommand(liveSlideId, 'prev'); }, [liveSlideId]);
 
-  const handlePlaylistNext = useCallback(() => {
-    if (liveSlideId) LiveSyncService.sendPlaylistCommand(liveSlideId, 'next');
-  }, [liveSlideId]);
-
-  const handlePlaylistPrev = useCallback(() => {
-    if (liveSlideId) LiveSyncService.sendPlaylistCommand(liveSlideId, 'prev');
-  }, [liveSlideId]);
-
-  const trimStart = settings?.trimStart || 0;
-  const trimEnd = (isAudioMode ? audioStatus?.duration : (settings?.trimEnd && settings.trimEnd > 0 ? settings.trimEnd : (playState.duration || 0))) || 0;
-  const effectiveDuration = Math.max(0, trimEnd - trimStart);
-  const displayCurrentTime = hasMedia ? Math.max(0, (activePlayState.currentTime || 0) - trimStart) : 0;
-
-  const scrubberRefValue = isAudioMode ? (audioStatus?.duration || 0) : (playState.duration || settings?.trimEnd || 0);
-
-  const progressFraction = Math.max(0, Math.min(1, 
-    (hasMedia && effectiveDuration > 0) ? (activePlayState.currentTime - trimStart) / effectiveDuration : 0
-  ));
+  const effectiveTrimStart = settings?.trimStart || 0;
+  const effectiveTrimEnd = (isAudioMode ? audioStatus?.duration : (settings?.trimEnd && settings.trimEnd > 0 ? settings.trimEnd : (playState.duration || 0))) || 0;
+  const effectiveDuration = Math.max(0, effectiveTrimEnd - effectiveTrimStart);
+  const displayCurrentTime = hasMedia ? Math.max(0, (activePlayState.currentTime || 0) - effectiveTrimStart) : 0;
 
   const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 4];
 
   const handleSpeedChange = (s: number) => {
     LiveSyncService.sendVideoCommand(liveSlideId, 'speed', s);
-    if (presentationId) {
-      updateVideoSettings(liveSlideId, { speed: s }, presentationId);
-    }
+    if (presentationId) updateVideoSettings(liveSlideId, { speed: s }, presentationId);
     setShowSpeedMenu(false);
   };
 
-  const handleMuteToggle = () => {
-    if (!settings) return; // Mute for audio not implemented via this bridge
-    const newMuted = !settings.muted;
-    LiveSyncService.sendVideoCommand(liveSlideId, 'mute', newMuted);
-    if (presentationId) {
-      updateVideoSettings(liveSlideId, { muted: newMuted }, presentationId);
+  const handleMuteToggle = useCallback(() => {
+    lastVolumeInteractionRef.current = performance.now();
+    const nextMuted = !isMutedRef.current;
+    isMutedRef.current = nextMuted;
+    setIsMuted(nextMuted);
+    if (liveSlideId) {
+      LiveSyncService.sendVideoCommand(liveSlideId, 'mute', nextMuted);
+      if (presentationId) updateVideoSettings(liveSlideId, { muted: nextMuted }, presentationId);
     }
-  };
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!settings) return;
-    const val = parseFloat(e.target.value);
-    LiveSyncService.sendVideoCommand(liveSlideId, 'volume', val);
-    if (presentationId) {
-      updateVideoSettings(liveSlideId, { volume: val, muted: val === 0 }, presentationId);
+    if (isAudioMode && audioStatus) {
+      audioService.setTrackVolume(audioStatus.scopeId, nextMuted ? 0 : currentVolumeRef.current);
     }
-    if (val > 0 && settings.muted) {
-      LiveSyncService.sendVideoCommand(liveSlideId, 'mute', false);
-    }
-  };
+  }, [liveSlideId, presentationId, isAudioMode, audioStatus, updateVideoSettings]);
 
   return (
     <div className="w-full flex h-12 bg-stone-900 border-t border-white/5 relative z-20 shrink-0 select-none">
@@ -415,41 +274,23 @@ export const LiveMediaToolbar: React.FC<LiveMediaToolbarProps> = ({
         "flex-1 flex items-center gap-4 px-4 transition-all duration-500",
         hasMedia ? "text-stone-300 opacity-100" : "text-stone-600 opacity-40 grayscale pointer-events-none"
       )}>
-        {/* Name / Metadata - Removed audio filename per user request */}
-        {!hasMedia && (
-            <div className="flex items-center gap-2 shrink-0">
-                <div className="w-px h-3 bg-white/5" />
-            </div>
-        )}
         {/* Play/Pause Group */}
         <div className="flex items-center gap-0.5 shrink-0">
           {hasPlaylist && (
-            <button
-              onClick={handlePlaylistPrev}
-              className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-stone-400 hover:text-white transition-colors cursor-pointer"
-              title={t('prev_track', 'Previous Track')}
-            >
+            <button type="button" onClick={handlePlaylistPrev} className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-white/10 text-stone-400 hover:text-white transition-colors cursor-pointer apple-press" title={t('prev_track', 'Previous Track')}>
               <SkipBack className="w-3.5 h-3.5 fill-current" />
             </button>
           )}
-          
           <button
+            type="button"
             onClick={handleTogglePlayPause}
-            className={cn(
-                "w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 transition-colors cursor-pointer",
-                activePlayState.isPlaying ? "text-accent" : "text-stone-300 hover:text-white"
-            )}
+            className={cn("w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors cursor-pointer apple-press", activePlayState.isPlaying ? "text-accent" : "text-stone-300 hover:text-white")}
             aria-label={activePlayState.isPlaying ? t('pause', 'Pause') : t('play', 'Play')}
           >
             {activePlayState.isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 ml-0.5 fill-current" />}
           </button>
-
           {hasPlaylist && (
-            <button
-              onClick={handlePlaylistNext}
-              className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-stone-400 hover:text-white transition-colors cursor-pointer"
-              title={t('next_track', 'Next Track')}
-            >
+            <button type="button" onClick={handlePlaylistNext} className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-white/10 text-stone-400 hover:text-white transition-colors cursor-pointer apple-press" title={t('next_track', 'Next Track')}>
               <SkipForward className="w-3.5 h-3.5 fill-current" />
             </button>
           )}
@@ -463,118 +304,103 @@ export const LiveMediaToolbar: React.FC<LiveMediaToolbarProps> = ({
         </div>
 
         {/* Scrubber */}
-        <div
-          ref={scrubberRef}
-          className="group flex-1 h-full flex items-center cursor-pointer relative"
-          onMouseDown={handleScrubberMouseDown}
-        >
-          <div className={cn(
-            "w-full h-1.5 bg-white/10 rounded-full relative overflow-visible transition-all",
-            isDraggingScrubber ? "h-2" : "group-hover:h-2"
-          )}>
-            <div
-              className="absolute inset-y-0 left-0 bg-white/15 rounded-full"
-              style={{ width: `${(activePlayState.buffered / (isAudioMode ? (audioStatus?.duration || 1) : (playState.duration || 1))) * 100}%` }}
-            />
-            <div
-              className={cn(
-                  "absolute inset-y-0 left-0 rounded-full",
-                  isAudioMode ? "bg-amber-500" : "bg-accent"
-              )}
-              style={{ width: `${progressFraction * 100}%` }}
-            />
-            <div
-              className={cn(
-                "absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full shadow-lg ring-[1.5px] ring-black/30 transition-all z-10",
-                isAudioMode ? "bg-amber-500" : "bg-accent",
-                isDraggingScrubber 
-                  ? "opacity-100 scale-110" 
-                  : "opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100"
-              )}
-              style={{ left: `calc(${progressFraction * 100}% - 7px)` }}
-            />
-          </div>
+        <div className="flex-1 h-8 flex items-center">
+          <Slider
+            mode="track"
+            color={isAudioMode ? 'amber' : 'accent'}
+            min={0}
+            max={effectiveDuration || 1}
+            step={0.01}
+            value={displayCurrentTime}
+            bufferedFraction={activePlayState.buffered / (isAudioMode ? (audioStatus?.duration || 1) : (playState.duration || 1))}
+            onChange={(val) => {
+              if (isAudioMode && audioStatus) {
+                handleSeek(val);
+              } else {
+                handleSeek(effectiveTrimStart + val);
+              }
+            }}
+          />
         </div>
 
         {/* Speed & Volume Tools (Hide speed for audio mode for now as it's less common) */}
         {!isAudioMode && (
-            <div className="flex items-center gap-1 shrink-0 ml-2">
-            <div className="relative">
-                <button
-                ref={speedButtonRef}
-                onClick={() => {
-                    const rect = speedButtonRef.current?.getBoundingClientRect();
-                    if (rect) {
-                    setMenuPosition({ 
-                        bottom: window.innerHeight - rect.top + 8,
-                        right: window.innerWidth - rect.right
-                    });
-                    }
-                    setShowSpeedMenu(!showSpeedMenu);
-                }}
-                className="h-8 px-2 flex items-center gap-1.5 rounded-md hover:bg-white/10 transition-colors text-[11px] font-medium cursor-pointer"
-                >
-                <Gauge className="w-3.5 h-3.5 opacity-70" />
-                {settings?.speed}x
-                </button>
-                {showSpeedMenu && createPortal(
-                <div 
-                    className="fixed bg-stone-900 border border-white/5 rounded-lg shadow-xl py-1 min-w-[100px] z-100 animate-in fade-in zoom-in-95"
-                    style={{ 
-                    bottom: menuPosition.bottom,
-                    right: menuPosition.right
-                    }}
-                >
-                    {SPEED_OPTIONS.map((s) => (
-                    <button
-                        key={s}
-                        onClick={() => handleSpeedChange(s)}
-                        className={cn(
-                        "w-auto min-w-[100px] px-3 py-1.5 text-left text-[11px] font-medium transition-colors cursor-pointer block",
-                        s === (settings?.speed || 1) ? "text-accent bg-accent/10" : "text-stone-400 hover:text-white hover:bg-white/5"
-                        )}
-                    >
-                        {s}x
-                    </button>
-                    ))}
-                </div>,
-                document.body
-                )}
-            </div>
-            </div>
+          <div className="relative shrink-0 ml-2">
+            <button
+              type="button"
+              ref={speedButtonRef}
+              onClick={() => {
+                const rect = speedButtonRef.current?.getBoundingClientRect();
+                if (rect) setMenuPosition({ bottom: window.innerHeight - rect.top + 8, right: window.innerWidth - rect.right });
+                setShowSpeedMenu(!showSpeedMenu);
+              }}
+              className="h-8 px-2 flex items-center gap-1.5 rounded-xl hover:bg-white/10 transition-colors text-[11px] font-medium cursor-pointer apple-press"
+            >
+              <Gauge className="w-3.5 h-3.5 opacity-70" />
+              {settings?.speed || 1}x
+            </button>
+            {showSpeedMenu && createPortal(
+              <div 
+                className="fixed bg-stone-900 border border-white/5 rounded-xl shadow-xl py-1 min-w-[100px] z-100 animate-in fade-in zoom-in-95"
+                style={{ bottom: menuPosition.bottom, right: menuPosition.right }}
+              >
+                {SPEED_OPTIONS.map((s) => (
+                  <button
+                    type="button"
+                    key={s}
+                    onClick={() => handleSpeedChange(s)}
+                    className={cn(
+                      "w-full px-3 py-1.5 text-left text-[11px] font-medium transition-colors cursor-pointer block apple-press",
+                      s === (settings?.speed || 1) ? "text-accent bg-accent/10" : "text-stone-400 hover:text-white hover:bg-white/5"
+                    )}
+                  >
+                    {s}x
+                  </button>
+                ))}
+              </div>,
+              document.body
+            )}
+          </div>
         )}
 
-        <div className="flex items-center gap-2 px-1">
+        <div className="flex items-center gap-1.5 px-1">
           <button
-            onClick={() => toggleStageQr(!showStageQr)}
-            className={cn(
-              "h-8 px-2 flex items-center gap-1.5 rounded-md transition-colors cursor-pointer text-[11px] font-medium mr-2",
-              showStageQr ? "bg-accent/20 text-accent hover:bg-accent/30" : "hover:bg-white/10 text-stone-300"
-            )}
-            title={t('toggle_stage_qr', 'Toggle Stage QR')}
-          >
-            <QrCode className="w-3.5 h-3.5" />
-            {t('stage_qr', 'Stage QR')}
-          </button>
-
-          <button
+            type="button"
             onClick={handleMuteToggle}
-            className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-white/10 transition-colors cursor-pointer"
-            aria-label={settings?.muted ? t('unmute', 'Unmute') : t('mute', 'Mute')}
+            className="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white/10 transition-colors cursor-pointer text-stone-300 hover:text-white apple-press"
+            aria-label={isMuted || currentVolume === 0 ? t('unmute', 'Unmute') : t('mute', 'Mute')}
           >
-            {settings?.muted ? <VolumeX className="w-4 h-4 text-red-500" /> : <Volume2 className="w-4 h-4" />}
+            {isMuted || currentVolume === 0 ? <VolumeX className="w-4 h-4 text-red-500" /> : <Volume2 className="w-4 h-4" />}
           </button>
-          {!isAudioMode && (
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={settings?.muted ? 0 : (settings?.volume ?? 1)}
-                onChange={handleVolumeChange}
-                className="w-16 h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-accent hover:bg-white/20 transition-colors"
-              />
-          )}
+          
+          <div className="w-20 h-8 flex items-center" title={t('volume', 'Volume')}>
+            <Slider
+              mode="track"
+              color={isAudioMode ? 'amber' : 'accent'}
+              min={0}
+              max={1}
+              step={0.01}
+              value={isMuted ? 0 : currentVolume}
+              onChange={(val) => {
+                lastVolumeInteractionRef.current = performance.now();
+                currentVolumeRef.current = val;
+                setCurrentVolume(val);
+                if (isMutedRef.current && val > 0) {
+                  isMutedRef.current = false;
+                  setIsMuted(false);
+                  if (liveSlideId) LiveSyncService.sendVideoCommand(liveSlideId, 'mute', false);
+                }
+                if (liveSlideId) LiveSyncService.sendVideoCommand(liveSlideId, 'volume', val);
+                if (isAudioMode && audioStatus) audioService.setTrackVolume(audioStatus.scopeId, val);
+              }}
+              onChangeEnd={(val) => {
+                lastVolumeInteractionRef.current = performance.now();
+                if (liveSlideId && presentationId) {
+                  updateVideoSettings(liveSlideId, { volume: val, muted: val === 0 }, presentationId);
+                }
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>

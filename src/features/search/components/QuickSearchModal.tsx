@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { Search, CornerDownLeft, BookOpen, Clock, ChevronDown, ChevronRight, Hash, Sparkles, Wand2, ArrowRight } from 'lucide-react';
@@ -7,9 +7,10 @@ import { useHistoryStore } from '@/core/store/historyStore';
 import { db } from '@/core/db';
 import { getBookName } from '@/core/data/bookData';
 import { cn } from '@/core/utils/cn';
-import { parseSearchQuery, ParseResult, ParsedItem } from '../utils/searchParser';
+import { sanitizeHtml } from '@/core/utils/sanitizeHtml';
+import { parseSearchQuery, ParsedItem } from '../utils/searchParser';
 import { SearchResult, searchVerses as performKeywordSearch } from '../services/globalSearchService';
-import { Verse } from '@/core/types';
+import { Badge, Kbd } from '@/shared/ui';
 
 interface QuickSearchModalProps {
     isOpen: boolean;
@@ -93,7 +94,6 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
             }
         }
 
-        // If it's primarily a keyword search or has keywords, perform the heavy DB search
         const keywordItems = parsed.items.filter(i => i.type === 'keyword');
         if (keywordItems.length > 0) {
             const keywordQuery = keywordItems.map(i => i.query).join(' ');
@@ -117,7 +117,6 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
         const chapter = ref.chapter || 1;
         
         if (ref.verse && !ref.verseEnd) {
-            // Single verse
             const verse = await db.verses
                 .where('[translationId+bookId+chapter]')
                 .equals([currentTranslationId, bookId, chapter])
@@ -127,12 +126,10 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
             if (verse) {
                 setActiveVerse(verse);
             } else {
-                // Fallback to navigating to book/chapter
                 setBook(bookId);
                 setChapter(chapter);
             }
         } else if (ref.verse && ref.verseEnd) {
-            // Range
             const verses = await db.verses
                 .where('[translationId+bookId+chapter]')
                 .equals([currentTranslationId, bookId, chapter])
@@ -147,7 +144,6 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
                 setChapter(chapter);
             }
         } else {
-            // Just chapter
             setBook(bookId);
             setChapter(chapter);
         }
@@ -155,10 +151,9 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
     };
 
     const handleSelectTopic = async (topic: ParsedItem) => {
-        // For simplicity, we navigate to the first reference in the topic
         if (topic.refs && topic.refs.length > 0) {
             const firstRef = topic.refs[0];
-            setQuery(firstRef); // This will trigger a re-parse and show the ref correctly
+            setQuery(firstRef);
         }
     };
 
@@ -179,18 +174,18 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-[10vh] px-4 pointer-events-none">
             <div
-                className="fixed inset-0 bg-stone-950/40 backdrop-blur-md pointer-events-auto"
+                className="fixed inset-0 bg-stone-950/75 backdrop-blur-xl apple-backdrop pointer-events-auto"
                 onClick={onClose}
             />
 
-            <div className="w-full max-w-2xl bg-stone-900/90 border border-white/10 rounded-2xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden relative animate-in zoom-in-95 duration-200 pointer-events-auto flex flex-col max-h-[80vh]">
+            <div className="w-full max-w-2xl bg-stone-900/90 border border-white/10 rounded-2xl shadow-[0_0_50px_-12px_rgba(0,0,0,0.5)] overflow-hidden relative apple-modal pointer-events-auto flex flex-col max-h-[80vh] ring-1 ring-white/5">
                 {/* Search Header */}
                 <div className="p-5 flex items-center gap-4 border-b border-white/5 bg-stone-900/50">
                     <div className={cn(
-                        "p-2 rounded-xl transition-all duration-300 shrink-0",
-                        isLoading ? "bg-accent/20 animate-pulse" : "bg-stone-800"
+                        "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 shrink-0",
+                        isLoading ? "bg-accent/20 text-accent animate-pulse" : "bg-stone-800 text-stone-400"
                     )}>
-                        <Search className={cn("w-5 h-5", isLoading ? "text-accent" : "text-stone-400")} />
+                        <Search className="w-5 h-5" />
                     </div>
                     <input
                         ref={inputRef}
@@ -202,30 +197,31 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
                             if (e.key === 'Enter' && results.references.length > 0) handleSelectReference(results.references[0]);
                         }}
                         placeholder={t('search.placeholder', 'Search Bible, topics or phrases...')}
-                        className="flex-1 bg-transparent border-none text-white focus:ring-0 placeholder:text-stone-600 text-xl font-medium min-w-0"
+                        className="flex-1 bg-transparent border-none text-white focus:outline-none placeholder:text-stone-600 text-lg font-medium min-w-0"
                     />
                 </div>
 
                 {/* Correction Banner */}
                 {isCorrectedResult && (
-                    <div className="px-5 py-2 bg-accent/10 border-b border-accent/20 flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs text-accent/80 font-medium">
-                            <Sparkles className="w-3 h-3" />
+                    <div className="px-5 py-2.5 bg-accent/10 border-b border-accent/20 flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-accent/90 font-medium">
+                            <Sparkles className="w-3.5 h-3.5 shrink-0" />
                             <span>{t('search.auto_corrected', 'Auto-resolved reference:')}</span>
                             <span className="text-accent underline font-bold">
                                 {results.references.find(r => r.isCorrected)?.bookName}
                             </span>
                         </div>
                         <button 
+                            type="button"
                             onClick={handleUndoCorrection}
-                            className="text-[10px] text-stone-500 hover:text-white uppercase tracking-wider font-bold"
+                            className="text-[10px] text-stone-400 hover:text-white uppercase tracking-wider font-bold cursor-pointer transition-colors"
                         >
                             {t('search.undo', 'Original query')}
                         </button>
                     </div>
                 )}
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-2">
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2">
                     {hasAnyResults ? (
                         <>
                             {/* References Section */}
@@ -240,11 +236,12 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
                                     {results.references.map((ref, i) => (
                                         <button
                                             key={i}
+                                            type="button"
                                             onClick={() => handleSelectReference(ref)}
-                                            className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-all text-left group"
+                                            className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 active:scale-[0.99] transition-all text-left group cursor-pointer will-change-transform"
                                         >
                                             <div className="flex items-center gap-3 min-w-0">
-                                                <div className="p-2 bg-stone-800 rounded-xl group-hover:bg-accent/20 transition-colors shrink-0">
+                                                <div className="w-9 h-9 bg-stone-800 rounded-xl flex items-center justify-center group-hover:bg-accent/20 transition-colors shrink-0">
                                                     <BookOpen className="w-4 h-4 text-accent" />
                                                 </div>
                                                 <div className="min-w-0">
@@ -258,7 +255,7 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
                                                     </p>
                                                 </div>
                                             </div>
-                                            <CornerDownLeft className="w-4 h-4 text-stone-700 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                                            <CornerDownLeft className="w-4 h-4 text-stone-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                                         </button>
                                     ))}
                                 </SearchSection>
@@ -276,11 +273,12 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
                                     {results.topics.map((topic, i) => (
                                         <button
                                             key={i}
+                                            type="button"
                                             onClick={() => handleSelectTopic(topic)}
-                                            className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-all text-left group"
+                                            className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 active:scale-[0.99] transition-all text-left group cursor-pointer will-change-transform"
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className="p-2 bg-stone-800 rounded-xl group-hover:bg-purple-500/20 transition-colors">
+                                                <div className="w-9 h-9 bg-stone-800 rounded-xl flex items-center justify-center group-hover:bg-purple-500/20 transition-colors shrink-0">
                                                     <Sparkles className="w-4 h-4 text-purple-400" />
                                                 </div>
                                                 <div>
@@ -290,7 +288,7 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
                                                     </p>
                                                 </div>
                                             </div>
-                                            <ArrowRight className="w-4 h-4 text-stone-700 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            <ArrowRight className="w-4 h-4 text-stone-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                                         </button>
                                     ))}
                                 </SearchSection>
@@ -308,21 +306,23 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
                                     {results.keywords.map((res, i) => (
                                         <button
                                             key={i}
+                                            type="button"
                                             onClick={() => handleSelectKeyword(res)}
-                                            className="w-full p-4 rounded-xl hover:bg-white/5 transition-all text-left group border border-transparent hover:border-white/5"
+                                            className="w-full p-4 rounded-xl hover:bg-white/5 active:scale-[0.99] transition-all text-left group border border-transparent hover:border-white/5 cursor-pointer will-change-transform"
                                         >
                                             <div className="flex items-center justify-between mb-1">
                                                 <h4 className="text-xs font-bold text-accent">
                                                     {getBookName(res.verse.bookId, lang)} {res.verse.chapter}:{res.verse.verseNumber}
                                                 </h4>
                                                 {res.isDiscovery && (
-                                                    <span className="text-[9px] bg-amber-500/10 text-amber-500 px-1.5 py-0.5 rounded border border-amber-500/20 font-bold uppercase">
+                                                    <Badge variant="accent" size="xs">
                                                         {t('search.found_in', 'Matched in')} {res.sourceTranslationId}
-                                                    </span>
+                                                    </Badge>
                                                 )}
                                             </div>
                                             <p className="text-sm text-stone-300 leading-relaxed" 
-                                               dangerouslySetInnerHTML={{ __html: res.highlightedText }} />
+                                               // audit-ignore: sanitized with DOMPurify
+                                               dangerouslySetInnerHTML={{ __html: sanitizeHtml(res.highlightedText) }} />
                                         </button>
                                     ))}
                                 </SearchSection>
@@ -341,29 +341,30 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
                         /* History / Recent State */
                         <div className="p-4 space-y-6">
                             <div className="space-y-3">
-                                <div className="flex items-center gap-2 text-[10px] font-bold text-stone-600 uppercase tracking-[0.2em] px-2">
-                                    <Clock className="w-3 h-3" /> {t('search.recent', 'Recent Activity')}
+                                <div className="flex items-center gap-2 text-[10px] font-bold text-stone-500 uppercase tracking-[0.2em] px-2">
+                                    <Clock className="w-3.5 h-3.5" /> {t('search.recent', 'Recent Activity')}
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {history.slice(0, 6).map((verse, i) => (
                                         <button
                                             key={i}
+                                            type="button"
                                             onClick={() => {
                                                 setActiveVerse(verse);
                                                 onClose();
                                             }}
-                                            className="flex flex-col gap-1 p-3 rounded-xl bg-stone-800/20 border border-white/5 hover:border-accent/30 hover:bg-accent/5 transition-all text-left group"
+                                            className="flex flex-col gap-1 p-3 rounded-xl bg-stone-800/30 border border-white/5 hover:border-accent/30 hover:bg-accent/5 active:scale-[0.98] transition-all text-left group cursor-pointer will-change-transform"
                                         >
                                             <h4 className="text-xs font-bold text-stone-300 group-hover:text-accent transition-colors">
                                                 {getBookName(verse.bookId, lang)} {verse.chapter}:{verse.verseNumber}
                                             </h4>
-                                            <p className="text-[10px] text-stone-600 truncate">{verse.text}</p>
+                                            <p className="text-[10px] text-stone-500 truncate">{verse.text}</p>
                                         </button>
                                     ))}
                                 </div>
                             </div>
 
-                            <div className="p-5 bg-gradient-to-br from-accent/5 to-transparent rounded-2xl border border-white/5 space-y-2">
+                            <div className="p-5 bg-linear-to-br from-accent/5 to-transparent rounded-2xl border border-white/5 space-y-2">
                                 <h5 className="text-xs font-bold text-stone-300 flex items-center gap-2">
                                     <Sparkles className="w-3.5 h-3.5 text-accent" />
                                     {t('search.smart_tips.title', 'Smart Bible Intelligence')}
@@ -381,15 +382,15 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
 
                 {/* Footer Controls */}
                 <div className="p-3 bg-stone-950/80 border-t border-white/5 flex items-center justify-between backdrop-blur-sm">
-                    <div className="flex gap-4">
-                        <kbd className="flex items-center gap-1.5 px-2 py-1 bg-stone-800 rounded border border-white/5 text-[9px] text-stone-400 font-bold uppercase tracking-wider">
-                            ESC <span className="text-stone-600">to</span> {t('search.close', 'Close')}
-                        </kbd>
-                        <kbd className="flex items-center gap-1.5 px-2 py-1 bg-stone-800 rounded border border-white/5 text-[9px] text-stone-400 font-bold uppercase tracking-wider">
-                            ENTER <span className="text-stone-600">to</span> {t('search.navigate', 'Navigate')}
-                        </kbd>
+                    <div className="flex gap-2">
+                        <Kbd size="xs" className="flex items-center gap-1.5 px-2.5 py-1">
+                            ESC <span className="text-stone-600 font-normal">to</span> {t('search.close', 'Close')}
+                        </Kbd>
+                        <Kbd size="xs" className="flex items-center gap-1.5 px-2.5 py-1">
+                            ENTER <span className="text-stone-600 font-normal">to</span> {t('search.navigate', 'Navigate')}
+                        </Kbd>
                     </div>
-                    <div className="flex items-center gap-2 text-[10px] text-stone-600 font-medium">
+                    <div className="flex items-center gap-2 text-[10px] text-stone-500 font-medium">
                         <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                         {currentTranslationId} {t('search.active', 'Active')}
                     </div>
@@ -412,8 +413,9 @@ const SearchSection: React.FC<SearchSectionProps> = ({ title, icon, isExpanded, 
     return (
         <div className="space-y-1">
             <button 
+                type="button"
                 onClick={onToggle}
-                className="w-full flex items-center justify-between px-3 py-2 text-stone-500 hover:text-stone-300 transition-colors"
+                className="w-full flex items-center justify-between px-3 py-2 text-stone-500 hover:text-stone-300 transition-colors cursor-pointer select-none"
             >
                 <div className="flex items-center gap-2">
                     {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}

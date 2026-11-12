@@ -26,7 +26,7 @@ export const LayoutSettingsPicker: React.FC = () => {
             {/* ─── Screen Geometry ─── */}
             <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-3xl p-6 space-y-6 shadow-xl leading-none">
                 <div className="flex items-center gap-3 px-1">
-                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
+                    <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
                         <Scan className="w-4 h-4 text-stone-500" />
                     </div>
                     <label className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em]">{t('screen_geometry', 'Screen Geometry')}</label>
@@ -83,7 +83,7 @@ export const LayoutSettingsPicker: React.FC = () => {
             {/* ─── Safe Area / Padding ─── */}
             <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-3xl p-6 space-y-6 shadow-xl leading-none">
                 <div className="flex items-center gap-3 px-1">
-                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center border border-white/10">
+                    <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
                         <Maximize className="w-4 h-4 text-stone-500" />
                     </div>
                     <label className="text-[10px] font-black text-stone-500 uppercase tracking-[0.2em]">{t('content_inset', 'Content Inset')}</label>

@@ -8,4 +8,11 @@ describe('sanitizeHtml utility', () => {
         expect(clean).toContain('Hello <span>World</span>');
         expect(clean).not.toContain('script');
     });
+
+    it('should allow mark tags and safe classes for search highlighting while stripping events', () => {
+        const input = 'Matched: <mark class="bg-accent/30 text-accent font-bold" onclick="alert(1)">highlighted</mark>';
+        const clean = sanitizeHtml(input);
+        expect(clean).toContain('<mark class="bg-accent/30 text-accent font-bold">highlighted</mark>');
+        expect(clean).not.toContain('onclick');
+    });
 });

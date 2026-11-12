@@ -71,3 +71,25 @@ vi.stubGlobal('electron', {
         removeListener: vi.fn(),
     },
 });
+
+// Mock @tanstack/react-virtual for JSDOM test environments (JSDOM does not calculate layout dimensions)
+vi.mock('@tanstack/react-virtual', async () => {
+    const actual = await vi.importActual('@tanstack/react-virtual');
+    return {
+        ...actual,
+        useVirtualizer: (options: any) => ({
+            getVirtualItems: () =>
+                Array.from({ length: options.count }, (_, index) => ({
+                    index,
+                    start: index * (options.estimateSize ? options.estimateSize(index) : 50),
+                    size: options.estimateSize ? options.estimateSize(index) : 50,
+                    end: (index + 1) * (options.estimateSize ? options.estimateSize(index) : 50),
+                    key: index,
+                })),
+            getTotalSize: () => options.count * 50,
+            scrollToIndex: vi.fn(),
+            measureElement: vi.fn(),
+        }),
+    };
+});
+

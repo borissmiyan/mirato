@@ -4,6 +4,8 @@ import { AlertCircle, RefreshCw, Copy, Check } from 'lucide-react';
 import { ErrorLoggingService } from '@/core/services/errorLoggingService';
 import { cn } from '@/core/utils/cn';
 import i18n from '@/core/i18n';
+import { Button } from './Button';
+import { IpcService } from '@/core/services/ipcService';
 
 interface Props {
   children?: ReactNode;
@@ -36,6 +38,13 @@ export class ErrorBoundary extends Component<Props, State> {
       componentStack: errorInfo.componentStack || undefined
     });
     this.setState({ errorId });
+    if (IpcService.isElectron()) {
+      IpcService.send('projector:render-error', {
+        message: error.message,
+        componentStack: errorInfo.componentStack || undefined,
+        errorId
+      });
+    }
   }
 
   private handleCopyId = () => {
@@ -55,7 +64,7 @@ export class ErrorBoundary extends Component<Props, State> {
       if (this.props.fallback) return this.props.fallback;
 
       return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-[#0c0a09] p-6 selection:bg-accent/30 font-sans">
+        <div className="min-h-screen w-full flex items-center justify-center bg-stone-950 p-6 selection:bg-accent/30 font-sans">
           <div className="max-w-md w-full animate-in fade-in zoom-in duration-500">
             <div className="relative group">
               {/* Outer Glow */}
@@ -84,9 +93,12 @@ export class ErrorBoundary extends Component<Props, State> {
                       {this.state.errorId || i18n.t('logging_error', 'Logging error...')}
                     </div>
                     {this.state.errorId && (
-                       <button
+                       <Button
+                         size="sm"
+                         square
+                         variant="ghost"
                          onClick={this.handleCopyId}
-                         className="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-white/5 rounded-xl transition-all cursor-pointer group/btn"
+                         className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 group/btn"
                          title={i18n.t('copy_error_id', 'Copy Error ID')}
                        >
                          {this.state.copied ? (
@@ -94,25 +106,27 @@ export class ErrorBoundary extends Component<Props, State> {
                          ) : (
                            <Copy className="w-4 h-4 text-stone-400 group-hover/btn:text-white transition-colors" />
                          )}
-                       </button>
+                       </Button>
                     )}
                   </div>
 
                   <div className="grid grid-cols-1 w-full gap-3 pt-2">
-                    <button
+                    <Button
+                      size="sm"
+                      variant="primary"
                       onClick={this.handleReload}
-                      className="flex items-center justify-center gap-2 bg-white text-black hover:bg-stone-200 py-3 rounded-2xl text-sm font-bold transition-all active:scale-[0.98] cursor-pointer shadow-lg shadow-white/5"
+                      className="w-full gap-2"
                     >
                       <RefreshCw className="w-4 h-4" />
-                      {i18n.t('reload_page', 'Reload Page')}
-                    </button>
+                      <span>{i18n.t('reload_page', 'Reload Page')}</span>
+                    </Button>
                   </div>
                 </div>
               </div>
             </div>
             
             <p className="text-center mt-6 text-[10px] uppercase tracking-[0.2em] font-black text-stone-600">
-              Ekklesienter Stability Engine
+              Deck.CE Stability Engine
             </p>
           </div>
         </div>

@@ -20,41 +20,61 @@ export function useSlideTransitionManager(currentKey: string, selectedSlide: ISl
 
   // Synchronous phase: detect slide change and cache previous
   if (currentKey !== currentKeyRef.current) {
-    setPrevSlideState({ key: currentKeyRef.current, content: prevContentRef.current });
-    currentKeyRef.current = currentKey;
-
     const transition = (selectedSlide as ICanvasSlide)?.transition || { type: 'none', duration: 0.5 };
     const type = normalizeTransitionType(transition.type);
+    const duration = transition.duration ?? 0.5;
+
+    // Hard cut case: if duration is 0 or type is none, we do NOT cache prev content in DOM at all.
+    if (type === 'none' || duration === 0) {
+      setPrevSlideState(null);
+    } else {
+      setPrevSlideState({ key: currentKeyRef.current, content: prevContentRef.current });
+    }
+    
+    currentKeyRef.current = currentKey;
     
     // Checkerboard and Comic dots need isTransitioning flag for specialized rendering
-    if (type === 'checkerboard' || type === 'comic-dots') {
+    if ((type === 'checkerboard' || type === 'comic-dots') && duration > 0) {
       setIsTransitioning(true);
     } else {
       setIsTransitioning(false);
     }
   }
 
+  const currentTransition = (selectedSlide as ICanvasSlide)?.transition;
+  const prevSlideKey = prevSlideState?.key;
+
   // Handle cleanup of previous slide state after transition duration
   useEffect(() => {
     if (prevSlideState) {
-      const transition = (selectedSlide as ICanvasSlide)?.transition || { type: 'none', duration: 0.5 };
-      const dur = Math.max(transition.duration * 1000 + 200, 100);
+      const transition = currentTransition || { type: 'none', duration: 0.5 };
+      const duration = transition.duration ?? 0.5;
+      if (transition.type === 'none' || duration === 0) {
+        setPrevSlideState(null);
+        return;
+      }
+      const dur = Math.max(duration * 1000 + 200, 100);
       const timer = setTimeout(() => {
-        setPrevSlideState(curr => curr?.key === prevSlideState.key ? null : curr);
+        setPrevSlideState(curr => curr?.key === prevSlideKey ? null : curr);
       }, dur);
       return () => clearTimeout(timer);
     }
-  }, [prevSlideState?.key, (selectedSlide as ICanvasSlide)?.transition]);
+  }, [prevSlideState, prevSlideKey, currentTransition]);
 
   // Handle complex transition timeout (checkerboard/comic-dots)
   useEffect(() => {
     if (isTransitioning && selectedSlide) {
-      const transition = (selectedSlide as ICanvasSlide).transition || { type: 'none', duration: 0.5 };
-      const timeout = Math.max(transition.duration * 1000 + 50, 100);
+      const transition = currentTransition || { type: 'none', duration: 0.5 };
+      const duration = transition.duration ?? 0.5;
+      if (transition.type === 'none' || duration === 0) {
+        setIsTransitioning(false);
+        return;
+      }
+      const timeout = Math.max(duration * 1000 + 50, 100);
       const timer = setTimeout(() => setIsTransitioning(false), timeout);
       return () => clearTimeout(timer);
     }
-  }, [isTransitioning, selectedSlide?.id, lastTransitionTrigger]);
+  }, [isTransitioning, selectedSlide, currentTransition, lastTransitionTrigger]);
 
   return {
     prevSlideState,

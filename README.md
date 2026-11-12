@@ -5,8 +5,15 @@
 <h1 align="center">Mirato</h1>
 
 <p align="center">
-  <strong>Современная система презентаций, проецирования Писания и беспроводного суфлера для церквей и медиа-команд.</strong><br>
-  <em>(Ранее известная как Ekklesienter)</em>
+  <strong>Next-generation presentation studio, scripture projection, and wireless stage prompter for churches and live events.</strong><br>
+  <em>(Formerly known as Ekklesienter)</em>
+</p>
+
+<p align="center">
+  <strong>Language / Язык / Sprache:</strong><br>
+  <a href="README.md"><strong>English</strong></a> •
+  <a href="README.ru.md">Русский</a> •
+  <a href="README.de.md">Deutsch</a>
 </p>
 
 <p align="center">
@@ -20,169 +27,174 @@
 
 ---
 
-## 🌟 О проекте Mirato
+## 🌟 About Mirato
 
-**Mirato** создано с одной главной целью: дать церкви и медиа-служению надежный, быстрый и красивый инструмент для проведения богослужений без технических сбоев.
+**Mirato** was crafted with a singular mission: to provide churches, worship teams, and live events with a rock-solid, lightning-fast, and beautiful presentation tool that eliminates technical disruptions during services.
 
-Приложение сочетает в себе профессиональные возможности дорогих проприетарных комплексов (таких как ProPresenter), простоту интуитивного интерфейса и абсолютную независимость от облачных сервисов во время служения.
+It combines the capabilities of expensive proprietary broadcast software (such as ProPresenter) with the intuitive simplicity of modern design tools and complete independence from cloud services during live production.
 
 > [!TIP]
-> **Mirato полностью автономно.** База текстов Библии, тысячи песен с аккордами, медиатека фонов и презентации хранятся локально на вашем компьютере. Приложение будет работать со 100% стабильностью даже при полном отключении интернета в зале.
+> **Mirato is 100% offline-first.** Bible translations, hymnals, media backgrounds, and presentations are stored locally on your machine via IndexedDB and local files. The software operates with absolute stability even if the internet connection goes completely down in the sanctuary.
 
 ---
 
-## ⚡ Ключевые возможности
+## ⚡ Key Capabilities
 
-### 📖 Мгновенный поиск Писания за 5 мс
-- **Умный нечеткий парсер:** Наберите `Ин 3 16`, `Рим 8:28` или `Пс 90` — и стих уже на экране превью.
-- **Параллельные переводы:** Выводите два перевода рядом (например, Синодальный + Новый русский перевод или английский ESV).
-- **Автоматический кегль (Auto-Fit):** Длинные стихи Писания автоматически рассчитывают размер шрифта и межстрочный интервал, гарантируя, что ни одно слово не обрежется за границами экрана.
+### 📖 Instant Scripture Search (Sub-5ms)
+- **Fuzzy Reference Parser:** Type `Jn 3 16`, `Rom 8:28`, or `Ps 23` — the verse is instantly parsed and previewed.
+- **Parallel Translations:** Display two translations side-by-side (e.g., KJV + ESV or Synodal + NIV) with synchronized verse numbers.
+- **Dynamic Auto-Fit:** Scripture passages automatically calculate typography size, line-height, and margins to ensure no word ever overflows off-screen.
 
-### 🎸 Песенники с аккордами и транспозицией
-- **5000+ песен из коробки:** Полная библиотека христианских сборников с куплетами, припевами и мостами.
-- **Транспонирование на лету:** Музыканты сменили тональность прямо на репетиции? Нажмите `⌥T` — аккорды мгновенно пересчитаются (например, из `C` в `D#`).
-- **Раздельный вывод:** Зал на проекторе видит только чистый эстетичный текст, а музыканты и вокалисты на суфлере — текст с аккордами над слогами.
+### 📱 Mobile Web Remote Controller
+- **Zero App Installation:** Anyone with permission can scan a QR code on any iPhone, Android phone, or tablet over local Wi-Fi.
+- **Live Slide & Bible Control:** Operators, pastors, or speakers can flip slides, view live previews, or browse and display Bible verses directly from their mobile screen.
+- **Emergency Overlays:** Trigger Blackout (`F1`) or Clear Text (`F2`) with a single tap from anywhere in the hall.
+- **PIN-Protected Security:** Customizable PIN authentication prevents unauthorized access to the projection stream.
 
-### 📱 Беспроводной суфлер AirDeck по QR-коду
-- Подключите любой смартфон, планшет или старый ноутбук музыкантов по локальному Wi-Fi.
-- Никаких проводов: наведите камеру на QR-код в Mirato, и экран вокалиста готов.
-- Задержка передачи по локальной сети менее **8 миллисекунд**.
-- Отображение текущего слайда, следующего слайда, часов и таймера обратного отсчета для проповедника.
+### 🎵 Church Hymnals & Songbooks
+- **Built-in Hymnal Database:** Comprehensive collections with fast lookup by song number, title, or lyric text.
+- **Structured Stanzas:** Automatic separation into verses, choruses, and bridges with one-click slide creation.
+- **Worship Themes:** Pre-designed visual templates tailored specifically for worship song display.
 
-### 🎨 Векторный холст нового поколения
-- **Векторное перо (Pen Tool):** Создавайте произвольные замкнутые контуры с кривыми Безье.
-- **Булевы операции (Boolean):** Объединение (Union), вычитание (Subtract), пересечение (Intersect) геометрических фигур прямо в редакторе.
-- **Режимы предпросмотра 1x / 1/2 / 1/4:** Возможность снизить нагрузку на GPU слабых ноутбуков, сохраняя на проекторе кристальное 4K/FullHD качество.
+### 📐 Figma-Grade Vector Canvas
+- **Precision Vector Engine:** Freely position text blocks, shapes, strokes, images, and video backgrounds.
+- **Smart Magnetic Guides:** Automatic alignment snapping to slide centers and neighboring objects.
+- **Live Aspect Ratio Portal:** Switch canvas ratios (16:9, 16:10, 4:3, 9:16) via an overlay portal rendered above all panels.
 
-### 🚨 Панические клавиши оператора (Panic Keys)
-- В непредвиденной ситуации на сцене не нужно судорожно искать мышь:
-  - `F1` — **Blackout** (мгновенное мягкое затемнение проектора в черный).
-  - `F2` — **Clear Text** (мгновенно убрать текст, оставив красивое фоновое видео/заставку).
-  - `Esc` — возврат к слайду или сброс оверлеев.
+### 🖥️ Dual-Window Architecture & Presenter Workflow
+- **Independent Projector Process:** Secondary screen output runs in a dedicated window, leaving the operator with 100% cursor freedom without losing window focus.
+- **Live Editing on the Fly:** Modify slide content, fix typos, or add new slides during a live service without interrupting the projector display.
+
+### 🚨 Operator Panic Keys
+- No frantic mouse searching during unplanned pauses or stage interruptions:
+  - `F1` — **Blackout** (smooth blackout transition).
+  - `F2` — **Clear Text** (hides text layers while keeping background video/image playing).
+  - `Esc` — Reset overlays / restore normal presentation.
 
 ---
 
-## 📊 Сравнение: Mirato vs PowerPoint vs ProPresenter
+## 📊 Comparison: Mirato vs PowerPoint vs ProPresenter
 
-| Возможность | 👑 Mirato 2.3 | 📄 MS PowerPoint | 🎥 ProPresenter |
+| Feature | 👑 Mirato 2.3 | 📄 MS PowerPoint | 🎥 ProPresenter |
 | :--- | :---: | :---: | :---: |
-| **Режим докладчика** | Полная свобода курсора, оператор работает во время показа | Крадет фокус мыши, легко свернуть показ | Тяжелый интерфейс, высокая нагрузка на GPU |
-| **Редактирование на лету** | Мгновенно во время служения без выхода из показа | Невозможно без остановки презентации | Возможно, но требует открытия громоздкого окна |
-| **Поиск Библии** | 5 мс (Ин 3:16), параллельные переводы, авто-верстка | Отсутствует (только ручной копипаст) | Доступен за дополнительную плату модулей |
-| **Суфлер для сцены** | AirDeck по QR-коду на любой смартфон/планшет | Отсутствует | Требует отдельное платное iOS-приложение |
-| **Транспозиция аккордов** | Встроенная транспозиция на лету | Отсутствует | Ограниченная поддержка |
-| **Панические клавиши (F1/F2)** | Аппаратные хоткеи затемнения экрана | Только клавиша `B` (черный экран) | Настраиваемые |
-| **Стоимость лицензии** | **Бесплатно и Open Source** | Подписка Microsoft 365 | От \$399 + ежегодные обновления |
+| **Dual-Screen & Cursor Freedom** | Independent window, operator has full mouse freedom | Captures mouse focus; clicking outside drops slideshow | Complex multi-panel UI, heavy GPU overhead |
+| **Live Editing During Service** | Instant real-time updates without leaving presentation | Impossible without stopping the slideshow | Supported, but requires opening a heavy modal editor |
+| **Instant Scripture Search** | Sub-5ms (`Jn 3:16`), parallel translations, auto-fit | None (manual copy-paste from browser) | Available, but modern translations require paid modules |
+| **Mobile Web Remote** | Built-in via local Wi-Fi & QR code (no app needed, with Bible search) | Basic hardware clicker or PowerPoint mobile app (Office 365 required) | Requires separate ProRemote app with manual port configuration |
+| **Stage Prompter (AirDeck)** | Built-in wireless prompter for singers & speakers | None | Requires separate paid iOS app |
+| **Church Hymnals & Songbooks** | Built-in hymnal library with search by song number | None (each song requires manual slides) | Basic text import / CCLI SongSelect subscription |
+| **Panic Keys (F1 / F2)** | Dedicated blackout & clear text hotkeys | Key `B` only (black screen) | Configurable |
+| **License & Pricing** | **100% Free & Open Source (MIT)** | Microsoft 365 Subscription | From \$399 + annual upgrade maintenance |
 
 ---
 
-## 💾 Загрузка и Установка (Downloads)
+## 📥 Download Mirato (v2.3.0)
 
-Все официальные сборки доступны на странице [**GitHub Releases**](https://github.com/borissmiyan/mirato/releases/latest).
+Pre-built binaries for all major desktop platforms are available in the [v2.3.0 Release](https://github.com/borissmiyan/mirato/releases/tag/v2.3.0):
 
-| Платформа | Архитектура | Формат | Описание |
-| :--- | :--- | :---: | :--- |
-| **macOS** | **Apple Silicon (M1 / M2 / M3 / M4)** | `.dmg` | Для всех современных компьютеров Mac |
-| **macOS** | **Intel (x86_64)** | `.dmg` | Для компьютеров Mac на процессорах Intel (macOS 12+) |
-| **Windows** | **64-bit (x64)** | `.exe` | Инсталлятор для Windows 10 / 11 |
-| **Linux** | **64-bit (x64)** | `.AppImage` / `.deb` | Для Ubuntu, Debian, Fedora, Arch Linux |
+| Platform | Architecture | Package | Description |
+| :--- | :--- | :--- | :--- |
+| **macOS** | **Apple Silicon (M1 / M2 / M3 / M4)** | `.dmg` (207 MB) | [Download](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-macOS12+-arm64.dmg) — For modern Apple Silicon Macs |
+| **macOS** | **Intel (x86_64)** | `.dmg` (213 MB) | [Download](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-macOS12+-x64.dmg) — For Intel-based Macs (macOS 12 Monterey+) |
+| **Windows** | **64-bit (x64)** | `.exe` (175 MB) | [Download](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-Setup-2.3.0.exe) — Installer for Windows 10 & 11 |
+| **Linux** | **64-bit (x86_64)** | `.AppImage` (211 MB) | [Download](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-x86_64.AppImage) — Portable AppImage for Ubuntu, Fedora, Debian |
+| **Linux** | **ARM64 (aarch64)** | `.AppImage` (212 MB) | [Download](https://github.com/borissmiyan/mirato/releases/download/v2.3.0/Mirato-2.3.0-arm64.AppImage) — For ARM-based Linux systems |
 
 ---
 
-## 🍎 Важная инструкция по запуску на macOS (Команда `xattr`)
+## 🍎 macOS First-Launch Guide (`xattr` Command)
 
-Так как Mirato распространяется свободно и с открытым исходным кодом без платной ежегодной подписки разработчика Apple, встроенная система безопасности **Apple Gatekeeper** при первом открытии может показать сообщение:
+Because Mirato is an open-source project distributed without an Apple Developer paid subscription ($99/year), macOS **Gatekeeper** may display a dialog on first launch:
 
-> *«Программа "Mirato" повреждена и её невозможно открыть. Вам следует переместить её в Корзину»*  
-> *(«"Mirato" is damaged and can't be opened. You should move it to the Trash»)*
+> *"Mirato is damaged and can't be opened. You should move it to the Trash."*
 
-### Разблокировка занимает 10 секунд:
-1. Перетащите **Mirato.app** из смонтированного диска в папку **«Программы»** (`/Applications`).
-2. Откройте стандартный **Терминал** (Terminal) через Spotlight (`Cmd + Пробел` → введите *Терминал*).
-3. Вставьте и выполните следующую команду:
+### Unlock in 10 seconds:
+1. Drag **Mirato.app** from the mounted DMG into your **`/Applications`** folder.
+2. Open the standard macOS **Terminal** (`Cmd + Space` → type *Terminal*).
+3. Copy and run the following command:
 
 ```bash
 xattr -cr /Applications/Mirato.app
 ```
 
-*(Если система запросит права администратора, выполните: `sudo xattr -rd com.apple.quarantine /Applications/Mirato.app`)*
+*(If prompted for administrator privileges: `sudo xattr -rd com.apple.quarantine /Applications/Mirato.app`)*
 
-4. Запустите Mirato снова. Приложение откроется мгновенно и больше никогда не будет запрашивать подтверждений!
+4. Open Mirato again. It will launch instantly without any further warnings!
 
 > [!NOTE]
-> Этот текстовый файл с инструкцией также всегда включен непосредственно в смонтированный DMG-образ под именем `Команда_для_Терминала.txt`.
+> A companion text file containing this exact command is also included directly inside the mounted DMG image (`Команда_для_Терминала.txt`).
 
 ---
 
-## ⌨️ Горячие клавиши оператора (Cheatsheet)
+## ⌨️ Operator Shortcuts (Cheatsheet)
 
-| Сочетание | Действие |
+| Shortcut | Action |
 | :--- | :--- |
-| `Пробел` / `→` | Следующий слайд |
-| `←` | Предыдущий слайд |
-| `F1` | **Blackout** — полное затемнение проектора |
-| `F2` | **Clear** — скрыть текст, оставить фоновое видео |
-| `Esc` | Сброс затемнения / возврат к показу |
-| `⌘K` (Mac) / `Ctrl+K` (Win) | Палитра быстрых действий и быстрый переход |
-| `⌘F` (Mac) / `Ctrl+F` (Win) | Фокус в поле поиска Писания / Песенников |
-| `⌥T` | Транспонирование тональности песни |
-| `⌘R` | Открыть панель беспроводного суфлера AirDeck |
-| `V` | Инструмент выбора и перемещения (Select) |
-| `H` | Инструмент «Рука» (Pan холста) |
-| `P` | Векторное перо (Pen Tool) |
-| `⌘0` | Сбросить масштаб холста к 100% |
+| `Space` / `→` / `↓` | Next slide / Play-Pause media |
+| `←` / `↑` | Previous slide |
+| `F1` | **Blackout** — smooth blackout overlay |
+| `F2` | **Clear Text** — hide text layers, keep background playing |
+| `Esc` | Clear overlay / reset selection |
+| `⌘K` (Mac) / `Ctrl+K` (Win) | Quick Action Palette |
+| `⌘D` (Mac) / `Ctrl+D` (Win) | Duplicate slide or canvas element |
+| `⌘+` / `⌘-` / `⌘0` | Canvas zoom in / out / reset to 100% |
+| `V` | Selection tool |
+| `H` | Hand tool (Canvas pan) |
+| `P` | Vector Pen tool |
+| `T` / `R` / `O` / `L` | Create Text / Rectangle / Circle / Line on canvas |
+| `I` | Color EyeDropper |
 
 ---
 
-## 🛠️ Стек технологий и Архитектура
+## 🛠️ Technology Stack
 
-Mirato построено по бескомпромиссным стандартам производительности систем реального времени:
+Mirato is engineered with modern web and desktop technologies:
 
-- **Ядро десктопа:** [Electron](https://www.electronjs.org/) с раздельной многооконной архитектурой контроллера и проектора.
-- **Пользовательский интерфейс:** [React 19](https://react.dev/) + [Vite](https://vitejs.dev/) + [Tailwind CSS v4](https://tailwindcss.com/).
-- **Управление состоянием:** [Jotai](https://jotai.org/) (атомарный UI-стейт) + [Zustand](https://zustand-demo.pmnd.rs/) (презентационные срезы).
-- **Хранилище данных:** [Dexie.js](https://dexie.org/) (IndexedDB) с полной автономностью и поддержкой миграций.
-- **Трансляция и суфлер:** WebSockets / WebRTC для суб-миллисекундного беспроводного релея AirDeck.
-- **Обработка медиа:** Встроенный легковесный конвейер [FFmpeg WebAssembly](https://ffmpegwasm.netlify.app/) для декодирования и фонового кэширования.
+- **Desktop Framework:** [Electron](https://www.electronjs.org/) with dual-process controller/projector isolation.
+- **Frontend UI:** [React 19](https://react.dev/) + [Vite](https://vitejs.dev/) + [Tailwind CSS v4](https://tailwindcss.com/).
+- **State Management:** [Jotai](https://jotai.org/) (atomic UI state) + [Zustand](https://zustand-demo.pmnd.rs/) (presentation slices).
+- **Offline Storage:** [Dexie.js](https://dexie.org/) (IndexedDB) with schema migration.
+- **Relay & Prompter:** Embedded HTTP & WebSocket server for sub-millisecond mobile and AirDeck syncing.
+- **Media Pipeline:** Embedded [FFmpeg WebAssembly](https://ffmpegwasm.netlify.app/) for background video thumbnailing and caching.
 
 ---
 
-## 👨‍💻 Разработка и сборка из исходников
+## 👨‍💻 Building from Source
 
 ```bash
-# 1. Клонирование репозитория
+# 1. Clone the repository
 git clone https://github.com/borissmiyan/mirato.git
 cd mirato
 
-# 2. Установка зависимостей
+# 2. Install dependencies
 npm install
 
-# 3. Запуск в режиме разработки
+# 3. Start local development server
 npm run dev
 
-# 4. Проверка качества и тестов (100% герметичность)
+# 4. Run automated checks & hermetic test suite (588 tests)
 npm run check:design
 npm run check:hygiene
 npm run check:esm
 npx vitest run
 
-# 5. Сборка продакшн-пакетов
-npm run build:mac-modern   # macOS Apple Silicon + Intel
-npm run build:win          # Windows Installer
-npm run build:linux        # Linux AppImage & deb
+# 5. Build production packages
+npm run build:mac-modern   # macOS Apple Silicon + Intel DMG
+npm run build:win          # Windows Setup Installer
+npm run build:linux        # Linux AppImage
 ```
 
 ---
 
-## 🤝 Сообщество и Поддержка
+## 🤝 Community & Support
 
-- 💬 **Discord-сообщество:** [discord.gg/mirato](https://discord.gg/mirato) — обсуждение идей, обмен фонами и шаблонами.
-- 🐛 **Баг-трекер и предложения:** [GitHub Issues](https://github.com/borissmiyan/mirato/issues)
-- 💡 **Дискуссии разработчиков:** [GitHub Discussions](https://github.com/borissmiyan/mirato/discussions)
+- 💬 **Discord Community:** [discord.gg/mirato](https://discord.gg/mirato)
+- 🐛 **Issue Tracker:** [GitHub Issues](https://github.com/borissmiyan/mirato/issues)
+- 💡 **Discussions & Feedback:** [GitHub Discussions](https://github.com/borissmiyan/mirato/discussions)
 
 ---
 
 <p align="center">
-  Сделано с любовью и молитвой для церквей по всему миру. 🤍<br>
-  <strong>Mirato © 2026. Распространяется под лицензией MIT.</strong>
+  Crafted with care and prayer for churches around the globe. 🤍<br>
+  <strong>Mirato © 2026. Released under the MIT License.</strong>
 </p>

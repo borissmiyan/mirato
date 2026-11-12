@@ -24,7 +24,7 @@
     "test:ui": "vitest --ui",
     "lint": "eslint src --ext .ts,.tsx",
     "check": "tsc --noEmit && eslint src && vitest run",
-    "prepare": "husky",
+    "prepare": "husky || true",
     "check:types": "tsc --noEmit && tsc --project tsconfig.electron.json --noEmit",
     "check:electron": "tsc --project tsconfig.electron.json --noEmit",
     "check:circular": "node scripts/verify-no-circular.mjs",
@@ -168,8 +168,6 @@
     "@ffmpeg/core": "^0.12.10",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
-    "@tanstack/react-virtual": "^3.13.14",
-    "dompurify": "^3.2.4",
     "@fontsource/alice": "^5.2.8",
     "@fontsource/caveat": "^5.2.8",
     "@fontsource/comfortaa": "^5.2.8",
@@ -192,11 +190,13 @@
     "@fontsource/roboto": "^5.2.9",
     "@fontsource/ubuntu": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
+    "@tanstack/react-virtual": "^3.13.14",
     "clsx": "^2.1.1",
     "cors": "^2.8.6",
     "date-fns": "^4.1.0",
     "dexie": "^4.3.0",
     "dexie-react-hooks": "^4.2.0",
+    "dompurify": "^3.2.4",
     "express": "^5.2.1",
     "i18next": "^25.8.0",
     "i18next-browser-languagedetector": "^8.2.0",
@@ -242,6 +242,7 @@
     "electron-builder": "^26.7.0",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "husky": "^9.1.7",
     "jsdom": "^28.1.0",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.8.2",
@@ -249,5 +250,10 @@
     "vite-plugin-electron": "^0.29.0",
     "vite-plugin-electron-renderer": "^0.14.6",
     "vitest": "^4.0.18"
+  },
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": [
+      "eslint --fix"
+    ]
   }
 }

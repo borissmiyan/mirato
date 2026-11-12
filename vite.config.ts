@@ -23,10 +23,6 @@ export default defineConfig(({ mode }) => {
           vite: {
             build: {
               rollupOptions: {
-                output: {
-                  format: 'cjs',
-                  entryFileNames: '[name].cjs',
-                },
                 external: ['bufferutil', 'utf-8-validate']
               }
             }

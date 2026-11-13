@@ -343,10 +343,11 @@ const InlineTextEditorContent: React.FC<InlineTextEditorContentProps> = ({
             style={{
                 justifyContent: vAlignCss,
                 height: isFlowMode ? undefined : '100%',
+                minHeight: '1em',
                 pointerEvents: 'none',
             }}
         >
-            <div className="relative w-full" style={{ overflow: 'visible' }}>
+            <div className={cn("relative", isAutoWidth ? "w-max" : "w-full")} style={{ overflow: 'visible' }}>
                 {/* Stroke Layers pinned exactly to the editable text bounding height */}
                 {hasTextStrokes && filteredStrokes.slice().reverse().map((stroke, idx) => {
                     const baseWidth = stroke.width || item.borderWidth || 2;

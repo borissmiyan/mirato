@@ -138,12 +138,13 @@ const TextRendererContent: React.FC<TextRendererContentProps> = ({
       style={{
         justifyContent: alignItemsCss,
         height: isFlowText ? undefined : '100%',
+        minHeight: '1em',
         opacity: isEditing ? 0 : 1,
         isolation: 'isolate',
         overflow: 'visible',
       }}
     >
-      <div className="relative w-full" style={{ overflow: 'visible' }}>
+      <div className={cn("relative", isAutoWidthText ? "w-max" : "w-full")} style={{ overflow: 'visible' }}>
         {/* Stroke Layers pinned exactly to the text bounding height */}
         {hasTextStrokes && filteredStrokes.slice().reverse().map((stroke, idx) => {
           const baseWidth = stroke.width || item.borderWidth || 2;

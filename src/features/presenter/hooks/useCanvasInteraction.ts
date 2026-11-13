@@ -81,7 +81,6 @@ export function useCanvasInteraction(
             // Figma Deep-Selection (Cmd+Click / Ctrl+Click): select only clicked child, bypassing group expansion
             targetIds = [item.id];
             setSelectedIds(targetIds);
-            if (item.type === 'text' && type === 'move') return;
         } else if (!selectedIds.includes(item.id)) {
             // Figma-grade group selection: if grouped and group not already selected, select whole group
             if (item.groupId && !selectedIds.some(id => localItems.find(i => i.id === id)?.groupId === item.groupId)) {
@@ -91,7 +90,6 @@ export function useCanvasInteraction(
                 targetIds = [item.id];
             }
             setSelectedIds(targetIds);
-            if (item.type === 'text' && type === 'move') return;
         }
 
         let initialPathNodes: IVectorNode[] | undefined;

@@ -303,7 +303,40 @@ export const TypographySection: React.FC<ITypographySectionProps> = ({
               <button
                 type="button"
                 key={mode}
-                onClick={() => updateCanvasItems(selectedIds, { text: { resizingMode: mode } } as never)}
+                onClick={() => {
+                  if (mode === 'fixed') {
+                    const updates: Array<{ id: string; updates: Partial<ICanvasItem> }> = [];
+                    const canvasEl = document.getElementById('slide-canvas-container');
+                    const cRect = canvasEl?.getBoundingClientRect();
+
+                    selectedIds.forEach(id => {
+                      const el = document.getElementById(`item-${id}`);
+                      if (el && cRect && cRect.width > 0 && cRect.height > 0) {
+                        const eRect = el.getBoundingClientRect();
+                        const widthPct = (eRect.width / cRect.width) * 100;
+                        const heightPct = (eRect.height / cRect.height) * 100;
+                        updates.push({
+                          id,
+                          updates: {
+                            width: Number(widthPct.toFixed(2)),
+                            height: Number(heightPct.toFixed(2)),
+                            text: { resizingMode: 'fixed' } as never,
+                          }
+                        });
+                      } else {
+                        updates.push({
+                          id,
+                          updates: {
+                            text: { resizingMode: 'fixed' } as never,
+                          }
+                        });
+                      }
+                    });
+                    onBatchUpdate(updates);
+                  } else {
+                    updateCanvasItems(selectedIds, { text: { resizingMode: mode } } as never);
+                  }
+                }}
                 onMouseDown={(e) => e.preventDefault()}
                 className={cn(
                   "flex-1 py-1.5 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer apple-press group/mode",

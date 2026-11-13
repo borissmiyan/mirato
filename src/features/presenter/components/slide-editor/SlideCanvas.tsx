@@ -319,17 +319,14 @@ const SlideCanvas: React.FC<SlideCanvasProps> = ({ slideId, canvasItems }) => {
                 <MaskGroupRenderer maskGroups={maskGroups} />
                 <BooleanGroupRenderer booleanGroups={booleanGroups} />
                 {regularItems.map((item: ICanvasItem) => {
-                    if (item.visible === false) return null;
-                    const isAutoW = item.type === 'text' && item.text?.resizingMode === 'auto-width';
-                    const isAutoH = item.type === 'text' && item.text?.resizingMode === 'auto-height';
-                    const isEditing = editingId === item.id;
+                    if (item.visible === false || item.type === 'text') return null;
 
                     return (
                         <div
                             key={`visual-${item.id}`}
                             id={`visual-${item.id}`}
-                            className={cn("absolute overflow-hidden", isEditing && "opacity-0")}
-                            style={getItemStyle(item, isAutoW, isAutoH, item.zIndex)}
+                            className="absolute overflow-hidden"
+                            style={getItemStyle(item, false, false, item.zIndex)}
                         >
                             <CanvasItemView item={item} isEditing={false} />
                         </div>
@@ -383,11 +380,11 @@ const SlideCanvas: React.FC<SlideCanvasProps> = ({ slideId, canvasItems }) => {
                                 isMultiSelected={selectedIds.length > 1 && isSelected}
                             />
 
-                            {/* Инлайн-редактор текста при двойном клике */}
-                            {isEditing && (
+                            {/* Текст в потоке DOM (для auto-width/auto-height) или инлайн-редактор */}
+                            {(item.type === 'text' || isEditing) && (
                                 <CanvasItemView
                                     item={item}
-                                    isEditing={true}
+                                    isEditing={isEditing}
                                     onSave={handleTextSave}
                                     onInput={handleTextUpdate}
                                     onCancel={handleCancel}

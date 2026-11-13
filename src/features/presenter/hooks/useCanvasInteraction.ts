@@ -98,6 +98,7 @@ export function useCanvasInteraction(
         }
 
         const isAltDrag = Boolean(e.altKey && type === 'move');
+        const startDims = type === 'resize' ? resolveVisualDimensions(item) : { width: item.width, height: item.height };
 
         dragState.current = {
             type,
@@ -106,8 +107,8 @@ export function useCanvasInteraction(
             startY: e.clientY,
             startItemX: item.x,
             startItemY: item.y,
-            startItemW: item.width,
-            startItemH: item.height,
+            startItemW: startDims.width,
+            startItemH: startDims.height,
             startRotation: item.rotation || 0,
             startPivotX: item.pivotX ?? 50,
             startPivotY: item.pivotY ?? 50,
@@ -118,12 +119,13 @@ export function useCanvasInteraction(
             originalTargetIds: targetIds,
             draggedItems: targetIds.map(id => {
                 const activeItem = localItems.find(i => i.id === id) || item;
+                const dims = type === 'resize' ? resolveVisualDimensions(activeItem) : { width: activeItem.width, height: activeItem.height };
                 return {
                     id: activeItem.id,
                     startItemX: activeItem.x,
                     startItemY: activeItem.y,
-                    startItemW: activeItem.width,
-                    startItemH: activeItem.height,
+                    startItemW: dims.width,
+                    startItemH: dims.height,
                     startRotation: activeItem.rotation || 0,
                     startPivotX: activeItem.pivotX ?? 50,
                     startPivotY: activeItem.pivotY ?? 50,

@@ -89,6 +89,7 @@ const TextRendererContent: React.FC<TextRendererContentProps> = ({
     textAlign: textAlignCss as React.CSSProperties['textAlign'],
     whiteSpace: isAutoWidthText ? 'pre' : 'pre-wrap',
     wordBreak: isAutoWidthText ? 'normal' : 'break-word',
+    minWidth: isAutoWidthText ? '1ch' : undefined,
   };
 
   // Faux bold support matching InlineTextEditor

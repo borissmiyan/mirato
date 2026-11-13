@@ -43,6 +43,7 @@ Thumbs.db
 .agent/
 *.tsbuildinfo
 website/
+scratch/
 
 
 .env.*.local

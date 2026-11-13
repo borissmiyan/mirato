@@ -24,3 +24,5 @@
    - All list items and cards (`*Card`, `*Row`, `*Item`) must be wrapped in `React.memo`.
 6. **5-Stage Development Cycle:**
    - 1. Research -> 2. Plan & Spec -> 3. Adversarial Critic Audit -> 4. TDD Execution -> 5. Verification.
+7. **Canvas & Interaction Integrity Gate:**
+   - Invariant check on layer separation, drag unlocks, and non-0px bounds via `npm run check:canvas`.

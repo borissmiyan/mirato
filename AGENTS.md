@@ -67,3 +67,10 @@
    - **Path Geometry & Bundle Depth:** Запрещены слепые относительные переходы `path.join(__dirname, '../../...')` в серверных/Electron-модулях без валидации `fs.existsSync` или использования `app.getAppPath()`, так как глубина директории после бандлинга (`dist/`, `dist-electron/`) смещается относительно исходников.
    - **Network Endpoint Fallback Hygiene:** Запрещено хардкодить `http://localhost:<port>` в UI-компонентах без строгой изоляции окружения (`isRemote`) во избежание `ERR_CONNECTION_REFUSED`.
    - **Artifact Pre-Flight & Smoke Gate:** В десктопных приложениях сборка обязана верифицироваться гейтом `npm run check:smoke` (`scripts/verify-electron-smoke.mjs`), подтверждающим синтаксическую валидность `preload.cjs`, главного процесса и целостность встроенных ассетов.
+
+13. **CANVAS & VISUAL INTERACTION HARNESS GATE (ZERO 0PX & DRAG INVARIANTS):**
+   - **Layer Separation Invariant:** Запрещено разделять визуальные и интерактивные слои холста без монтирования реального контента в интерактивном слое (`Layer 2`). Контейнеры текста обязаны рендерить `<CanvasItemView>` во 2-м слое во избежание схлопывания `max-content` в `0px`.
+   - **Zero Drag Aborts:** Запрещены слепые аборты перемещения (`if (item.type === 'text' && type === 'move') return;`). Текст и фигуры обязаны свободно перемещаться мышью при обычном клике/выборе.
+   - **Visual Dimensions Calibration:** При изменении размера или перемещении обязано использоваться `resolveVisualDimensions` с чтением реальных DOM-габаритов для предотвращения скачков координат.
+   - **Anti-Collapse Safety:** Все авто-тексты обязаны содержать `minHeight: 1em` и `minWidth: 1ch`.
+   - **Проверяется детерминированным гейтом:** `npm run check:canvas` (`scripts/verify-canvas-interactions.mjs`) перед каждым коммитом.

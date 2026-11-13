@@ -46,6 +46,9 @@ jobs:
       - name: ⚡ Verify Component Memoization
         run: node scripts/verify-memoization.mjs
 
+      - name: 🎨 Verify Canvas & Interaction Invariants
+        run: node scripts/verify-canvas-interactions.mjs
+
       - name: 🔒 Verify Database Schema Drift
         run: node scripts/verify-schema-drift.mjs
 

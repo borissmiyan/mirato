@@ -32,6 +32,7 @@
     "check:hygiene": "node scripts/verify-resource-hygiene.mjs",
     "check:esm": "node scripts/verify-esm-and-path-hygiene.mjs",
     "check:smoke": "node scripts/verify-electron-smoke.mjs",
+    "check:canvas": "node scripts/verify-canvas-interactions.mjs",
     "check:memo": "node scripts/verify-memoization.mjs",
     "check:design": "node scripts/verify-design-system.mjs",
     "check:security:antipatterns": "node scripts/verify-security-antipatterns.mjs",

@@ -1,9 +1,28 @@
+import fs from 'fs';
+import os from 'os';
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 import electron from 'vite-plugin-electron/simple'
+
+/** Dev-only middleware that streams the generated 385-hymn .mrt archive from ~/Documents without bloating public/ or dist/. */
+function devFullHymnsPlugin(): Plugin {
+  return {
+    name: 'dev-full-hymns-mrt',
+    configureServer(server) {
+      server.middlewares.use('/__dev-hymns-full.mrt', (_req, res, next) => {
+        const mrtPath = path.join(os.homedir(), 'Documents', 'Гимны Надежды (1-385)', 'Гимны Надежды (1-385).mrt');
+        if (!fs.existsSync(mrtPath)) return next();
+        const stat = fs.statSync(mrtPath);
+        res.setHeader('Content-Type', 'application/zip');
+        res.setHeader('Content-Length', String(stat.size));
+        fs.createReadStream(mrtPath).pipe(res);
+      });
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
@@ -14,6 +33,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
     },
     plugins: [
+      devFullHymnsPlugin(),
       react(),
       tailwindcss(),
       electron({

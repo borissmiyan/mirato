@@ -1,9 +1,10 @@
 import React, { useCallback } from 'react';
-import { useAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
+import { RefreshCw } from 'lucide-react';
 
 // Store imports
-import { useBibleStore } from '@/features/bible-browser/store/bibleStore';
+import { usePresentationStore } from '../../store/presentationStore';
 import {
   sidebarOpenAtom,
   historyOpenAtom,
@@ -13,13 +14,14 @@ import {
   clipSlideContentAtom,
   timelineModeAtom,
 } from '@/core/store/uiAtoms';
-import { useAtomValue } from 'jotai';
+import { hasPendingLiveUpdateAtom, liveUpdateTriggerAtom } from '@/core/store/liveSyncAtoms';
+import { Tooltip } from '@/shared/ui';
 
 // Hooks and Services
 import { LiveSyncService } from '@/core/services/liveSyncService';
-import { IpcService } from '@/core/services/ipcService';
 import { useSlideDisplayData } from '../../hooks/useSlideDisplayData';
 import { useSlideTransitionManager } from '../../hooks/useSlideTransitionManager';
+import { SlideExitingContext } from '../../hooks/video/useVideoVolumeSync';
 
 // Utils and Types
 import { cn } from '@/core/utils/cn';
@@ -35,10 +37,12 @@ import { SlideContentOrchestrator } from './SlideContentOrchestrator';
 
 const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
   const { isProjector = false, isPreview = false } = props;
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const lang = i18n.language?.substring(0, 2) || 'en';
-  
+
   const clipContent = useAtomValue(clipSlideContentAtom);
+  const hasPendingLiveUpdate = useAtomValue(hasPendingLiveUpdateAtom);
+  const setLiveUpdateTrigger = useSetAtom(liveUpdateTriggerAtom);
 
   // 1. Data Orchestration
   const data = useSlideDisplayData(props);
@@ -68,36 +72,9 @@ const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
     prevSlideState,
     isTransitioning,
     prevContentRef
-  } = useSlideTransitionManager(currentKey, selectedSlide, presentationStore.lastTransitionTrigger);
+  } = useSlideTransitionManager(currentKey, selectedSlide, presentationStore.lastTransitionTrigger, isProjector);
 
-  // 3. Side Effects (Projector Sync & Mode Sync)
-  React.useEffect(() => {
-    if (isProjector || !IpcService.isElectron()) return;
-
-    const unsub = IpcService.on('projector-ready', () => {
-      const store = useBibleStore.getState();
-      const { activeVerse, isMultiVerseMode: multiMode, selectedVerses, secondTranslationId: secId } = store;
-
-      LiveSyncService.showAppMode(appMode);
-
-      if (appMode === 'scripture') {
-        if (multiMode && selectedVerses.length >= 2) {
-          LiveSyncService.showMultiVerses(selectedVerses, secId);
-        } else if (activeVerse) {
-          LiveSyncService.showVerse(activeVerse, secId);
-        }
-      } else if (selectedSlide) {
-        LiveSyncService.showSlide(
-          selectedSlide,
-          presentationStore.selectedPresentationId || presentationStore.activePresentationId || undefined,
-          presentationStore.activePresentationId || undefined
-        );
-      }
-    });
-
-    return () => unsub?.();
-  }, [isProjector, appMode, selectedSlide, presentationStore.selectedPresentationId, presentationStore.activePresentationId]);
-
+  // 3. Side Effects (Mode Sync; projector-ready is handled exclusively by useProjectorLifecycleSync)
   React.useEffect(() => {
     if (isProjector) return;
     LiveSyncService.showAppMode(appMode);
@@ -112,7 +89,9 @@ const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
       activeVerse={activeVerse}
       parallelVerse={parallelVerse}
       selectedSlide={selectedSlide}
-      hasActivePresentation={!!presentation}
+      hasActiveService={!!presentationStore.activeServiceId}
+      hasActivePresentation={!!presentation && (!presentation.hymnalId || !!presentationStore.navigationParentSlideId) && !!presentationStore.activeServiceId}
+      hasSlides={!!presentation && (!presentation.hymnalId || !!presentationStore.navigationParentSlideId) && !!presentationStore.activeServiceId && (presentation.slides?.length ?? 0) > 0}
       showRef={showRef}
       previewFontSize={previewFontSize}
       settings={settings}
@@ -137,6 +116,8 @@ const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
     parallelVerse,
     selectedSlide,
     presentation,
+    presentationStore.activeServiceId,
+    presentationStore.navigationParentSlideId,
     showRef,
     previewFontSize,
     settings,
@@ -178,7 +159,7 @@ const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
 
   const viewportPadding = React.useMemo(() => {
     if (isProjector) return { top: 0, bottom: 0, left: 0, right: 0 };
-    
+
     const baseGap = appMode === 'hymns' ? 8 : 16;
     let pr = baseGap;
     let pt = 80;
@@ -286,7 +267,7 @@ const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     if (isProjector || appMode === 'scripture' || appMode === 'hymns') return;
-    
+
     const isPinchOrZoom = e.ctrlKey || e.metaKey;
 
     if (!isPinchOrZoom) {
@@ -303,7 +284,7 @@ const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
     const zoomIntensity = e.ctrlKey ? 0.01 : 0.05;
     const factor = Math.exp(-delta * zoomIntensity);
     const newZoom = Math.min(Math.max(zoom * factor, 0.1), 4);
-    
+
     if (newZoom === zoom) return;
 
     // Zoom towards Mouse Position
@@ -331,6 +312,15 @@ const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
   const transition = (selectedSlide as ICanvasSlide)?.transition || { type: 'none', duration: 0.5 };
   const hasTransition = transition.type !== 'none';
 
+  const liveSlideId = usePresentationStore(s => s.liveSlideId);
+  const previewSlideId = presentationStore.previewSlideId;
+  const isPreviewDetachedFromLive = !isProjector && appMode === 'presentation' && Boolean(liveSlideId) && previewSlideId !== liveSlideId;
+  const bottomBarOffset = timelineMode === 'expanded'
+    ? 'bottom-[316px]'
+    : timelineMode === 'compact'
+      ? 'bottom-[176px]'
+      : 'bottom-4';
+
   return (
     <div
       className={cn(
@@ -356,7 +346,9 @@ const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
         viewportPadding={viewportPadding}
         containerClassName={cn(
           'relative',
-          !isProjector && 'ring-1 ring-white/10 border border-white/5 shadow-2xl'
+          !isProjector && (isPreviewDetachedFromLive
+            ? 'ring-2 ring-amber-500/45 border border-amber-500/30 shadow-2xl'
+            : 'ring-1 ring-white/10 border border-white/5 shadow-2xl')
         )}
         zoom={zoom}
         offset={offset}
@@ -366,16 +358,67 @@ const SlideDisplay: React.FC<SlideDisplayProps> = (props) => {
       >
         <SlideBackground background={settings?.background} />
         <div className="relative z-10 w-full h-full">
-          {prevSlideState && hasTransition && (
-            <div key={prevSlideState.key} className={cn("absolute inset-0 z-0 pointer-events-none", isProjector || clipContent ? "overflow-hidden" : "overflow-visible")}>
-              {prevSlideState.content}
-            </div>
-          )}
-          <div key={currentKey} className={cn("absolute inset-0 z-10 pointer-events-auto", isProjector ? "overflow-hidden" : "overflow-visible")}>
-            {content}
-          </div>
+          {[
+            ...(prevSlideState && (hasTransition || prevSlideState.isAudioFadeOutOnly)
+              ? [{
+                key: prevSlideState.key,
+                content: prevSlideState.content,
+                isExiting: true,
+                isAudioFadeOutOnly: Boolean(prevSlideState.isAudioFadeOutOnly),
+              }]
+              : []),
+            {
+              key: currentKey,
+              content,
+              isExiting: false,
+              isAudioFadeOutOnly: false,
+            },
+          ].map((slot) => (
+            <SlideExitingContext.Provider key={slot.key} value={slot.isExiting}>
+              <div
+                className={cn(
+                  "absolute inset-0",
+                  slot.isExiting ? "z-0 pointer-events-none" : "z-10 pointer-events-auto",
+                  slot.isAudioFadeOutOnly && "opacity-0",
+                  (slot.isExiting ? (isProjector || clipContent) : isProjector) ? "overflow-hidden" : "overflow-visible"
+                )}
+              >
+                {slot.content}
+              </div>
+            </SlideExitingContext.Provider>
+          ))}
         </div>
       </LogicalCanvas>
+
+      {/* Bottom-left Staged Live Update Button — aligned with TimelineModeToggle & SlideEditorToolbar */}
+      {!isProjector && appMode === 'presentation' && Boolean(liveSlideId) && hasPendingLiveUpdate && (
+        <div
+          className={cn(
+            'absolute left-4 z-40 pointer-events-auto transition-all duration-300 ease-in-out animate-in fade-in zoom-in-95',
+            bottomBarOffset
+          )}
+        >
+          <Tooltip content={t('push_to_live_hint', 'Apply edited changes to the live projector')} position="top">
+            <div
+              className={cn(
+                'flex items-center justify-center p-1.5 h-14 rounded-xl shadow-2xl transition-all duration-300',
+                'bg-stone-900/40 backdrop-blur-2xl border border-white/10 ring-1 ring-white/5',
+                'hover:bg-stone-900/60 hover:border-white/20'
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => setLiveUpdateTrigger(v => v + 1)}
+                aria-label={t('push_to_live', 'Update Live')}
+                className="flex items-center justify-center gap-2 h-10 px-3 rounded-lg cursor-pointer transition-all duration-200 apple-press bg-accent text-accent-foreground font-semibold text-xs shadow-md whitespace-nowrap"
+              >
+                <RefreshCw className="w-4 h-4 shrink-0" />
+                <span>{t('push_to_live', 'Update Live')}</span>
+              </button>
+            </div>
+          </Tooltip>
+        </div>
+      )}
 
       {/* 5. Editor Toolbar */}
       {appMode === 'presentation' && !isProjector && selectedSlide && (

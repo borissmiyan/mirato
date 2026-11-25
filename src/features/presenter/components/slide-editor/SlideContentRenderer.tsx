@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ISlide, IBlock, ICanvasSlide, ITimerSlide, IVideoSlide } from '@/core/types/presentation';
+import { ISlide, IBlock, ICanvasSlide, IHymnSlide, ITimerSlide, IVideoSlide } from '@/core/types/presentation';
 import { ITemplate, ITemplateTextStyle } from '@/core/types/template';
 import { ICanvasItem } from '@/core/types/canvas';
 import { IStyleLayer } from '@/core/types/style';
@@ -11,14 +11,16 @@ import { partitionMaskedItems } from '@/core/utils/canvasMasks';
 import { partitionBooleanGroups } from '@/core/utils/canvasBooleanGroups';
 import {
     Monitor, Music, Coins, Baby, Mic2, Megaphone,
-    Presentation as PresentationIcon, BookOpen, Plus, Lock
+    BookOpen, Plus, Lock
 } from 'lucide-react';
+import { CustomSlideStackIcon } from '@/shared/ui';
 import { VerseDisplay } from '@/features/presenter/components/bible/VerseDisplay';
 import { ParallelVerseDisplay } from '@/features/presenter/components/bible/ParallelVerseDisplay';
 import { Verse } from '@/core/types/bible';
 import { cn } from '@/core/utils/cn';
 
 import { SlideBackground } from '@/features/presenter/components/display/SlideBackground';
+import HymnSlideRenderer from '@/features/presenter/components/display/HymnSlideRenderer';
 import TimerSlideRenderer from '@/features/presenter/components/display/TimerSlideRenderer';
 import VideoSlideRenderer from '@/features/presenter/components/display/VideoSlideRenderer';
 import { usePresenterStore } from '@/features/presenter/store/presenterStore';
@@ -26,7 +28,7 @@ import { PresentationDataService } from '@/features/presenter/services/Presentat
 import { useLiveQuery } from 'dexie-react-hooks';
 
 const ICON_MAP: Record<string, React.FC<{ className?: string; strokeWidth?: number }>> = {
-    Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus, Presentation: PresentationIcon,
+    Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus, Presentation: CustomSlideStackIcon,
 };
 
 const formatFontFamily = (family?: string) => {
@@ -141,6 +143,17 @@ const SlideContentRenderer: React.FC<SlideContentRendererProps> = ({
     const block = propBlock || dbBlock;
     const template = propTemplate || dbTemplate;
 
+    // Dynamically render live IHymnSlide references using HymnSlideRenderer (never fall through to blank default block)
+    if (slide?.type === 'hymn') {
+        return (
+            <HymnSlideRenderer
+                slide={slide as IHymnSlide}
+                scale={scale}
+                className={className}
+            />
+        );
+    }
+
     const isRu = lang === 'ru';
     const ts = template?.textStyle;
     const bg = backgroundOverride || (slide && 'backgroundOverride' in slide ? slide.backgroundOverride : undefined) || template?.background;
@@ -150,7 +163,7 @@ const SlideContentRenderer: React.FC<SlideContentRendererProps> = ({
 
     const isTimer = slide?.type === 'timer';
 
-    const BlockIcon = block ? (ICON_MAP[block.icon] || PresentationIcon) : PresentationIcon;
+    const BlockIcon = block ? (ICON_MAP[block.icon] || CustomSlideStackIcon) : CustomSlideStackIcon;
     const title = variables.title || (slide?.type === 'normal' ? (slide as ICanvasSlide).content?.variables?.title : undefined) || (isRu ? block?.nameRu : block?.name) || '';
     const subtitle = variables.subtitle ? String(variables.subtitle) : (slide?.type === 'normal' ? String((slide as ICanvasSlide).content?.variables?.subtitle || '') : '');
     const content = variables.content ? String(variables.content) : (slide?.type === 'normal' ? String((slide as ICanvasSlide).content?.variables?.content || '') : '');

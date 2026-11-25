@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Search, Play, Pause, AlertCircle, Eye, MoreVertical } from 'lucide-react';
+import { FolderOpen, Search, Play, Pause, Eye, MoreVertical } from 'lucide-react';
 import { IMediaItem, IMediaBin } from '@/core/types';
 import { cn } from '@/core/utils/cn';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -181,7 +182,13 @@ const MediaListRow: React.FC<{
   );
 });
 
-export const MediaPoolListView: React.FC<MediaPoolListViewProps> = ({
+MediaListRow.displayName = 'MediaListRow';
+
+type ListEntry =
+  | { kind: 'bin'; bin: IMediaBin }
+  | { kind: 'item'; item: IMediaItem };
+
+export const MediaPoolListView: React.FC<MediaPoolListViewProps> = React.memo(({
   bins,
   visibleItems,
   activeBinId,
@@ -197,7 +204,6 @@ export const MediaPoolListView: React.FC<MediaPoolListViewProps> = ({
   onImportDroppedFiles,
   onItemClick,
   onDoubleClick,
-  onHoverItem,
   onDragStart,
   onItemContextMenu,
   onTogglePlayback,
@@ -205,9 +211,31 @@ export const MediaPoolListView: React.FC<MediaPoolListViewProps> = ({
   onImportMedia
 }) => {
   const { t } = useTranslation();
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const entries = useMemo<ListEntry[]>(() => {
+    const list: ListEntry[] = [];
+    if (!activeBinId && !searchQuery.trim()) {
+      for (const bin of bins) {
+        list.push({ kind: 'bin', bin });
+      }
+    }
+    for (const item of visibleItems) {
+      list.push({ kind: 'item', item });
+    }
+    return list;
+  }, [bins, visibleItems, activeBinId, searchQuery]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: entries.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 50,
+    overscan: 6,
+    initialRect: { width: 320, height: 500 },
+  });
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto no-scrollbar min-h-0 px-1 pt-1 pb-4">
+    <div className="flex-1 flex flex-col min-h-0 px-1 pt-1">
       {/* Table Header */}
       <div className="flex items-center gap-2 px-2 py-1 text-[10px] font-bold text-stone-500 uppercase tracking-wider border-b border-white/5 select-none shrink-0 mb-1">
         <span className="w-8 shrink-0">#</span>
@@ -219,123 +247,149 @@ export const MediaPoolListView: React.FC<MediaPoolListViewProps> = ({
         <span className="w-10 shrink-0 text-right" />
       </div>
 
-      <div className="flex flex-col gap-1">
-        {/* Bins as list rows */}
-        {!activeBinId && !searchQuery.trim() && bins.map(bin => {
-          const isDraggingOver = draggingOverId === bin.id;
-          return (
-            <div
-              key={bin.id}
-              onClick={() => onSelectBin(bin.id)}
-              onDragOver={(e) => { e.preventDefault(); onSetDraggingOverId(bin.id); }}
-              onDragLeave={() => onSetDraggingOverId(null)}
-              onDrop={(e) => {
-                if (e.dataTransfer.types.includes('Files')) {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onSetDraggingOverId(null);
-                  onImportDroppedFiles(e.dataTransfer.files, bin.id);
-                } else {
-                  onBinDrop(e, bin.id);
-                }
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                onBinContextMenu(e, bin);
-              }}
-              className={cn(
-                "group flex items-center gap-2 px-2 py-1.5 rounded-xl border transition-all cursor-pointer select-none text-xs",
-                isDraggingOver ? "bg-accent/15 border-accent text-accent" : "bg-stone-900/40 hover:bg-stone-800/60 border-white/5 text-stone-300"
-              )}
-            >
-              <div className="w-8 h-8 rounded-xl bg-amber-500/10 shrink-0 flex items-center justify-center border border-amber-500/20">
-                <FolderOpen className="w-4 h-4 text-amber-500" />
+      <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar min-h-0 pb-4">
+        {entries.length > 0 ? (
+          <div
+            style={{
+              height: `${rowVirtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const entry = entries[virtualRow.index];
+              if (!entry) return null;
+              return (
+                <div
+                  key={entry.kind === 'bin' ? `bin-${entry.bin.id}` : entry.item.id}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                    paddingBottom: '4px',
+                  }}
+                >
+                  {entry.kind === 'bin' ? (
+                    <div
+                      onClick={() => onSelectBin(entry.bin.id)}
+                      onDragOver={(e) => { e.preventDefault(); onSetDraggingOverId(entry.bin.id); }}
+                      onDragLeave={() => onSetDraggingOverId(null)}
+                      onDrop={(e) => {
+                        if (e.dataTransfer.types.includes('Files')) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onSetDraggingOverId(null);
+                          onImportDroppedFiles(e.dataTransfer.files, entry.bin.id);
+                        } else {
+                          onBinDrop(e, entry.bin.id);
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        onBinContextMenu(e, entry.bin);
+                      }}
+                      className={cn(
+                        "group flex items-center gap-2 px-2 py-1.5 rounded-xl border transition-all cursor-pointer select-none text-xs",
+                        draggingOverId === entry.bin.id
+                          ? "bg-accent/15 border-accent text-accent"
+                          : "bg-stone-900/40 hover:bg-stone-800/60 border-white/5 text-stone-300"
+                      )}
+                    >
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/10 shrink-0 flex items-center justify-center border border-amber-500/20">
+                        <FolderOpen className="w-4 h-4 text-amber-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-semibold text-stone-200 group-hover:text-white truncate block">
+                          {entry.bin.name}
+                        </span>
+                        <span className="text-[10px] text-stone-500">{t('media_pool.folder', 'Folder')}</span>
+                      </div>
+                      <span className="text-[10px] text-stone-500 font-mono uppercase tracking-wider">BIN</span>
+                    </div>
+                  ) : (
+                    <MediaListRow
+                      item={entry.item}
+                      isSelected={selectedIds.has(entry.item.id)}
+                      isPlaying={playingItemId === entry.item.id}
+                      mediaTime={mediaTimes[entry.item.id]}
+                      onClick={(e) => onItemClick(entry.item.id, e)}
+                      onDoubleClick={() => onDoubleClick(entry.item)}
+                      onDragStart={(e) => onDragStart(e, entry.item)}
+                      onContextMenu={(e) => onItemContextMenu(e, entry.item)}
+                      onTogglePlayback={(e) => onTogglePlayback(e, entry.item)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            {visibleItems.length === 0 && searchQuery.trim() && (
+              <div className="py-8">
+                <EmptyState
+                  size="sm"
+                  icon={<Search className="w-5 h-5 text-stone-500" />}
+                  title={t('media_pool.no_results', 'No media found')}
+                  action={
+                    <button
+                      type="button"
+                      onClick={onClearSearch}
+                      className="text-xs text-accent hover:underline mt-1 cursor-pointer font-medium"
+                    >
+                      {t('media_pool.clear_search', 'Clear Search')}
+                    </button>
+                  }
+                />
               </div>
-              <div className="flex-1 min-w-0">
-                <span className="font-semibold text-stone-200 group-hover:text-white truncate block">
-                  {bin.name}
-                </span>
-                <span className="text-[10px] text-stone-500">{t('media_pool.folder', 'Folder')}</span>
+            )}
+
+            {visibleItems.length === 0 && !searchQuery.trim() && activeBinId && (
+              <div className="py-8">
+                <EmptyState
+                  size="sm"
+                  icon={<FolderOpen className="w-5 h-5 text-stone-500" />}
+                  title={t('media_pool.bin_empty', 'This bin is empty')}
+                  action={
+                    <button
+                      type="button"
+                      onClick={onImportMedia}
+                      className="text-xs text-accent hover:underline mt-1 cursor-pointer font-medium"
+                    >
+                      {t('media_pool.import', 'Import')}
+                    </button>
+                  }
+                />
               </div>
-              <span className="text-[10px] text-stone-500 font-mono uppercase tracking-wider">BIN</span>
-            </div>
-          );
-        })}
+            )}
 
-        {/* Media Items */}
-        {visibleItems.map(item => (
-          <MediaListRow
-            key={item.id}
-            item={item}
-            isSelected={selectedIds.has(item.id)}
-            isPlaying={playingItemId === item.id}
-            mediaTime={mediaTimes[item.id]}
-            onClick={(e) => onItemClick(item.id, e)}
-            onDoubleClick={() => onDoubleClick(item)}
-            onDragStart={(e) => onDragStart(e, item)}
-            onContextMenu={(e) => onItemContextMenu(e, item)}
-            onTogglePlayback={(e) => onTogglePlayback(e, item)}
-          />
-        ))}
-
-        {/* Empty States */}
-        {visibleItems.length === 0 && searchQuery.trim() && (
-          <div className="py-8">
-            <EmptyState
-              size="sm"
-              icon={<Search className="w-5 h-5 text-stone-500" />}
-              title={t('media_pool.no_results', 'No media found')}
-              action={
-                <button
-                  type="button"
-                  onClick={onClearSearch}
-                  className="text-xs text-accent hover:underline mt-1 cursor-pointer font-medium"
-                >
-                  {t('media_pool.clear_search', 'Clear Search')}
-                </button>
-              }
-            />
-          </div>
-        )}
-
-        {visibleItems.length === 0 && !searchQuery.trim() && activeBinId && (
-          <div className="py-8">
-            <EmptyState
-              size="sm"
-              icon={<FolderOpen className="w-5 h-5 text-stone-500" />}
-              title={t('media_pool.bin_empty', 'This bin is empty')}
-              action={
-                <button
-                  type="button"
-                  onClick={onImportMedia}
-                  className="text-xs text-accent hover:underline mt-1 cursor-pointer font-medium"
-                >
-                  {t('media_pool.import', 'Import')}
-                </button>
-              }
-            />
-          </div>
-        )}
-
-        {visibleItems.length === 0 && !searchQuery.trim() && !activeBinId && bins.length === 0 && (
-          <div className="py-8">
-            <EmptyState
-              size="sm"
-              icon={<FolderOpen className="w-5 h-5 text-stone-500" />}
-              title={t('media_pool.pool_empty', 'Media pool is empty')}
-              action={
-                <button
-                  type="button"
-                  onClick={onImportMedia}
-                  className="text-xs text-accent hover:underline mt-1 cursor-pointer font-medium"
-                >
-                  {t('media_pool.import', 'Import')}
-                </button>
-              }
-            />
-          </div>
+            {visibleItems.length === 0 && !searchQuery.trim() && !activeBinId && bins.length === 0 && (
+              <div className="py-8">
+                <EmptyState
+                  size="sm"
+                  icon={<FolderOpen className="w-5 h-5 text-stone-500" />}
+                  title={t('media_pool.pool_empty', 'Media pool is empty')}
+                  action={
+                    <button
+                      type="button"
+                      onClick={onImportMedia}
+                      className="text-xs text-accent hover:underline mt-1 cursor-pointer font-medium"
+                    >
+                      {t('media_pool.import', 'Import')}
+                    </button>
+                  }
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
-};
+});
+
+MediaPoolListView.displayName = 'MediaPoolListView';

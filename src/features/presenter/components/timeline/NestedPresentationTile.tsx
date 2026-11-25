@@ -6,14 +6,14 @@ import { ISlide, ICanvasSlide, INestedSlide, IBlock, ITemplate, IPresentationFil
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { usePresenterStore } from '@/features/presenter/store/presenterStore';
 import {
-    ChevronRight, ChevronDown, ExternalLink, Layers, Link2,
-    Presentation
+    ChevronRight, ChevronDown, ExternalLink, Layers, Link2
 } from 'lucide-react';
+import { CustomSlideStackIcon, Tooltip } from '@/shared/ui';
 import SlideContentRenderer from '../slide-editor/SlideContentRenderer';
 import { IpcService } from '@/core/services/ipcService';
 
 const ICON_MAP: Record<string, React.FC<{ className?: string; strokeWidth?: number }>> = {
-    Presentation
+    Presentation: CustomSlideStackIcon
 };
 
 interface NestedPresentationTileProps {
@@ -44,13 +44,14 @@ const NestedPresentationTile: React.FC<NestedPresentationTileProps> = ({
     onContextMenu,
 }) => {
     const { t } = useTranslation();
-    const { setPreviewSlide, setLiveSlide, setActivePresentation, toggleSlideExpansion, activePresentationId } = usePresentationStore(
+    const { setPreviewSlide, setLiveSlide, setActivePresentation, setCachedNestedPresentation, activePresentationId, navigationParentSlideId } = usePresentationStore(
         useShallow(s => ({
             setPreviewSlide: s.setPreviewSlide,
             setLiveSlide: s.setLiveSlide,
             setActivePresentation: s.setActivePresentation,
-            toggleSlideExpansion: s.toggleSlideExpansion,
+            setCachedNestedPresentation: s.setCachedNestedPresentation,
             activePresentationId: s.activePresentationId,
+            navigationParentSlideId: s.navigationParentSlideId,
         }))
     );
 
@@ -64,7 +65,7 @@ const NestedPresentationTile: React.FC<NestedPresentationTileProps> = ({
     const isLinked = slide.type === 'normal' && Boolean((slide as ICanvasSlide).linkedPresentationId);
 
     return (
-        <div data-parent-id={slide.id} className="flex items-center gap-2 px-2 bg-white/2 rounded-2xl border border-white/5 py-3">
+        <div data-parent-id={slide.id} className="relative z-0 flex items-center gap-2 px-2 bg-white/2 rounded-[14px] border border-white/5 py-3 animate-nested-unfold">
             {/* Left accent bar */}
             <div className={cn(
                 'w-1 h-12 rounded-full shrink-0',
@@ -75,19 +76,27 @@ const NestedPresentationTile: React.FC<NestedPresentationTileProps> = ({
                 {nestedPresentation.slides.map((nestedSlide, idx) => {
                     const nb = blocksMap.get(nestedSlide.blockId);
                     const nt = templatesMap.get(nestedSlide.templateId);
-                    const isNSel = previewSlideId === nestedSlide.id && selectedPresentationId === nestedPresentation.id;
+                    const isNSel = previewSlideId === nestedSlide.id
+                        && selectedPresentationId === nestedPresentation.id
+                        && (!navigationParentSlideId || navigationParentSlideId === slide.id);
 
                     return (
                         <div
                             key={nestedSlide.id}
                             data-slide-id={nestedSlide.id}
-                            onClick={() => setPreviewSlide(nestedSlide.id, nestedPresentation.id)}
+                            onClick={() => {
+                                setCachedNestedPresentation(slide.id, nestedPresentation);
+                                setCachedNestedPresentation(nestedPresentation.id, nestedPresentation);
+                                setPreviewSlide(nestedSlide.id, nestedPresentation.id, activePresentationId || undefined, slide.id);
+                            }}
                             onContextMenu={(e) => {
                                 e.preventDefault();
                                 onContextMenu(e, nestedSlide.id, nestedPresentation.id);
                             }}
                             onDoubleClick={async () => {
-                                setPreviewSlide(nestedSlide.id, nestedPresentation.id);
+                                setCachedNestedPresentation(slide.id, nestedPresentation);
+                                setCachedNestedPresentation(nestedPresentation.id, nestedPresentation);
+                                await setPreviewSlide(nestedSlide.id, nestedPresentation.id, activePresentationId || undefined, slide.id);
                                 setLiveSlide(nestedSlide.id, nestedPresentation.id, activePresentationId || undefined, slide.id);
 
                                 if (IpcService.isElectron()) {
@@ -96,7 +105,7 @@ const NestedPresentationTile: React.FC<NestedPresentationTileProps> = ({
                                 }
                             }}
                             className={cn(
-                                'group/nested relative shrink-0 w-24 aspect-video rounded-xl border transition-all cursor-pointer overflow-hidden',
+                                'group/nested relative shrink-0 w-24 aspect-video rounded-[10px] border transition-all cursor-pointer overflow-hidden',
                                 isNSel
                                     ? 'border-accent ring-1 ring-accent/30 scale-105 z-10'
                                     : 'border-white/5 hover:border-white/20 bg-stone-900/50'
@@ -115,14 +124,25 @@ const NestedPresentationTile: React.FC<NestedPresentationTileProps> = ({
                                 />
 
                             {/* Slide number badge */}
-                            <div className="absolute top-0.5 left-0.5 px-1 py-0.5 rounded bg-black/40 text-[6px] font-black text-stone-500">
+                            <div className="absolute top-1 left-1 px-1 py-0.5 rounded-[5px] bg-black/40 text-[6px] font-black text-stone-500">
                                 {idx + 1}
                             </div>
 
                             {/* Linked indicator */}
                             {isLinked && idx === 0 && (
-                                <div className="absolute bottom-0.5 right-0.5 px-1 py-0.5 rounded bg-accent/20 border border-accent/20">
-                                    <Link2 className="w-2 h-2 text-accent" />
+                                <div className="absolute bottom-1 right-1 z-20">
+                                    <Tooltip
+                                        content={
+                                            isHymn
+                                                ? t('linked_hymn_tooltip', 'Связано со сборником гимнов')
+                                                : t('linked_presentation_tooltip', 'Связано с оригиналом в библиотеке')
+                                        }
+                                        position="top"
+                                    >
+                                        <div className="px-1 py-0.5 rounded-[5px] bg-accent/20 border border-accent/20">
+                                            <Link2 className="w-2 h-2 text-accent" />
+                                        </div>
+                                    </Tooltip>
                                 </div>
                             )}
                         </div>

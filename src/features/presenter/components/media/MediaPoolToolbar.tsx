@@ -201,7 +201,7 @@ export const MediaPoolToolbar: React.FC<MediaPoolToolbarProps> = ({
           />
 
           {isSortOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-40 py-1 rounded-xl bg-stone-900/95 border border-white/10 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150">
+            <div className="absolute right-0 top-full mt-1.5 w-40 py-1 rounded-xl bg-stone-900 border border-white/10 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150">
               {sortOptions.map(opt => (
                 <button
                   key={opt.value}
@@ -243,7 +243,7 @@ export const MediaPoolToolbar: React.FC<MediaPoolToolbarProps> = ({
           />
 
           {isFilterOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-44 py-1 rounded-xl bg-stone-900/95 border border-white/10 shadow-2xl backdrop-blur-xl z-50 animate-in fade-in zoom-in-95 duration-150 max-h-80 overflow-y-auto no-scrollbar">
+            <div className="absolute right-0 top-full mt-1.5 w-44 py-1 rounded-xl bg-stone-900 border border-white/10 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 max-h-80 overflow-y-auto no-scrollbar">
               <div className="px-2.5 py-1 text-[10px] font-bold text-stone-500 uppercase tracking-wider">
                 {t('media_pool.type', 'Type')}
               </div>

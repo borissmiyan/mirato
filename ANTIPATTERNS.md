@@ -63,3 +63,20 @@ export const ListItem = React.memo(function ListItem({ item, onSelect }: Props) 
 ## AP-004 — Modifying Existing Tests to Make Broken Code Pass
 
 **Severity:** 🔴 Critical (Anti-Tampering Violation) — Masks regression bugs. Existing tests are immutable truth.
+
+---
+
+## AP-005 — Glassmorphism & Translucent UI Surfaces
+
+**Severity:** 🔴 Critical — Violates Mirato's solid opaque visual language and degrades GPU compositor performance on macOS Electron.
+
+- **NEVER** apply `backdrop-blur-*` or semi-transparent backgrounds (`bg-stone-900/60`, `bg-stone-950/80`, `bg-white/5` panels, etc.) to UI surfaces: panels, sidebars, headers, footers, cards, popovers, menus, dropdowns, toolbars, or inputs.
+- **ONLY** modal dimming backdrops (`fixed inset-0 ... apple-backdrop`) may use `backdrop-blur-*` and dark translucency.
+
+```tsx
+// ❌ WRONG
+<div className="bg-stone-900/80 backdrop-blur-xl border border-white/10">...</div>
+
+// ✅ CORRECT
+<div className="bg-stone-900 border border-white/10">...</div>
+```

@@ -141,59 +141,68 @@ export function useMediaPoolData(
     return () => clearTimeout(checkTimer);
   }, [visibleItems, activeBinId]);
 
-  // Preload audio durations for audio items without stored duration using lightweight metadata loading (no PCM decode)
+  // Preload audio durations for disk-backed audio items sequentially using a single Audio element
+  // (avoids Chromium's WebMediaPlayer limit and skips virtual IndexedDB paths like "Service/audio")
   useEffect(() => {
-    const audioOnly = visibleItems.filter(i => 
-      i.type === 'audio' && 
-      !i.duration && 
-      !mediaTimesRef.current[i.id] && 
+    const isRealDiskPath = (p?: string) =>
+      Boolean(p && (p.startsWith('/') || p.includes(':\\') || p.startsWith('local-resource:')));
+
+    const audioOnly = visibleItems.filter(i =>
+      i.type === 'audio' &&
+      !i.duration &&
+      !mediaTimesRef.current[i.id] &&
       !i.isMissing &&
-      i.path
+      isRealDiskPath(i.path)
     );
 
     if (audioOnly.length === 0) return;
 
     let isCancelled = false;
+    const probeAudio = new Audio();
+    probeAudio.preload = 'metadata';
 
-    for (const item of audioOnly) {
-      const url = getLocalResourceUrl(item.path);
-      if (!url) continue;
+    const probeSequentially = async () => {
+      for (const item of audioOnly) {
+        if (isCancelled) break;
+        const url = getLocalResourceUrl(item.path);
+        if (!url) continue;
 
-      const audio = new Audio();
-      audio.preload = 'metadata';
+        const dur = await new Promise<number | null>((resolve) => {
+          const onLoaded = () => {
+            cleanup();
+            resolve(probeAudio.duration);
+          };
+          const onError = () => {
+            cleanup();
+            resolve(null);
+          };
+          const cleanup = () => {
+            probeAudio.removeEventListener('loadedmetadata', onLoaded);
+            probeAudio.removeEventListener('error', onError);
+          };
+          probeAudio.addEventListener('loadedmetadata', onLoaded);
+          probeAudio.addEventListener('error', onError);
+          probeAudio.src = url;
+        });
 
-      const cleanup = () => {
-        audio.removeEventListener('loadedmetadata', onLoaded);
-        audio.removeEventListener('error', onError);
-        audio.src = '';
-        audio.load();
-      };
+        if (isCancelled) break;
+        if (dur && isFinite(dur) && dur > 0) {
+          setMediaTimes(prev => ({
+            ...prev,
+            [item.id]: prev[item.id] ?? { current: 0, duration: dur }
+          }));
+          // Persist to IndexedDB so it never needs to be probed again
+          db.mediaPool.update(item.id, { duration: Math.round(dur) }).catch(() => {});
+        }
+      }
+    };
 
-      const onLoaded = () => {
-        const dur = audio.duration;
-        cleanup();
-        if (isCancelled || !isFinite(dur) || dur <= 0) return;
-
-        setMediaTimes(prev => ({
-          ...prev,
-          [item.id]: prev[item.id] ?? { current: 0, duration: dur }
-        }));
-
-        // Persist to IndexedDB so it never needs to be probed or loaded again
-        db.mediaPool.update(item.id, { duration: Math.round(dur) }).catch(() => {});
-      };
-
-      const onError = () => {
-        cleanup();
-      };
-
-      audio.addEventListener('loadedmetadata', onLoaded);
-      audio.addEventListener('error', onError);
-      audio.src = url;
-    }
+    probeSequentially();
 
     return () => {
       isCancelled = true;
+      probeAudio.src = '';
+      probeAudio.load();
     };
   }, [visibleItems]);
 

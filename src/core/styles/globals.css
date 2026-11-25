@@ -241,6 +241,19 @@ select,
     40%, 80% { transform: translateX(4px); }
 }
 
+@keyframes nested-tray-unfold {
+    0% {
+        opacity: 0;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+.animate-nested-unfold {
+    animation: nested-tray-unfold 260ms ease-out 60ms both;
+}
+
 /* Projector Mode: ensure no scrollbars, pure black background, no cursor delay */
 body.projector-mode {
     overflow: hidden !important;

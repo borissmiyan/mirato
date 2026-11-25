@@ -5,6 +5,7 @@ import { db } from '@/core/db';
 import { useBibleStore } from '@/features/bible-browser/store/bibleStore';
 import { useShallow } from 'zustand/react/shallow';
 import BibleManager from './BibleManager';
+import { HymnalsVisibilitySection } from './HymnalsVisibilitySection';
 import { AlertCircle, Database, Trash2, Info, Layers, HardDrive, Loader2, RotateCcw, Sparkles } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
@@ -203,6 +204,9 @@ const DataSettings: React.FC = () => {
                     />
                 </div>
             </Card>
+
+            {/* Hymnal Visibility & Audio Packs Section */}
+            <HymnalsVisibilitySection />
 
             {/* Storage Optimization Card */}
             <Card padding="md" rounded="xl" className="relative overflow-hidden group">

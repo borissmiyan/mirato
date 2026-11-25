@@ -1,6 +1,10 @@
 const hymns = {
     title: 'Hymnen',
+    hymnals: 'Liederbücher',
     search_placeholder: 'Hymnen suchen...',
+    search_hymnals_placeholder: 'Liederbücher und Sprachen suchen...',
+    create_custom: 'Eigenes Liederbuch erstellen',
+    import_custom: 'Liederbuch hinzufügen',
     select_hymnal: 'Liederbuch wählen',
     select_hymnal_prompt: 'Wählen Sie ein Liederbuch',
     no_results: 'Keine Ergebnisse',

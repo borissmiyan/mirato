@@ -155,7 +155,7 @@ export const GraceLibExportService = {
                 return;
             }
 
-            const extension = type === 'presentations' ? '.ektp' : '.ektmp';
+            const extension = type === 'presentations' ? '.mrtp' : '.mrtmp';
             const itemType = (type === 'presentations' ? 'presentation' : 'template') as 'presentation' | 'template';
 
             let savedCount = 0;
@@ -177,7 +177,7 @@ export const GraceLibExportService = {
     async exportGraceLib() {
         try {
             const blob = await this.packEntireGraceLib();
-            const filename = `GraceLib_${new Date().toISOString().split('T')[0]}.ektgl`;
+            const filename = `GraceLib_${new Date().toISOString().split('T')[0]}.mrtgl`;
             const saved = await this._saveFile(blob, filename, 'gracelib');
             if (saved) toast.success(i18n.t('gracelib_export_success', 'GraceLib exported successfully'));
         } catch (error) {
@@ -194,13 +194,15 @@ export const GraceLibExportService = {
         if (window.electron?.ipcRenderer?.invoke) {
             const uint8Array = new Uint8Array(await blob.arrayBuffer());
             const extMap: Record<string, string[]> = {
-                presentation: ['ektp'],
-                template: ['ektmp'],
-                gracelib: ['ektgl'],
+                presentation: ['mrtp', 'ektp'],
+                template: ['mrtmp', 'ektmp'],
+                gracelib: ['mrtgl', 'ektgl'],
             };
             
-            // Clean filename to prevent double extensions if passed wrongly
-            const cleanName = filename.endsWith(`.${extMap[type]?.[0]}`) ? filename : `${filename}.${extMap[type]?.[0] || 'bin'}`;
+            // Auto-normalize legacy .ekt* extensions to canonical Mirato extensions
+            const canonicalExt = extMap[type]?.[0] || 'bin';
+            const stripped = filename.replace(/\.(mrtmp|ektmp|mrtgl|ektgl|mrtp|ektp|mrt|ekt)$/i, '');
+            const cleanName = `${stripped}.${canonicalExt}`;
             
             const saved = await window.electron.ipcRenderer.invoke('export:save-file', {
                 filename: cleanName,

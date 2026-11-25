@@ -45,7 +45,7 @@ const VerseEditor: React.FC<VerseEditorProps> = ({ verse, onSave, onCancel }) =>
     }, [handleSave, handleCancel]);
 
     return (
-        <div className="w-full p-6 bg-stone-900/60 backdrop-blur-xl border-b border-white/5 animate-in slide-in-from-left-2 fade-in duration-300">
+        <div className="w-full p-6 bg-stone-900 border-b border-white/5 animate-in slide-in-from-left-2 fade-in duration-300">
             <div className="flex gap-6">
                 {/* Verse Number Indicator */}
                 <div className="flex flex-col items-center min-w-8 pt-1">

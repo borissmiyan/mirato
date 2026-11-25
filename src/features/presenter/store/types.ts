@@ -98,7 +98,7 @@ export interface PresentationState {
     saveActiveService: () => Promise<void>;
     duplicateSlide: (presentationId: string, slideId: string) => Promise<void>;
     duplicateSlides: (presentationId: string, slideIds: string[]) => Promise<void>;
-    addHymnToActivePresentation: (hymnPresentationId: string, themeId?: string, index?: number) => Promise<void>;
+    addHymnToActivePresentation: (hymnPresentationId: string, themeId?: string, index?: number, options?: { includeAudio?: boolean; audioStrategy?: 'auto' | 'manual' | 'delay'; audioVariant?: 'minus' | 'plus'; mode?: 'nested-hymn' | 'reference' | 'snapshot' }) => Promise<void>;
     moveSlide: (presentationId: string, slideId: string, direction: 'back' | 'forth' | 'start' | 'end') => Promise<void>;
     moveSlides: (presentationId: string, slideIds: string[], direction: 'back' | 'forth' | 'start' | 'end') => Promise<void>;
     removeSlide: (presentationId: string, slideId: string) => Promise<void>;

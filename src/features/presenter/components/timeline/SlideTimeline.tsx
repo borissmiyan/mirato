@@ -4,11 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
-import { Layers, Presentation } from 'lucide-react';
+import { CustomHymnStackIcon, CustomSlideStackIcon } from '@/shared/ui/SlideIcons';
 import { ICanvasSlide, INestedSlide, ISlide, IPresentationFile } from '@/core/types';
 import { useModalStore } from '@/core/store/modalStore';
 import { useAtom, useSetAtom } from 'jotai';
-import { appModeAtom, isTimelineHoveredAtom, latestInteractionAreaAtom, selectedTransitionSlideIdAtom, slideDesignPanelOpenAtom } from '@/core/store/uiAtoms';
+import { appModeAtom, isTimelineHoveredAtom, latestInteractionAreaAtom, selectedCanvasItemIdsAtom, selectedTransitionSlideIdAtom, slideDesignPanelOpenAtom } from '@/core/store/uiAtoms';
 import { 
     DndContext, 
     DragOverlay, 
@@ -21,6 +21,7 @@ import { TrackContainerHandle } from './TrackContainer';
 import { useTimelineLayout } from './hooks/useTimelineLayout';
 import { useTimelineOperations } from './hooks/useTimelineOperations';
 import { useMetadata } from '@/features/presenter/hooks/useMetadata';
+import { useExpandedPresentationsMap, getNestedPresentationFromMap } from './hooks/useExpandedPresentationsMap';
 import { useTimelineDragAndDrop } from './hooks/useTimelineDragAndDrop';
 import { useTimelineShortcuts } from './hooks/useTimelineShortcuts';
 import { useTimelineLiveSync } from './hooks/useTimelineLiveSync';
@@ -87,6 +88,14 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
     const selectedAudioId = usePresentationStore(s => s.selectedAudioScopeId);
     const [designPanelOpen] = useAtom(slideDesignPanelOpenAtom);
     const setLatestArea = useSetAtom(latestInteractionAreaAtom);
+    const setSelectedCanvasItemIds = useSetAtom(selectedCanvasItemIdsAtom);
+
+    const blurDesignPanelInput = useCallback(() => {
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active.closest('[data-slide-design-panel="true"]')) {
+            active.blur();
+        }
+    }, []);
 
     // Local State
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number; slideId: string; presentationId: string } | null>(null);
@@ -113,39 +122,28 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
         () => activePresentationId ? db.presentationFiles.get(activePresentationId) : undefined,
         [activePresentationId]
     );
-
+    const rawPresentation = useMemo(
+        () => (activePresentation?.id === activePresentationId ? activePresentation : dbPresentation),
+        [activePresentation, dbPresentation, activePresentationId]
+    );
+    // Keep presentation & hymns timelines isolated when switching modes
     const presentation = useMemo(() => {
-        if (activePresentation?.id === activePresentationId) return activePresentation;
-        return dbPresentation;
-    }, [activePresentation, dbPresentation, activePresentationId]);
-
+        if (!rawPresentation) return undefined;
+        const isHymnPres = Boolean(rawPresentation.hymnalId || rawPresentation.metadata?.isHymnLibraryItem);
+        if (appMode === 'hymns' && !isHymnPres) return undefined;
+        if (appMode === 'presentation' && isHymnPres && !navigationParentSlideId) return undefined;
+        return rawPresentation;
+    }, [rawPresentation, appMode, navigationParentSlideId]);
+    const presentationHymnal = useLiveQuery(() => (presentation?.hymnalId ? db.hymnals.get(presentation.hymnalId) : undefined), [presentation?.hymnalId]);
+    const isBuiltInHymnReadOnly = Boolean((presentation?.hymnalId || presentation?.metadata?.isHymnLibraryItem) && presentationHymnal?.isBuiltIn !== false);
     useEffect(() => {
-        if (!presentation?.slides) return;
-        if (!dragActiveRef.current) {
-            setLocalSlides(presentation.slides);
-        }
+        if (!dragActiveRef.current) setLocalSlides(presentation?.slides || []);
     }, [presentation?.slides]);
 
-    const expandedPresentationIds = useMemo(() => {
-        return (presentation?.slides || [])
-            .filter(s => s.isExpanded || s.id === navigationParentSlideId)
-            .map(s => {
-                const canvasSlide = s.type === 'normal' ? s as ICanvasSlide : null;
-                const nestedSlide = s.type === 'nested' ? s as INestedSlide : null;
-                return canvasSlide?.masterPresentationId || nestedSlide?.presentationId;
-            })
-            .filter(Boolean) as string[];
-    }, [presentation?.slides, navigationParentSlideId]);
-
-    const liveExpandedPresentations = useLiveQuery(
-        (): Promise<IPresentationFile[]> => expandedPresentationIds.length > 0 ? db.presentationFiles.where('id').anyOf(expandedPresentationIds).toArray() : Promise.resolve([]),
-        [expandedPresentationIds]
+    const presentationsMap = useExpandedPresentationsMap(
+        presentation?.slides || [],
+        navigationParentSlideId
     );
-    const expandedPresentations = useMemo<IPresentationFile[]>(() => liveExpandedPresentations || [], [liveExpandedPresentations]);
-
-    const presentationsMap = useMemo<Map<string, IPresentationFile>>(() => {
-        return new Map(expandedPresentations.map(p => [p.id, p]));
-    }, [expandedPresentations]);
 
     // Metadata
     const { blocksMap, templatesMap, templates } = useMetadata();
@@ -199,7 +197,7 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
         updatePresentationSlides,
         addPresentationToTimeline,
         takeSnapshot,
-        disabled: !!presentation?.metadata?.isHymnLibraryItem
+        disabled: isBuiltInHymnReadOnly
     });
 
     /** Apple ProMotion spring curve for drag overlay landing smoothly into the target slot */
@@ -216,6 +214,10 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
     const copyAudioScope = usePresentationStore(s => s.copyAudioScope);
     const duplicateAudioScope = usePresentationStore(s => s.duplicateAudioScope);
 
+    const noop = useCallback(() => {}, []);
+    const asyncNoopVoid = useCallback(async () => {}, []);
+    const asyncNoopStr = useCallback(async () => undefined, []);
+
     useTimelineShortcuts({
         activePresentationId,
         slides: presentation?.slides || [],
@@ -224,14 +226,14 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
         previewSlideId,
         isTimelineHoveredRef,
         copySlides,
-        pasteSlides,
-        duplicateSlides,
-        duplicateSlide,
-        removeSlides,
-        removeSlide,
+        pasteSlides: isBuiltInHymnReadOnly ? noop : pasteSlides,
+        duplicateSlides: isBuiltInHymnReadOnly ? noop : duplicateSlides,
+        duplicateSlide: isBuiltInHymnReadOnly ? noop : duplicateSlide,
+        removeSlides: isBuiltInHymnReadOnly ? noop : removeSlides,
+        removeSlide: isBuiltInHymnReadOnly ? noop : removeSlide,
         copyAudioScope,
-        pasteAudioScope,
-        duplicateAudioScope,
+        pasteAudioScope: isBuiltInHymnReadOnly ? asyncNoopVoid : pasteAudioScope,
+        duplicateAudioScope: isBuiltInHymnReadOnly ? asyncNoopStr : duplicateAudioScope,
         setSelectedSlideIds,
         setLiveSlide,
         clearSelection
@@ -274,30 +276,35 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
         navigationParentSlideId,
     });
 
-    useEffect(() => {
-        // Critical: Never auto-scroll timeline while dragging or dropping slides to prevent infinite flip-flop
-        if (activeId || droppingId) return;
+    const lastScrolledPreviewIdRef = useRef<string | null>(null);
 
-        if (autoFollow && previewSlideId) {
-            let targetId = previewSlideId;
+    useEffect(() => {
+        // Critical: Never auto-scroll timeline while dragging or dropping slides, and only scroll
+        // when previewSlideId or navigationParentSlideId actually changes.
+        if (activeId || droppingId) return;
+        if (!autoFollow || !previewSlideId) return;
+        const scrollKey = `${previewSlideId}:${navigationParentSlideId || ''}`;
+        if (lastScrolledPreviewIdRef.current === scrollKey) return;
+        lastScrolledPreviewIdRef.current = scrollKey;
+
+        let targetId = previewSlideId;
+        
+        if (navigationParentSlideId) {
+            const parentSlide = localSlidesRef.current.find(s => s.id === navigationParentSlideId);
+            const masterId = parentSlide?.type === 'normal' 
+                ? (parentSlide as ICanvasSlide).masterPresentationId 
+                : (parentSlide?.type === 'nested' ? (parentSlide as INestedSlide).presentationId : undefined);
             
-            if (navigationParentSlideId) {
-                const parentSlide = localSlidesRef.current.find(s => s.id === navigationParentSlideId);
-                const masterId = parentSlide?.type === 'normal' 
-                    ? (parentSlide as ICanvasSlide).masterPresentationId 
-                    : (parentSlide?.type === 'nested' ? (parentSlide as INestedSlide).presentationId : undefined);
-                
-                if (masterId) {
-                    const nestedPres = presentationsMap.get(masterId);
-                    if (nestedPres && nestedPres.slides.length > 0 && nestedPres.slides[0].id === previewSlideId) {
-                        targetId = navigationParentSlideId;
-                    }
+            if (masterId && parentSlide) {
+                const nestedPres = getNestedPresentationFromMap(presentationsMap, parentSlide.id, masterId);
+                if (nestedPres && nestedPres.slides.length > 0 && nestedPres.slides[0].id === previewSlideId) {
+                    targetId = navigationParentSlideId;
                 }
             }
-            
-            trackRef.current?.scrollToSlide(targetId, navigationParentSlideId || undefined);
         }
-    }, [autoFollow, previewSlideId, activeId, droppingId, designPanelOpen, navigationParentSlideId, presentationsMap]);
+        
+        trackRef.current?.scrollToSlide(targetId, navigationParentSlideId || undefined);
+    }, [autoFollow, previewSlideId, activeId, droppingId, navigationParentSlideId, presentationsMap]);
 
     const handleSelect = useCallback((id: string, multi?: boolean, range?: boolean, deselect?: boolean, slides?: ISlide[]) => {
         if (deselect) {
@@ -309,8 +316,9 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
         }
         setTransEditId(null);
         selectAudioScope(null);
-        setAutoFollow(true);
-    }, [toggleSlideSelection, setPreviewSlide, activePresentationId, setTransEditId, selectAudioScope]);
+        setSelectedCanvasItemIds([]);
+        setAutoFollow(false);
+    }, [toggleSlideSelection, setPreviewSlide, activePresentationId, setTransEditId, selectAudioScope, setSelectedCanvasItemIds]);
 
     const handleLive = useCallback(async (id: string | null, pid?: string, rootId?: string, parentId?: string | null) => {
         if (!id) {
@@ -318,28 +326,49 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
             return;
         }
         const item = visualTimeline.find(i => i.id === id);
+        if (item?.slide?.blockId === 'master-presentation') {
+            const masterPresId = item.slide.type === 'normal'
+                ? (item.slide as ICanvasSlide).masterPresentationId
+                : (item.slide.type === 'nested' ? (item.slide as INestedSlide).presentationId : undefined);
+            const nestedPres = getNestedPresentationFromMap(presentationsMap, item.slide.id, masterPresId);
+            if (nestedPres && nestedPres.slides.length > 0) {
+                const firstNestedId = nestedPres.slides[0].id;
+                usePresentationStore.getState().setCachedNestedPresentation(item.slide.id, nestedPres);
+                await setPreviewSlide(firstNestedId, nestedPres.id, activePresentationId || undefined, item.slide.id);
+                setLiveSlide(firstNestedId, nestedPres.id, activePresentationId || undefined, item.slide.id, activePresentationId || undefined);
+                if (openProjector) await openProjector();
+                return;
+            }
+        }
         if (item) {
              setLiveSlide(id, item.presentationId, activePresentationId || undefined, item.parentSlideId || null, activePresentationId || undefined);
         } else {
              setLiveSlide(id, pid, rootId, parentId);
         }
         if (openProjector) await openProjector();
-    }, [setLiveSlide, openProjector, visualTimeline, activePresentationId]);
+    }, [setPreviewSlide, setLiveSlide, openProjector, visualTimeline, activePresentationId, presentationsMap]);
 
-    // Height calculation: compact mode is 160px (56px header + 16px top + 72px slide + 16px bottom), expanded is 300px
-    const timelineHeight = timelineMode === 'compact' ? 160 : 300;
+    // Height calculation: compact mode is 168px (64px header + 16px top + 72px slide + 16px bottom), expanded is 308px
+    const timelineHeight = timelineMode === 'compact' ? 168 : 308;
 
     const isVisible = isOpen && timelineMode !== 'hidden';
     // When hidden, completely unmount from DOM to eliminate all background CPU, timers, and listener load
-    if (!activePresentationId || !isVisible) return null;
+    if (!isVisible) return null;
 
     return (
         <div
             data-timeline-root
-            className="absolute bottom-0 left-0 right-0 bg-stone-900/60 backdrop-blur-xl border-t border-white/5 flex flex-col z-30 transition-[height,padding] duration-250 ease-out will-change-transform animate-in slide-in-from-bottom pointer-events-auto"
+ className="absolute bottom-0 left-0 right-0 bg-stone-900 border-t border-white/5 flex flex-col z-30 transition-[height,padding] duration-250 ease-out will-change-transform animate-in slide-in-from-bottom pointer-events-auto"
             style={{ height: timelineHeight, paddingRight: designPanelOpen ? 320 : 0 }}
-            onPointerDown={() => setLatestArea('timeline')}
-            onMouseEnter={() => setIsHovered(true)}
+            onPointerDown={() => {
+                blurDesignPanelInput();
+                setLatestArea('timeline');
+                setAutoFollow(false);
+            }}
+            onMouseEnter={() => {
+                blurDesignPanelInput();
+                setIsHovered(true);
+            }}
             onMouseLeave={() => setIsHovered(false)}
         >
             <TimelineToolbar
@@ -371,7 +400,7 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
                     onDragCancel={handleDragCancel}
                 >
                     <TimelineSlideTrack
-                        disabled={!!presentation?.metadata?.isHymnLibraryItem}
+                        disabled={!activePresentationId || isBuiltInHymnReadOnly}
                         localSlides={localSlides}
                         visualTimeline={visualTimeline}
                         handleDragStart={handleDragStart}
@@ -403,11 +432,11 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
                         setContextMenu={setContextMenu}
                         isSubItemSelected={isSubItemSelected}
                         dragActiveId={activeId || droppingId}
-                        audioTrack={timelineMode === 'expanded' ? <AudioTrack visualTimeline={visualTimeline} /> : null}
+                        audioTrack={timelineMode === 'expanded' && localSlides.length > 0 ? <AudioTrack visualTimeline={visualTimeline} readOnly={isBuiltInHymnReadOnly} /> : null}
                     >
                         {nativeDropIndex === localSlides.length && (
                             <div className="w-32 h-[72px] shrink-0 rounded-xl relative overflow-hidden transition-all duration-300 transform animate-in zoom-in-95 opacity-80 outline-dashed outline-2 outline-accent outline-offset-1 flex items-center justify-center bg-accent/20 shadow-[0_0_15px_rgba(var(--accent-rgb, 147, 51, 234),0.2)]">
-                                <Presentation className="w-8 h-8 text-accent animate-pulse" />
+                                <CustomSlideStackIcon className="w-8 h-8 text-accent animate-pulse" />
                             </div>
                         )}
                     </TimelineSlideTrack>
@@ -443,19 +472,27 @@ const SlideTimeline: React.FC<SlideTimelineProps> = ({ openProjector, isOpen = t
             })()}
 
             {localSlides.length === 0 && (
-                <div className="absolute inset-0 top-10 flex items-center justify-center gap-4 text-stone-700 italic pointer-events-none">
-                    <Layers className="w-6 h-6 opacity-20" />
-                    <span className="text-xs">{t('timeline_empty_hint', 'Add slides from the toolbar or drag blocks here.')}</span>
+                <div className="absolute inset-0 top-10 flex items-center justify-center gap-3 text-stone-500 pointer-events-none select-none">
+                    {appMode === 'hymns' ? <CustomHymnStackIcon className="w-5 h-5 opacity-40" /> : <CustomSlideStackIcon className="w-5 h-5 opacity-40" />}
+                    <span className="text-xs font-medium tracking-tight">
+                        {!presentation
+                            ? (appMode === 'hymns'
+                                ? t('select_hymn_to_preview', 'Select a hymn to preview')
+                                : t('select_presentation_hint', 'Select a presentation'))
+                            : t('timeline_empty_hint', 'Add slides from the toolbar or drag blocks here.')}
+                    </span>
                 </div>
             )}
 
-            {/* Context Menu Overlay */}
-            <TimelineContextMenu
-                contextMenu={contextMenu}
-                onClose={() => setContextMenu(null)}
-                presentationsMap={presentationsMap}
-                activePresentationId={activePresentationId}
-            />
+            {/* Context Menu Overlay (disabled for built-in read-only hymns) */}
+            {!isBuiltInHymnReadOnly && (
+                <TimelineContextMenu
+                    contextMenu={contextMenu}
+                    onClose={() => setContextMenu(null)}
+                    presentationsMap={presentationsMap}
+                    activePresentationId={activePresentationId}
+                />
+            )}
         </div>
     );
 };

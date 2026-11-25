@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -27,20 +28,30 @@ const AudioPickerModalContent: React.FC<AudioPickerModalContentProps> = ({ modal
     const addAudioScope = usePresentationStore(s => s.addAudioScope);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    const listScrollRef = useRef<HTMLDivElement>(null);
 
     const audioItems = useLiveQuery(
-        () => {
+        async () => {
             const baseQuery = db.mediaPool.where('type').equals('audio');
-            if (!searchQuery.trim()) {
-                return baseQuery.reverse().sortBy('createdAt');
-            }
-            return baseQuery
-                .filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                .reverse()
-                .sortBy('createdAt');
+            const items = !searchQuery.trim()
+                ? await baseQuery.reverse().sortBy('createdAt')
+                : await baseQuery
+                    .filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .reverse()
+                    .sortBy('createdAt');
+            // Drop raw binary blobs from in-memory picker list to prevent RAM bloat on 100+ audio files
+            return items.map(({ data, ...rest }) => rest as IMediaItem);
         },
         [searchQuery]
     ) || [];
+
+    const rowVirtualizer = useVirtualizer({
+        count: audioItems.length,
+        getScrollElement: () => listScrollRef.current,
+        estimateSize: () => 68,
+        overscan: 6,
+        initialRect: { width: 460, height: 420 },
+    });
 
     const handleSelect = async (item: IMediaItem) => {
         const { MediaPersistenceService } = await import('../../services/MediaPersistenceService');
@@ -140,7 +151,7 @@ const AudioPickerModalContent: React.FC<AudioPickerModalContentProps> = ({ modal
         <div className="fixed inset-0 z-10001 flex items-center justify-center apple-backdrop bg-stone-950/75 backdrop-blur-xl p-6">
             <div className="bg-stone-900 border border-white/10 ring-1 ring-white/5 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl apple-modal">
                 {/* Header */}
-                <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-stone-900/50 backdrop-blur-md">
+                <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-stone-900">
                     <div className="flex items-center gap-4">
                         <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
                             <Music className="w-5 h-5 text-purple-500" />
@@ -183,8 +194,8 @@ const AudioPickerModalContent: React.FC<AudioPickerModalContentProps> = ({ modal
                     </Button>
                 </div>
 
-                {/* Audio Grid */}
-                <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
+                {/* Audio List (Virtualized) */}
+                <div ref={listScrollRef} className="flex-1 overflow-y-auto p-4 no-scrollbar">
                     {audioItems.length === 0 ? (
                         <div className="h-64 flex flex-col items-center justify-center text-center p-6 space-y-4">
                             <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/5 flex items-center justify-center">
@@ -200,56 +211,79 @@ const AudioPickerModalContent: React.FC<AudioPickerModalContentProps> = ({ modal
                             </div>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 gap-2">
-                            {audioItems.map(item => (
-                                <button
-                                    key={item.id}
-                                    type="button"
-                                    onClick={() => handleSelect(item)}
-                                    className={cn(
-                                        "group w-full flex items-center gap-3 p-3 rounded-2xl bg-stone-900/40 border border-white/5 hover:border-purple-500/40 active:scale-[0.98] transition-all text-left cursor-pointer will-change-transform select-none",
-                                        selectedIds.includes(item.id) ? "border-purple-500/50 bg-purple-500/5" : "hover:bg-purple-500/5"
-                                    )}
-                                >
-                                    <div className={cn(
-                                        "w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 transition-transform",
-                                        selectedIds.includes(item.id)
-                                            ? "bg-purple-500 text-white border-purple-400"
-                                            : "bg-purple-500/20 text-purple-500 border-purple-500/20 group-hover:scale-105"
-                                    )}>
-                                        <Music className="w-5 h-5" />
+                        <div
+                            style={{
+                                height: `${rowVirtualizer.getTotalSize()}px`,
+                                width: '100%',
+                                position: 'relative',
+                            }}
+                        >
+                            {rowVirtualizer.getVirtualItems().map(virtualRow => {
+                                const item = audioItems[virtualRow.index];
+                                if (!item) return null;
+                                return (
+                                    <div
+                                        key={item.id}
+                                        data-index={virtualRow.index}
+                                        ref={rowVirtualizer.measureElement}
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            transform: `translateY(${virtualRow.start}px)`,
+                                            paddingBottom: '8px',
+                                        }}
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSelect(item)}
+                                            className={cn(
+                                                "group w-full flex items-center gap-3 p-3 rounded-2xl bg-stone-900/40 border border-white/5 hover:border-purple-500/40 active:scale-[0.98] transition-all text-left cursor-pointer select-none",
+                                                selectedIds.includes(item.id) ? "border-purple-500/50 bg-purple-500/5" : "hover:bg-purple-500/5"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 transition-transform",
+                                                selectedIds.includes(item.id)
+                                                    ? "bg-purple-500 text-white border-purple-400"
+                                                    : "bg-purple-500/20 text-purple-500 border-purple-500/20 group-hover:scale-105"
+                                            )}>
+                                                <Music className="w-5 h-5" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <span className={cn(
+                                                    "block text-xs font-bold transition-colors truncate",
+                                                    selectedIds.includes(item.id) ? "text-purple-400" : "text-stone-200 group-hover:text-purple-400"
+                                                )}>
+                                                    {item.name}
+                                                </span>
+                                                <span className="block text-[9px] font-bold text-stone-600 uppercase tracking-widest mt-0.5 truncate">
+                                                    {item.path}
+                                                </span>
+                                            </div>
+                                            {multi ? (
+                                                <div className={cn(
+                                                    "w-5 h-5 rounded-xl border transition-all flex items-center justify-center",
+                                                    selectedIds.includes(item.id)
+                                                        ? "bg-purple-500 border-purple-400 shadow-lg shadow-purple-500/20"
+                                                        : "border-white/10 group-hover:border-purple-500/40"
+                                                )}>
+                                                    {selectedIds.includes(item.id) && <div className="w-2 h-2 bg-white rounded-full shadow-inner" />}
+                                                </div>
+                                            ) : (
+                                                <Plus className="w-4 h-4 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                            )}
+                                        </button>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <span className={cn(
-                                            "block text-xs font-bold transition-colors truncate",
-                                            selectedIds.includes(item.id) ? "text-purple-400" : "text-stone-200 group-hover:text-purple-400"
-                                        )}>
-                                            {item.name}
-                                        </span>
-                                        <span className="block text-[9px] font-bold text-stone-600 uppercase tracking-widest mt-0.5 truncate">
-                                            {item.path}
-                                        </span>
-                                    </div>
-                                    {multi ? (
-                                        <div className={cn(
-                                            "w-5 h-5 rounded-xl border transition-all flex items-center justify-center",
-                                            selectedIds.includes(item.id)
-                                                ? "bg-purple-500 border-purple-400 shadow-lg shadow-purple-500/20"
-                                                : "border-white/10 group-hover:border-purple-500/40"
-                                        )}>
-                                            {selectedIds.includes(item.id) && <div className="w-2 h-2 bg-white rounded-full shadow-inner" />}
-                                        </div>
-                                    ) : (
-                                        <Plus className="w-4 h-4 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    )}
-                                </button>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-white/5 bg-stone-950/50 backdrop-blur-xl flex justify-end gap-3 shrink-0">
+                <div className="px-6 py-4 border-t border-white/5 bg-stone-950 flex justify-end gap-3 shrink-0">
                     <Button
                         size="xs"
                         variant="secondary"

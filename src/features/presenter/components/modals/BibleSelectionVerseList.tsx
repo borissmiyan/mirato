@@ -1,9 +1,9 @@
-import React, { useRef } from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { List } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { Verse } from '@/core/types';
-import { colorTokens, radiusTokens, spacingTokens } from '@/shared/tokens';
+import { Badge, CustomScriptureStackIcon, EmptyState, VirtualList } from '@/shared/ui';
 
 interface BibleSelectionVerseListProps {
   versesInChapter: Verse[];
@@ -11,96 +11,111 @@ interface BibleSelectionVerseListProps {
   handleVerseClick: (v: Verse, e: React.MouseEvent) => void;
 }
 
+/**
+ * Full-height virtualized verse column for BibleSelectionModal,
+ * matching the Bible page's VerseList header and verse-row visual language.
+ */
 export const BibleSelectionVerseList: React.FC<BibleSelectionVerseListProps> = ({
   versesInChapter,
   selectedVerseNumbers,
-  handleVerseClick
+  handleVerseClick,
 }) => {
   const { t } = useTranslation();
-  const parentRef = useRef<HTMLDivElement>(null);
 
-  const rowVirtualizer = useVirtualizer({
-    count: versesInChapter.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 56,
-    overscan: 5,
-  });
+  const getItemKey = useCallback(
+    (v: Verse) => v.id ?? `${v.translationId}-${v.bookId}-${v.chapter}-${v.verseNumber}`,
+    []
+  );
+
+  const estimateItemHeight = useCallback(
+    (index: number) => {
+      const textLen = versesInChapter[index]?.text?.length ?? 80;
+      const estimatedLines = Math.max(1, Math.ceil(textLen / 30));
+      return 26 + estimatedLines * 20;
+    },
+    [versesInChapter]
+  );
+
+  const renderVerse = useCallback(
+    (v: Verse) => {
+      const isSelected = selectedVerseNumbers.includes(v.verseNumber);
+      return (
+        <button
+          type="button"
+          onClick={(e) => handleVerseClick(v, e)}
+          className={cn(
+            'group w-full text-left px-3 py-2.5 rounded-xl border transition-colors duration-150 cursor-pointer select-none',
+            isSelected
+              ? 'bg-stone-800 border-stone-600'
+              : 'bg-[#1f1c1a] border-stone-800/90 hover:bg-[#262320] hover:border-stone-700'
+          )}
+        >
+          <div className="flex items-start gap-2.5">
+            <span
+              className={cn(
+                'min-w-[26px] h-6 px-1.5 rounded-lg flex items-center justify-center shrink-0 font-mono font-bold text-[11px] border tabular-nums transition-colors mt-0.5',
+                isSelected
+                  ? 'bg-accent text-stone-950 border-accent'
+                  : 'bg-stone-950 text-stone-400 border-stone-800 group-hover:text-stone-200'
+              )}
+            >
+              {v.verseNumber}
+            </span>
+            <p
+              className={cn(
+                'flex-1 font-serif text-[14px] leading-relaxed transition-colors duration-150 min-w-0',
+                isSelected ? 'text-stone-100' : 'text-stone-300 group-hover:text-stone-100'
+              )}
+            >
+              {v.text}
+            </p>
+          </div>
+        </button>
+      );
+    },
+    [selectedVerseNumbers, handleVerseClick]
+  );
+
+  const firstKey = versesInChapter[0]
+    ? `${versesInChapter[0].translationId}:${versesInChapter[0].bookId}:${versesInChapter[0].chapter}`
+    : 'empty';
 
   return (
-    <div className="flex-1 flex flex-col min-h-0">
-      <div className="flex items-center justify-between mb-2 px-1 shrink-0">
-        <label className="text-xs font-bold text-stone-500 uppercase tracking-wider">
-          {t('verses', 'Verses')}
-        </label>
-        {selectedVerseNumbers.length > 0 && (
-          <span className="text-xs font-bold text-amber-500/80">
-            {t('selected_count', { count: selectedVerseNumbers.length, defaultValue: '{{count}} selected' })}
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+      <div className="px-3.5 py-2.5 border-b border-white/[0.06] flex items-center justify-between bg-[#141210] shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="p-1 bg-accent/20 rounded-lg shrink-0">
+            <CustomScriptureStackIcon className="w-3.5 h-3.5 text-accent" />
+          </div>
+          <span className="text-xs font-bold text-stone-200 uppercase tracking-wider truncate">
+            {t('verses', 'Стихи')}
           </span>
-        )}
-      </div>
-      <div
-        ref={parentRef}
-        className={cn(
-          "flex-1 overflow-y-auto no-scrollbar bg-stone-950/60 border border-white/5 p-2",
-          radiusTokens.lg
-        )}
-      >
-        <div
-          style={{
-            height: `${rowVirtualizer.getTotalSize()}px`,
-            width: '100%',
-            position: 'relative',
-          }}
-        >
-          {rowVirtualizer.getVirtualItems().map(virtualRow => {
-            const v = versesInChapter[virtualRow.index];
-            if (!v) return null;
-            const isSelected = selectedVerseNumbers.includes(v.verseNumber);
-
-            return (
-              <div
-                key={v.id}
-                data-index={virtualRow.index}
-                ref={rowVirtualizer.measureElement}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualRow.start}px)`,
-                  paddingBottom: '8px',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={(e) => handleVerseClick(v, e)}
-                  className={cn(
-                    "w-full p-3 rounded-xl text-left transition-all border cursor-pointer group relative overflow-hidden",
-                    isSelected
-                      ? "bg-amber-500/10 border-amber-500/30 ring-1 ring-amber-500/20"
-                      : "bg-stone-900/50 border-white/5 hover:border-white/10 hover:bg-stone-900/80"
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <span className={cn(
-                      "text-xs font-bold mt-0.5 shrink-0 w-6 text-right font-mono",
-                      isSelected ? "text-amber-500" : "text-stone-500"
-                    )}>
-                      {v.verseNumber}
-                    </span>
-                    <p className={cn(
-                      "text-xs leading-relaxed transition-colors line-clamp-2 min-w-0 font-medium",
-                      isSelected ? "text-stone-100" : "text-stone-300 group-hover:text-white"
-                    )}>
-                      {v.text}
-                    </p>
-                  </div>
-                </button>
-              </div>
-            );
-          })}
         </div>
+        <Badge size="xs" variant="secondary">
+          {versesInChapter.length}
+        </Badge>
       </div>
+
+      <VirtualList
+        items={versesInChapter}
+        getItemKey={getItemKey}
+        renderItem={renderVerse}
+        estimateItemHeight={estimateItemHeight}
+        gap={6}
+        overscan={8}
+        resetKey={firstKey}
+        className="px-2.5 py-2.5"
+        emptyState={
+          <div className="py-12">
+            <EmptyState
+              icon={List}
+              title={t('no_verses_found', 'No verses found for this chapter')}
+              size="sm"
+              border="none"
+            />
+          </div>
+        }
+      />
     </div>
   );
 };

@@ -71,8 +71,8 @@ export const usePresentationManagement = (activeServiceId: string | null) => {
             if ('showSaveFilePicker' in window) {
                 try {
                     const handle = await window.showSaveFilePicker?.({
-                        suggestedName: `${pres.name}.ektp`,
-                        types: [{ description: 'Presentation Package', accept: { 'application/zip': ['.ektp'] } }]
+                        suggestedName: `${pres.name}.mrtp`,
+                        types: [{ description: 'Mirato Presentation Package', accept: { 'application/zip': ['.mrtp', '.ektp'] } }]
                     });
                     if (handle) {
                         const writable = await handle.createWritable();
@@ -98,7 +98,7 @@ export const usePresentationManagement = (activeServiceId: string | null) => {
             const handles = await window.showOpenFilePicker?.({
                 types: [{
                     description: 'Presentation or PowerPoint',
-                    accept: { 'application/zip': ['.ektp', '.pptx'] }
+                    accept: { 'application/zip': ['.mrtp', '.ektp', '.pptx'] }
                 }],
                 multiple: false
             });
@@ -107,7 +107,7 @@ export const usePresentationManagement = (activeServiceId: string | null) => {
 
             const file = await handle.getFile();
 
-            if (file.name.endsWith('.ektp')) {
+            if (file.name.toLowerCase().endsWith('.mrtp') || file.name.toLowerCase().endsWith('.ektp')) {
                 const presentationId = await EktpService.unpack(file);
                 const presentation = await db.presentationFiles.get(presentationId);
 

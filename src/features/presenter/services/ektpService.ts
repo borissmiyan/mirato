@@ -5,6 +5,7 @@ import { ThumbnailService } from './ThumbnailService';
 import { packSlideThumbnails, unpackSlideThumbnails } from './ektpThumbnailHelpers';
 import { APP_VERSION, EKT_SCHEMA_VERSION } from '@/core/constants';
 import { fontInstallerService } from '@/core/services/fontInstallerService';
+import { toMiratoFilename, yieldToMain } from '@/core/utils/fileExtensions';
 
 interface FileSystemHandleWithPermissions extends FileSystemFileHandle {
     queryPermission: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
@@ -103,8 +104,9 @@ export const EktpService = {
             };
         }
 
-        // 4. Handle Nested Presentations recursively
+        // 4. Handle Nested Presentations recursively (yield periodically for 100+ slides)
         const nestedFolder = zip.folder('nested');
+        let packedNestedCount = 0;
         for (const slide of presentation.slides) {
             const ns = slide as ISlide & { presentationId?: string; masterPresentationId?: string; linkedPresentationId?: string; localNestedPresentationId?: string; ektpHash?: string };
             const nestedId = slide.type === 'nested' ? ns.presentationId : (ns.masterPresentationId || ns.linkedPresentationId || ns.localNestedPresentationId);
@@ -116,7 +118,7 @@ export const EktpService = {
                     const nestedHash = await sha256(nestedBlob);
 
                     ns.ektpHash = nestedHash; // Replace link ID with self-verifying hash
-                    nestedFolder?.file(`${nestedHash}.ektp`, nestedBlob, { compression: 'STORE' });
+                    nestedFolder?.file(`${nestedHash}.mrtp`, nestedBlob, { compression: 'STORE' });
                     
                     Object.assign(manifest, nestedManifest);
 
@@ -125,6 +127,11 @@ export const EktpService = {
                     delete ns.masterPresentationId;
                     delete ns.linkedPresentationId;
                     delete ns.localNestedPresentationId;
+
+                    packedNestedCount++;
+                    if (packedNestedCount % 5 === 0) {
+                        await yieldToMain();
+                    }
                 } catch (e) {
                     console.error(`Failed to pack nested presentation on slide ${slide.id}`, e);
                 }
@@ -312,14 +319,17 @@ export const EktpService = {
             }
         });
 
-        // Recurse into Nested blocks independently triggering downstream dedup evaluation before unpacking memory
+        // Recurse into Nested blocks sequentially (prevents 100+ parallel JSZip/IndexedDB RAM spikes)
         const nestedSlides = presentation.slides.filter(s => (s as INestedSlide & { ektpHash?: string }).ektpHash);
 
-        await Promise.all(nestedSlides.map(async (slide) => {
+        let unpackedNestedCount = 0;
+        for (const slide of nestedSlides) {
             const ns = slide as INestedSlide & { ektpHash?: string; masterPresentationId?: string };
-            if (!ns.ektpHash) return;
+            if (!ns.ektpHash) continue;
             try {
-                const nestedBlob = await zip.file(`nested/${ns.ektpHash}.ektp`)?.async('blob');
+                // Support both canonical .mrtp and legacy .ektp nested archives
+                const nestedEntry = zip.file(`nested/${ns.ektpHash}.mrtp`) || zip.file(`nested/${ns.ektpHash}.ektp`);
+                const nestedBlob = await nestedEntry?.async('blob');
                 if (!nestedBlob) throw new Error("Nested archive missing in ZIP target tree");
 
                 // Recursion handles deduplication under the hood, passing binId down so it is imported to the pool
@@ -332,10 +342,15 @@ export const EktpService = {
                     ns.masterPresentationId = childId;
                 }
                 delete ns.ektpHash;
+
+                unpackedNestedCount++;
+                if (unpackedNestedCount % 4 === 0) {
+                    await yieldToMain();
+                }
             } catch (e) {
                 console.error(`Failed to load nested presentation ${ns.ektpHash}`, e);
             }
-        }));
+        }
 
         // Handle visual metadata (Preview PNG) for finder
         const previewFile = zip.file('preview.png');
@@ -489,7 +504,7 @@ export const EktpService = {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = filename.endsWith('.ektp') ? filename : `${filename}.ektp`;
+        link.download = toMiratoFilename(filename, 'presentation');
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

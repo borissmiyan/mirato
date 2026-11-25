@@ -50,13 +50,13 @@ export async function readHymnalManifest(hymnalDirPath: string): Promise<HymnalM
         }
         try {
             const files = await fs.promises.readdir(hymnalDirPath);
-            const ektpFiles = files.filter(f => f.endsWith('.ektp'));
+            const ektpFiles = files.filter(f => f.endsWith('.mrtp') || f.endsWith('.ektp'));
 
             manifest.hymns = ektpFiles.map(file => {
-                const match = file.match(/^(\d+)[-.\s]*(.+)\.ektp$/);
+                const match = file.match(/^(\d+)[-.\s]*(.+)\.(mrtp|ektp)$/);
                 const numberStr = match ? match[1] : '';
-                const title = match ? match[2].trim() : file.replace('.ektp', '');
-                const stableId = file.replace('.ektp', '').toLowerCase().replace(/\s+/g, '_');
+                const title = match ? match[2].trim() : file.replace(/\.(mrtp|ektp)$/, '');
+                const stableId = file.replace(/\.(mrtp|ektp)$/, '').toLowerCase().replace(/\s+/g, '_');
 
                 return {
                     id: stableId,
@@ -84,8 +84,8 @@ export async function readHymnalManifest(hymnalDirPath: string): Promise<HymnalM
 
             let file = h.file;
             if (!file) {
-                const match = diskFiles.find(f => f.startsWith(`${num}`) && f.endsWith('.ektp'));
-                file = match || `${num} - ${h.title}.ektp`;
+                const match = diskFiles.find(f => f.startsWith(`${num}`) && (f.endsWith('.mrtp') || f.endsWith('.ektp')));
+                file = match || `${num} - ${h.title}.mrtp`;
             }
 
             return {
@@ -120,13 +120,15 @@ export async function readHymnalCover(hymnalDirPath: string): Promise<string | n
  * Recursively scans directory trees to locate custom and bundled hymnal packages.
  */
 export async function scanHymnals(libraryDir: string, bundledDir: string): Promise<HymnalScanResult[]> {
-    const searchRoots = [
-        { dirPath: path.join(libraryDir, 'custom'), isBundled: false },
-        { dirPath: path.join(libraryDir, 'bundled'), isBundled: true }
-    ];
+    const searchRoots: Array<{ dirPath: string; isBundled: boolean }> = [];
+    // Scan fresh app-bundled hymnals FIRST so updates always take precedence over older userData copies
     if (bundledDir !== libraryDir && fs.existsSync(bundledDir)) {
         searchRoots.push({ dirPath: bundledDir, isBundled: true });
     }
+    searchRoots.push(
+        { dirPath: path.join(libraryDir, 'bundled'), isBundled: true },
+        { dirPath: path.join(libraryDir, 'custom'), isBundled: false }
+    );
     const results: HymnalScanResult[] = [];
     const seenDirs = new Set<string>();
 
@@ -140,7 +142,7 @@ export async function scanHymnals(libraryDir: string, bundledDir: string): Promi
                 const fullPath = path.join(dir, dirent.name);
                 if (dirent.isDirectory()) {
                     await search(fullPath, depth + 1, isBundledRoot);
-                } else if (dirent.name === 'hymnal.json' || dirent.name.endsWith('.ektp')) {
+                } else if (dirent.name === 'hymnal.json' || dirent.name.endsWith('.mrtp') || dirent.name.endsWith('.ektp')) {
                     isHymnalDir = true;
                 }
             }
@@ -155,22 +157,26 @@ export async function scanHymnals(libraryDir: string, bundledDir: string): Promi
                 }
 
                 const ektpFileMtimes: Record<string, string> = {};
-                async function collectMtimes(scanDir: string, relBase: string) {
-                    try {
-                        const entries = await fs.promises.readdir(scanDir, { withFileTypes: true });
-                        for (const entry of entries) {
-                            const relPath = relBase ? `${relBase}/${entry.name}` : entry.name;
-                            const fullEntryPath = path.join(scanDir, entry.name);
-                            if (entry.isDirectory()) {
-                                await collectMtimes(fullEntryPath, relPath);
-                            } else if (entry.name.endsWith('.ektp')) {
-                                const stat = await fs.promises.stat(fullEntryPath);
-                                ektpFileMtimes[relPath] = `${Math.floor(stat.mtimeMs)}_${stat.size}`;
+                // Bundled hymnals use manifestVersion for change detection; skip stat() on
+                // thousands of bundled .mrtp files on every launch to keep startup instant.
+                if (!isBundledRoot) {
+                    async function collectMtimes(scanDir: string, relBase: string) {
+                        try {
+                            const entries = await fs.promises.readdir(scanDir, { withFileTypes: true });
+                            for (const entry of entries) {
+                                const relPath = relBase ? `${relBase}/${entry.name}` : entry.name;
+                                const fullEntryPath = path.join(scanDir, entry.name);
+                                if (entry.isDirectory()) {
+                                    await collectMtimes(fullEntryPath, relPath);
+                                } else if (entry.name.endsWith('.mrtp') || entry.name.endsWith('.ektp')) {
+                                    const stat = await fs.promises.stat(fullEntryPath);
+                                    ektpFileMtimes[relPath] = `${Math.floor(stat.mtimeMs)}_${stat.size}`;
+                                }
                             }
-                        }
-                    } catch { }
+                        } catch { }
+                    }
+                    await collectMtimes(dir, '');
                 }
-                await collectMtimes(dir, '');
                 results.push({ path: dir, languageFolder, isBundled: isBundledRoot, ektpFileMtimes });
             }
         } catch { }

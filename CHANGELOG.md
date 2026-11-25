@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.4.3] - 2026-11-25
+
+### Added & Improved
+
+- **Instant Projector Startup**: The projector screen now opens immediately without the 5-second delay on first live launch.
+- **Export Presentations to PowerPoint, PDF & LibreOffice**: Save presentations in Mirato format, PowerPoint, PDF, or LibreOffice via `File → Export` or by right-clicking the Export button.
+- **More Hymnals & Backing Tracks**: Added popular hymnals, visibility toggles in Settings, fresh themes, and accompaniment audio with playback speed and volume controls.
+- **Smoother Hymns & Nested Presentations**: Pressing Enter immediately projects the first slide, tiles accurately show the current slide number and live status, and switching slides is smooth and predictable.
+- **Flicker-Free Dual-Translation Bible**: Slides with two translations now show both texts together right away.
+- **Live Speed & Volume Controls**: Adjust music or video playback speed and volume during the service without interrupting the screen.
+- **New Mirato Launch Screen**: Smooth animated startup with friendly loading messages.
+
+## [2.3.0] - 2026-10-18
+
+### Added & Improved
+
+- **New Mirato Name & Automatic Data Transfer**: Official rename to Mirato with automatic transfer of all existing presentations, Bibles, settings, and files on first launch.
+- **Redesigned Media Pool**: Browse images, videos, and audio in Grid, List, or Folder views with quick preview for any file.
+- **Easier Text Editing on Slides**: Text boxes automatically adjust to fit text, with smooth and accurate mouse dragging and resizing.
+- **Improved PowerPoint Import**: Better preservation of text colors, styles, and outlines when opening PowerPoint files.
+- **Presentation Organization**: Star favorites, organize with tags, and find presentations faster.
+- **Refreshed Interface**: Cleaner buttons, switches, and windows across the app.
+
+## [2.2.6] - 2026-09-18
+
+### Added & Improved
+
+- **Smart Fonts**: Automatic presentation font application across all screens and zero-admin OS font installation on Windows and macOS.
+- **Instant Presentation Opening & Hardware Audio Compression**: Eliminated launch freezes and added compact lossless-quality background audio compression.
+- **Native 0.1s Media Trimming**: Offline native video and audio trimming.
+- **Memory & Search Optimization**: Progressive Bible search results, optimized slide history snapshots, LRU image cache, and 1-click cache cleaner in Data Settings.
+
+## [2.2.5] - 2026-07-10
+
+### Added
+
+- **Remote Controller Bible Support**: Added Bible verse browsing and projection directly from the mobile remote controller.
+
+## [2.2.4] - 2026-06-15
+
+### Added
+
+- **German Language Support**: Added full German (`de`) localization across the interface.
+
+## [2.2.3] - 2026-06-12
+
+### Added & Fixed
+
+- **Scene Screen & Remote Fixes**: Introduced Scene Screen display type, fixed remote controller initial active slide sync, and improved canvas keyboard shortcuts.
+
 ## [2.2.2] - 2026-04-22
 
 ### Fixed

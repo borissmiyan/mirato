@@ -7,8 +7,17 @@ import {
     getTrackProgress,
     pauseTrack,
     setTrackVolume,
+    setTrackSpeed,
     seekBufferSourceTrack
 } from './audio/AudioPlaybackController';
+import {
+    readStoredGlobalSpeed,
+    readStoredGlobalVolume,
+    readStoredGlobalMuted,
+    persistGlobalSpeed,
+    persistGlobalVolume,
+    persistGlobalMuted
+} from './audio/AudioGlobalPrefs';
 
 export { type IActiveTrack } from './audio/types';
 
@@ -16,6 +25,9 @@ class AudioService {
     private static instance: AudioService;
     private audioContext: AudioContext | null = null;
     public targetScopeId: string | null = null;
+    public globalPlaybackSpeed: number = readStoredGlobalSpeed();
+    public globalVolume: number = readStoredGlobalVolume();
+    public globalMuted: boolean = readStoredGlobalMuted();
 
     // Playback state
     public activeTracks: Map<string, IActiveTrack> = new Map();
@@ -113,7 +125,8 @@ class AudioService {
                 const muteChanged = currentTrack.scope.isMuted !== activeScope.isMuted;
 
                 if (volumeChanged || muteChanged) {
-                    const targetVolume = activeScope.isMuted ? 0.001 : (activeScope.volume ?? 1);
+                    const effectiveMuted = Boolean(activeScope.isMuted || this.globalMuted);
+                    const targetVolume = effectiveMuted ? 0.001 : (activeScope.volume ?? 1) * this.globalVolume;
                     const fadeDuration = activeScope.volumeFadeDuration ?? 0.1;
 
                     rampGain(currentTrack.gain, targetVolume, now, fadeDuration);
@@ -237,11 +250,13 @@ class AudioService {
         });
 
         const offset = scope.trimStart || 0;
+        const initialSpeed = Math.max(0.25, Math.min(4, this.globalPlaybackSpeed));
         let source: AudioBufferSourceNode | MediaElementAudioSourceNode;
 
         if (audio) {
             audio.loop = false;
             audio.currentTime = offset;
+            audio.playbackRate = initialSpeed;
             source = ctx.createMediaElementSource(audio);
 
             const trimEnd = scope.trimEnd || 0;
@@ -265,6 +280,7 @@ class AudioService {
             const bufSource = ctx.createBufferSource();
             if (buffer) {
                 bufSource.buffer = buffer;
+                bufSource.playbackRate.value = initialSpeed;
 
                 if (scope.loop) {
                     bufSource.loop = true;
@@ -290,7 +306,8 @@ class AudioService {
         source.connect(gainNode);
         gainNode.connect(ctx.destination);
 
-        const targetVolume = scope.isMuted ? 0.001 : (scope.volume ?? 1);
+        const effectiveMuted = Boolean(scope.isMuted || this.globalMuted);
+        const targetVolume = effectiveMuted ? 0.001 : (scope.volume ?? 1) * this.globalVolume;
         gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, targetVolume), now + fadeInTime);
 
         const onEnded = () => {
@@ -315,7 +332,7 @@ class AudioService {
         this.activeTracks.set(scope.id, {
             source,
             gain: gainNode,
-            scope: { ...scope },
+            scope: { ...scope, speed: initialSpeed },
             mediaElement: audio,
             startTime: now,
             startOffset: offset,
@@ -409,6 +426,40 @@ class AudioService {
         const track = this.activeTracks.get(scopeId);
         if (!track) return;
         setTrackVolume(track, volume, this.audioContext);
+    }
+
+    public setTrackSpeed(scopeId: string, speed: number) {
+        const track = this.activeTracks.get(scopeId);
+        if (!track) return;
+        setTrackSpeed(track, speed, this.audioContext);
+    }
+
+    public setGlobalPlaybackSpeed(speed: number) {
+        const clamped = Math.max(0.25, Math.min(4, speed));
+        this.globalPlaybackSpeed = clamped;
+        persistGlobalSpeed(clamped);
+        this.activeTracks.forEach(track => {
+            setTrackSpeed(track, clamped, this.audioContext);
+        });
+    }
+
+    public setGlobalVolume(volume: number) {
+        const clamped = Math.max(0, Math.min(1, volume));
+        this.globalVolume = clamped;
+        persistGlobalVolume(clamped);
+        this.activeTracks.forEach(track => {
+            const effective = (track.scope.isMuted || this.globalMuted) ? 0 : (track.scope.volume ?? 1) * clamped;
+            setTrackVolume(track, effective, this.audioContext);
+        });
+    }
+
+    public setGlobalMuted(muted: boolean) {
+        this.globalMuted = muted;
+        persistGlobalMuted(muted);
+        this.activeTracks.forEach(track => {
+            const effective = (track.scope.isMuted || muted) ? 0 : (track.scope.volume ?? 1) * this.globalVolume;
+            setTrackVolume(track, effective, this.audioContext);
+        });
     }
 
     /**

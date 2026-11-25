@@ -80,7 +80,7 @@ export const CanvasFloatingToolbar: React.FC<CanvasFloatingToolbarProps> = React
     return (
         <div
             className={cn(
-                "absolute -translate-x-1/2 flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-stone-900/90 backdrop-blur-md border border-white/10 shadow-2xl z-50 pointer-events-auto select-none",
+"absolute -translate-x-1/2 flex items-center gap-0.5 px-2 py-1.5 rounded-full bg-stone-900 border border-white/10 shadow-2xl z-50 pointer-events-auto select-none",
                 isNearTop ? "origin-top" : "origin-bottom"
             )}
             style={{

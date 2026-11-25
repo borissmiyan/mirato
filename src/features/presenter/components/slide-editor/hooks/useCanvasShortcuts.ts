@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { ICanvasItem } from '@/core/types';
 import { CanvasTool } from '@/core/store/uiAtoms';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
@@ -46,27 +46,9 @@ export function useCanvasShortcuts({
   canvasTool,
   setVectorEditingId,
   setShowRulers,
-  handleZoomFit,
-  handleZoomToSelection,
-  handleFlipH,
-  handleFlipV,
-  handleDelete,
-  handleCopyStyle,
-  handlePasteStyle,
-  handleDuplicate,
-  handleGroup,
-  handleUngroup,
-  handleToggleMask,
-  handleToggleLock,
-  handleToggleVisibility,
-  handleBringForward,
-  handleBringToFront,
-  handleSendBackward,
-  handleSendToBack,
 }: UseCanvasShortcutsProps) {
   const [isAltHeld, setIsAltHeld] = useState(false);
   const [isShiftHeld, setIsShiftHeld] = useState(false);
-  const nudgeTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -110,150 +92,15 @@ export function useCanvasShortcuts({
         }
       }
 
-      // Shift+R: Toggle Rulers
-      if (e.shiftKey && e.key.toLowerCase() === 'r' && !e.metaKey && !e.ctrlKey) {
+      // Shift+R: Toggle Rulers (layout-independent)
+      if (e.shiftKey && (e.code === 'KeyR' || e.key.toLowerCase() === 'r') && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
         setShowRulers((prev) => !prev);
         return;
       }
-
-      // Shift+1: Zoom to Fit
-      if (e.shiftKey && (e.key === '!' || e.key === '1' || e.code === 'Digit1') && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        handleZoomFit();
-        return;
-      }
-
-      // Shift+2: Zoom to Selection
-      if (e.shiftKey && (e.key === '@' || e.key === '"' || e.key === '2' || e.code === 'Digit2') && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        handleZoomToSelection();
-        return;
-      }
-
-      // Shift+0: Zoom 100%
-      if (e.shiftKey && (e.key === '0' || e.code === 'Digit0') && !e.metaKey && !e.ctrlKey) {
-        e.preventDefault();
-        handleZoomFit();
-        return;
-      }
-
-      if (selectedIds.length === 0) return;
-
-      // Flip Horizontal: Shift+H
-      if (e.shiftKey && !e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'h') {
-        e.preventDefault();
-        handleFlipH();
-        return;
-      }
-
-      // Flip Vertical: Shift+V
-      if (e.shiftKey && !e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'v') {
-        e.preventDefault();
-        handleFlipV();
-        return;
-      }
-
-      const isMacCmd = e.metaKey || e.ctrlKey;
-
-      // Delete / Backspace
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        handleDelete();
-        return;
-      }
-
-      // Copy Style: Cmd+Alt+C
-      if (isMacCmd && e.altKey && e.key.toLowerCase() === 'c') {
-        e.preventDefault();
-        handleCopyStyle();
-        return;
-      }
-
-      // Paste Style: Cmd+Alt+V
-      if (isMacCmd && e.altKey && e.key.toLowerCase() === 'v') {
-        e.preventDefault();
-        handlePasteStyle();
-        return;
-      }
-
-      // Duplicate: Cmd+D
-      if (isMacCmd && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        handleDuplicate();
-        return;
-      }
-
-      // Group: Cmd+G / Ungroup: Cmd+Shift+G
-      if (isMacCmd && e.key.toLowerCase() === 'g') {
-        e.preventDefault();
-        if (e.shiftKey) handleUngroup(); else handleGroup();
-        return;
-      }
-
-      // Toggle Mask: Ctrl+Cmd+M
-      if (isMacCmd && (e.ctrlKey || e.altKey) && e.key.toLowerCase() === 'm') {
-        e.preventDefault();
-        handleToggleMask();
-        return;
-      }
-
-      // Lock / Unlock: Cmd+Shift+L
-      if (isMacCmd && e.shiftKey && e.key.toLowerCase() === 'l') {
-        e.preventDefault();
-        handleToggleLock();
-        return;
-      }
-
-      // Hide / Show: Cmd+Shift+H
-      if (isMacCmd && e.shiftKey && e.key.toLowerCase() === 'h') {
-        e.preventDefault();
-        handleToggleVisibility();
-        return;
-      }
-
-      // Bring to Front / Bring Forward
-      if (isMacCmd && (e.key === ']' || e.code === 'BracketRight')) {
-        e.preventDefault();
-        if (e.altKey || e.shiftKey) handleBringToFront(); else handleBringForward();
-        return;
-      }
-
-      // Send to Back / Send Backward
-      if (isMacCmd && (e.key === '[' || e.code === 'BracketLeft')) {
-        e.preventDefault();
-        if (e.altKey || e.shiftKey) handleSendToBack(); else handleSendBackward();
-        return;
-      }
-
-      // Arrow Nudge
-      if (e.key.startsWith('Arrow')) {
-        e.preventDefault();
-        const step = e.shiftKey ? 5 : 1;
-        let dx = 0;
-        let dy = 0;
-        if (e.key === 'ArrowLeft') dx = -step;
-        else if (e.key === 'ArrowRight') dx = step;
-        else if (e.key === 'ArrowUp') dy = -step;
-        else if (e.key === 'ArrowDown') dy = step;
-
-        if (dx !== 0 || dy !== 0) {
-          for (const id of selectedIds) {
-            const cur = resolvedItems.find((i) => i.id === id);
-            if (cur && !cur.locked) {
-              usePresentationStore.getState().updateCanvasItem(slideId, id, {
-                x: Math.round((cur.x + dx) * 10) / 10,
-                y: Math.round((cur.y + dy) * 10) / 10,
-              });
-            }
-          }
-          if (nudgeTimerRef.current) clearTimeout(nudgeTimerRef.current);
-          nudgeTimerRef.current = setTimeout(() => {
-            usePresentationStore.getState().takeSnapshot(slideId).catch(console.error);
-            nudgeTimerRef.current = null;
-          }, 350);
-        }
-      }
+      // Note: Canvas manipulation shortcuts (Cmd+D, Cmd+G, Cmd+[/], Shift+H/V, Shift+1/2/0,
+      // Delete/Backspace, Arrow Nudge, etc.) are centrally handled by useGlobalShortcuts +
+      // executePresentationHotkeys with zone priority so they never double-fire or hijack timeline shortcuts.
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -271,10 +118,6 @@ export function useCanvasShortcuts({
     window.addEventListener('blur', handleWindowBlur);
 
     return () => {
-      if (nudgeTimerRef.current) {
-        clearTimeout(nudgeTimerRef.current);
-        nudgeTimerRef.current = null;
-      }
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleWindowBlur);
@@ -282,11 +125,7 @@ export function useCanvasShortcuts({
   }, [
     slideId, resolvedItems, selectedIds, editingId, canvasTool,
     setSelectedIds, setEditingId, setToolAt, setVectorEditingId,
-    setShowRulers, handleZoomFit, handleZoomToSelection, handleFlipH,
-    handleFlipV, handleDelete, handleCopyStyle, handlePasteStyle,
-    handleDuplicate, handleGroup, handleUngroup, handleToggleMask,
-    handleToggleLock, handleToggleVisibility, handleBringForward,
-    handleBringToFront, handleSendBackward, handleSendToBack,
+    setShowRulers,
   ]);
 
   return {

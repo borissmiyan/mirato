@@ -2,8 +2,8 @@ import React, { useCallback, useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TFunction } from 'i18next';
 import { cn } from '@/core/utils/cn';
-import { IAudioScope, ISlide, ICanvasSlide } from '@/core/types';
-import { Music, Repeat, Trash2, ArrowRightLeft, AlertCircle, Copy, Layers } from 'lucide-react';
+import { IAudioScope, ICanvasSlide, HymnalAudioVariant } from '@/core/types';
+import { Music, Mic, Repeat, Trash2, ArrowRightLeft, AlertCircle, Copy, Layers } from 'lucide-react';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { usePresenterStore } from '@/features/presenter/store/presenterStore';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -11,6 +11,12 @@ import { db } from '@/core/db';
 import ContextMenu, { ContextMenuItem } from '@/shared/ui/ContextMenu';
 import { gainToDb, dbToGain } from '@/core/utils/audioUtils';
 import { TimelineItem } from './hooks/useTimelineLayout';
+import { IpcService } from '@/core/services/ipcService';
+import {
+    parseHymnalAudioFileId,
+    rewriteHymnalAudioFileIdVariant,
+} from '@/features/hymns/services/hymnalAudioCatalog';
+import { audioService } from '@/features/presenter/services/AudioService';
 
 // Sub-components & Hooks
 import { AudioWaveform } from './AudioScopeBlock/AudioWaveform';
@@ -23,6 +29,9 @@ interface AudioScopeBlockProps {
     endIdx: number;
     visualTimeline: TimelineItem[];
     tileGap: number;
+    readOnly?: boolean;
+    /** Optional override handler when switching Minus/Plus variant on virtual IHymnSlide audio clips. */
+    onSwitchAudioVariant?: (targetVariant: HymnalAudioVariant) => void;
 }
 
 // Helper to identify technical IDs that need replacement with human-readable names
@@ -44,6 +53,8 @@ const AudioScopeBlock: React.FC<AudioScopeBlockProps> = ({
     startIdx,
     endIdx,
     visualTimeline,
+    readOnly = false,
+    onSwitchAudioVariant,
 }) => {
     const { t } = useTranslation();
     
@@ -61,9 +72,55 @@ const AudioScopeBlock: React.FC<AudioScopeBlockProps> = ({
     const settings = usePresenterStore(s => s.settings);
 
     const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+    const [availableVariants, setAvailableVariants] = useState<{ minus: boolean; plus: boolean } | null>(null);
     const handleCloseContextMenu = useCallback(() => setContextMenu(null), []);
     const [isEditingVolume, setIsEditingVolume] = useState(false);
     const [volumeInputValue, setVolumeInputValue] = useState('');
+
+    const hymnAudioInfo = useMemo(() => parseHymnalAudioFileId(scope.fileId), [scope.fileId]);
+    const currentVariant: HymnalAudioVariant | null = hymnAudioInfo
+        ? (scope.audioVariant ?? hymnAudioInfo.variant)
+        : null;
+    const targetVariant: HymnalAudioVariant = currentVariant === 'plus' ? 'minus' : 'plus';
+
+    const handleOpenContextMenu = useCallback((e: React.MouseEvent) => {
+        if (readOnly && !hymnAudioInfo) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenu({ x: e.clientX, y: e.clientY });
+
+        if (hymnAudioInfo && hymnAudioInfo.hymnNumber !== null && IpcService.isElectron()) {
+            const api = window.electron?.ipcRenderer?.hymnalAudio;
+            if (api?.getAvailableVariants) {
+                api.getAvailableVariants(hymnAudioInfo.hymnalId, hymnAudioInfo.hymnNumber)
+                    .then(setAvailableVariants)
+                    .catch(() => setAvailableVariants(null));
+            }
+        }
+    }, [readOnly, hymnAudioInfo]);
+
+    const handleSwitchVariant = useCallback(() => {
+        if (!hymnAudioInfo) return;
+        audioService.stopAll(0.15);
+        if (onSwitchAudioVariant) {
+            onSwitchAudioVariant(targetVariant);
+        } else {
+            const nextFileId = rewriteHymnalAudioFileIdVariant(scope.fileId, targetVariant);
+            const nextFileName = scope.fileName
+                ? scope.fileName.replace(/\(\s*[-+]\s*\)/, targetVariant === 'plus' ? '(+)' : '(-)')
+                : scope.fileName;
+            updateAudioScope(scope.id, {
+                fileId: nextFileId,
+                fileName: nextFileName,
+                audioVariant: targetVariant,
+            });
+        }
+        setContextMenu(null);
+    }, [hymnAudioInfo, onSwitchAudioVariant, scope.fileId, scope.fileName, scope.id, targetVariant, updateAudioScope]);
+
+    const canSwitchVariant = Boolean(
+        hymnAudioInfo && (availableVariants === null || availableVariants[targetVariant])
+    );
 
     // ─── Data fetch ────────────────────────────────────────────────────────
     const mediaItem = useLiveQuery(
@@ -181,25 +238,26 @@ const AudioScopeBlock: React.FC<AudioScopeBlockProps> = ({
             <div
                 className={cn("absolute top-0 h-[72px] flex items-center group/scope", dragState && "z-0")}
                 style={{ left, width }}
-                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); setContextMenu({ x: e.clientX, y: e.clientY }); }}
+                onContextMenu={handleOpenContextMenu}
             >
                 <div 
                     className={cn(
-                        "relative w-full h-full rounded-xl border-2 flex flex-col justify-end p-2 overflow-hidden backdrop-blur-sm transition-opacity cursor-grab active:cursor-grabbing touch-none select-none",
-                        dragState ? "border-dashed border-purple-500/30 bg-purple-500/5 backdrop-blur-none" : "bg-purple-500/10 group-hover/scope:bg-purple-500/15 group-hover/scope:border-purple-500/30",
+"relative w-full h-full rounded-xl border-2 flex flex-col justify-end p-2 overflow-hidden transition-opacity touch-none select-none",
+                        readOnly ? "cursor-default" : "cursor-grab active:cursor-grabbing",
+ dragState ?"border-dashed border-purple-500/30 bg-purple-500/5" :"bg-purple-500/10 group-hover/scope:bg-purple-500/15 group-hover/scope:border-purple-500/30",
                         !dragState && (isSelected ? "border-amber-500/80 bg-purple-500/20 shadow-[0_0_15px_rgba(245,158,11,0.2)]" : "border-purple-500/20"),
                         isMissing && "border-red-500/50 bg-red-950/40"
                     )}
-                    onPointerDown={onClipDragDown}
+                    onPointerDown={readOnly ? undefined : onClipDragDown}
                 >
                     <div className={cn("w-full h-full transition-opacity duration-200", dragState && "opacity-0")}>
                         <AudioScopeBlockContent 
                             scope={scope}
                             updateAudioScope={updateAudioScope}
-                            onFadeInToggle={onFadeInToggle}
-                            onFadeOutToggle={onFadeOutToggle}
-                            onLeftHandleDown={onLeftHandleDown}
-                            onRightHandleDown={onRightHandleDown}
+                            onFadeInToggle={readOnly ? () => {} : onFadeInToggle}
+                            onFadeOutToggle={readOnly ? () => {} : onFadeOutToggle}
+                            onLeftHandleDown={readOnly ? () => {} : onLeftHandleDown}
+                            onRightHandleDown={readOnly ? () => {} : onRightHandleDown}
                             t={t}
                             isEditingVolume={isEditingVolume}
                             volumeInputValue={volumeInputValue}
@@ -209,6 +267,7 @@ const AudioScopeBlock: React.FC<AudioScopeBlockProps> = ({
                             hasNextScope={hasNextScope}
                             displayName={displayName}
                             isMissing={isMissing}
+                            hymnAudioVariant={currentVariant}
                         />
                     </div>
                 </div>
@@ -223,16 +282,16 @@ const AudioScopeBlock: React.FC<AudioScopeBlockProps> = ({
                     }}
                 >
                     <div className={cn(
-                        "relative w-full h-full rounded-xl border-2 flex flex-col justify-end p-2 overflow-hidden backdrop-blur-md shadow-[0_0_20px_rgba(168,85,247,0.3)] opacity-90",
+"relative w-full h-full rounded-xl border-2 flex flex-col justify-end p-2 overflow-hidden shadow-[0_0_20px_rgba(168,85,247,0.3)] opacity-90",
                         isMissing ? "bg-red-900/80 border-red-400" : "bg-purple-900/80 border-purple-400"
                     )}>
                         <AudioScopeBlockContent 
                             scope={scope}
                             updateAudioScope={updateAudioScope}
-                            onFadeInToggle={onFadeInToggle}
-                            onFadeOutToggle={onFadeOutToggle}
-                            onLeftHandleDown={onLeftHandleDown}
-                            onRightHandleDown={onRightHandleDown}
+                            onFadeInToggle={readOnly ? () => {} : onFadeInToggle}
+                            onFadeOutToggle={readOnly ? () => {} : onFadeOutToggle}
+                            onLeftHandleDown={readOnly ? () => {} : onLeftHandleDown}
+                            onRightHandleDown={readOnly ? () => {} : onRightHandleDown}
                             t={t}
                             isEditingVolume={isEditingVolume}
                             volumeInputValue={volumeInputValue}
@@ -242,22 +301,41 @@ const AudioScopeBlock: React.FC<AudioScopeBlockProps> = ({
                             hasNextScope={hasNextScope}
                             displayName={displayName}
                             isMissing={isMissing}
+                            hymnAudioVariant={currentVariant}
                         />
                     </div>
                 </div>
             )}
 
-            {contextMenu && (
+            {contextMenu && (!readOnly || canSwitchVariant) && (
                 <ContextMenu x={contextMenu.x} y={contextMenu.y} onClose={handleCloseContextMenu}>
-                    <ContextMenuItem icon={<Layers className="w-4 h-4" />} label={t('duplicate')} onClick={() => { duplicateAudioScope(scope.id); setContextMenu(null); }} />
-                    <ContextMenuItem icon={<Copy className="w-4 h-4" />} label={t('copy')} onClick={() => { copyAudioScope(scope.id); setContextMenu(null); }} />
-                    <div className="h-px bg-white/5 my-1" />
-                    <ContextMenuItem icon={<Trash2 className="w-4 h-4" />} label={t('delete_audio_clip')} onClick={() => { removeAudioScope(scope.id); setContextMenu(null); }} danger />
-                    <div className="h-px bg-white/5 my-1" />
-                    <ContextMenuItem icon={<ArrowRightLeft className="w-4 h-4" />} label={t('fade_in_plus_1s')} onClick={() => adjustFade('in', 1)} />
-                    <ContextMenuItem icon={<ArrowRightLeft className="w-4 h-4 rotate-180" />} label={t('fade_in_minus_1s')} onClick={() => adjustFade('in', -1)} />
-                    <div className="h-px bg-white/5 my-1" />
-                    <ContextMenuItem icon={<ArrowRightLeft className="w-4 h-4" />} label={t('fade_out_plus_1s')} onClick={() => adjustFade('out', 1)} />
+                    {canSwitchVariant && (
+                        <>
+                            <ContextMenuItem
+                                icon={targetVariant === 'plus' ? <Mic className="w-4 h-4" /> : <Music className="w-4 h-4" />}
+                                label={
+                                    targetVariant === 'plus'
+                                        ? t('switch_to_plus_audio', 'Переключить на плюсовку')
+                                        : t('switch_to_minus_audio', 'Переключить на минусовку')
+                                }
+                                onClick={handleSwitchVariant}
+                            />
+                            {!readOnly && <div className="h-px bg-white/5 my-1" />}
+                        </>
+                    )}
+                    {!readOnly && (
+                        <>
+                            <ContextMenuItem icon={<Layers className="w-4 h-4" />} label={t('duplicate')} onClick={() => { duplicateAudioScope(scope.id); setContextMenu(null); }} />
+                            <ContextMenuItem icon={<Copy className="w-4 h-4" />} label={t('copy')} onClick={() => { copyAudioScope(scope.id); setContextMenu(null); }} />
+                            <div className="h-px bg-white/5 my-1" />
+                            <ContextMenuItem icon={<Trash2 className="w-4 h-4" />} label={t('delete_audio_clip')} onClick={() => { removeAudioScope(scope.id); setContextMenu(null); }} danger />
+                            <div className="h-px bg-white/5 my-1" />
+                            <ContextMenuItem icon={<ArrowRightLeft className="w-4 h-4" />} label={t('fade_in_plus_1s')} onClick={() => adjustFade('in', 1)} />
+                            <ContextMenuItem icon={<ArrowRightLeft className="w-4 h-4 rotate-180" />} label={t('fade_in_minus_1s')} onClick={() => adjustFade('in', -1)} />
+                            <div className="h-px bg-white/5 my-1" />
+                            <ContextMenuItem icon={<ArrowRightLeft className="w-4 h-4" />} label={t('fade_out_plus_1s')} onClick={() => adjustFade('out', 1)} />
+                        </>
+                    )}
                 </ContextMenu>
             )}
         </>
@@ -281,13 +359,14 @@ interface AudioScopeBlockContentProps {
     hasNextScope: boolean;
     displayName: string;
     isMissing?: boolean;
+    hymnAudioVariant?: HymnalAudioVariant | null;
 }
 
 const AudioScopeBlockContent = React.memo(({
     scope, updateAudioScope, onFadeInToggle, onFadeOutToggle,
     onLeftHandleDown, onRightHandleDown, t, isEditingVolume,
     volumeInputValue, onVolumeBadgeDown, setVolumeInputValue,
-    setIsEditingVolume, hasNextScope, displayName, isMissing
+    setIsEditingVolume, hasNextScope, displayName, isMissing, hymnAudioVariant
 }: AudioScopeBlockContentProps) => (
     <>
         {!isMissing && <AudioWaveform scope={scope} updateAudioScope={updateAudioScope} />}
@@ -305,7 +384,7 @@ const AudioScopeBlockContent = React.memo(({
 
         <div className="absolute top-1 right-1 flex items-center gap-1 z-20">
             {scope.loop && (
-                <div className="bg-stone-900/60 p-1 rounded-xl border border-white/5 backdrop-blur-xl shadow-lg">
+                <div className="bg-stone-900 p-1 rounded-xl border border-white/5 shadow-lg">
                     <Repeat className="w-3 h-3 text-purple-300" />
                 </div>
             )}
@@ -324,15 +403,17 @@ const AudioScopeBlockContent = React.memo(({
 
         <div className="absolute top-1 left-9 z-20 opacity-0 group-hover/scope:opacity-100 transition-opacity flex items-center gap-1">
             {hasNextScope && (
-                <div className="p-1 bg-amber-500/80 text-black border border-amber-500/30 rounded-xl shadow-lg backdrop-blur-md animate-pulse">
+                <div className="p-1 bg-amber-500/80 text-black border border-amber-500/30 rounded-xl shadow-lg animate-pulse">
                     <ArrowRightLeft className="w-3 h-3" />
                 </div>
             )}
         </div>
 
-        <div className="absolute bottom-1.5 left-2.5 right-2.5 z-10 flex items-center gap-1.5 pointer-events-none transition-opacity min-w-0 opacity-40 group-hover/scope:opacity-60">
+        <div className="absolute bottom-1.5 left-2.5 right-2.5 z-10 flex items-center gap-1.5 pointer-events-none transition-opacity min-w-0 opacity-60 group-hover/scope:opacity-90">
             {isMissing ? (
                 <AlertCircle className="w-2.5 h-2.5 shrink-0 text-red-400" />
+            ) : hymnAudioVariant === 'plus' ? (
+                <Mic className="w-2.5 h-2.5 shrink-0 text-amber-300" />
             ) : (
                 <Music className="w-2.5 h-2.5 shrink-0 text-purple-300" />
             )}
@@ -342,6 +423,16 @@ const AudioScopeBlockContent = React.memo(({
             )}>
                 {displayName} {isMissing && `(${t('file_missing', 'Missing')})`}
             </span>
+            {hymnAudioVariant && (
+                <span className={cn(
+                    "shrink-0 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider border",
+                    hymnAudioVariant === 'plus'
+                        ? "bg-amber-500/20 text-amber-300 border-amber-500/35"
+                        : "bg-purple-500/20 text-purple-200 border-purple-400/25"
+                )}>
+                    {hymnAudioVariant === 'plus' ? t('audio_variant_plus', 'Плюс') : t('audio_variant_minus', 'Минус')}
+                </span>
+            )}
         </div>
     </>
 ));

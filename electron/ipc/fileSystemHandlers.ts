@@ -108,13 +108,21 @@ export function registerFileSystemHandlers(getMainWindow: () => BrowserWindow | 
                 '.svg': 'image/svg+xml',
                 '.webp': 'image/webp',
                 '.mp3': 'audio/mpeg',
+                '.ogg': 'audio/ogg',
                 '.aac': 'audio/aac',
                 '.wav': 'audio/wav',
                 '.m4a': 'audio/mp4',
                 '.mp4': 'video/mp4',
                 '.webm': 'video/webm',
                 '.mov': 'video/quicktime',
+                '.mrt': 'application/zip',
+                '.mrtp': 'application/zip',
+                '.mrtmp': 'application/zip',
+                '.mrtgl': 'application/zip',
+                '.ekt': 'application/zip',
                 '.ektp': 'application/zip',
+                '.ektmp': 'application/zip',
+                '.ektgl': 'application/zip',
                 '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
             };
 

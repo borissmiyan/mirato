@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '@/core/utils/cn';
-import { IAudioScope, ISlide, ICanvasSlide, ITimerSlide } from '@/core/types';
+import { IAudioScope, ISlide, ICanvasSlide, ITimerSlide, IHymnSlide, HymnalAudioVariant } from '@/core/types';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { useSetAtom } from 'jotai';
@@ -13,6 +13,7 @@ import AudioScopeBlock from './AudioScopeBlock';
 import TimerAudioClip from './TimerAudioClip';
 import { findOverlappingScopes } from '../../utils/timelineUtils';
 import { MediaPersistenceService } from '../../services/MediaPersistenceService';
+import { buildHymnalAudioFileId } from '@/features/hymns/services/hymnalAudioCatalog';
 
 /** Width of each slide tile in the timeline (matches SlideTimeline w-32 = 128px) */
 const TILE_WIDTH = 128;
@@ -29,14 +30,17 @@ interface AudioTrackProps {
         presentationId?: string,
         parentSlideId?: string
     }>;
+    readOnly?: boolean;
 }
 
-const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
+const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline, readOnly = false }) => {
     const { t } = useTranslation();
     const openModal = useModalStore(s => s.openModal);
     const activePresentationId = usePresentationStore(s => s.activePresentationId);
+    const activePresentation = usePresentationStore(s => s.activePresentation);
     const selectedPresentationId = usePresentationStore(s => s.selectedPresentationId);
     const addAudioScope = usePresentationStore(s => s.addAudioScope);
+    const updatePresentationSlides = usePresentationStore(s => s.updatePresentationSlides);
     const setLatestArea = useSetAtom(latestInteractionAreaAtom);
     const [hoveredSlotIdx, setHoveredSlotIdx] = React.useState<number | null>(null);
 
@@ -84,6 +88,109 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
         });
         return scopes;
     }, [dbScopes, slideToIndexMap]);
+
+    // Fetch referenced hymn presentations for IHymnSlide runs on the timeline
+    const hymnPresIds = useMemo(() => {
+        const ids = new Set<string>();
+        visualTimeline.forEach(item => {
+            if (item.slide?.type === 'hymn') {
+                const hs = item.slide as IHymnSlide;
+                if (hs.includeAudio !== false && hs.hymnPresentationId) {
+                    ids.add(hs.hymnPresentationId);
+                }
+            }
+        });
+        return Array.from(ids);
+    }, [visualTimeline]);
+
+    const referencedHymns = useLiveQuery(
+        () => hymnPresIds.length > 0 ? db.presentationFiles.where('id').anyOf(hymnPresIds).toArray() : [],
+        [hymnPresIds]
+    );
+
+    // Group contiguous IHymnSlide runs into single virtual audio clips so users see Minus/Plus & can switch via right-click
+    const hymnVirtualScopes = useMemo(() => {
+        if (!referencedHymns || referencedHymns.length === 0) return [];
+        const hymnMap = new Map(referencedHymns.map(p => [p.id, p]));
+        const runs: Array<{
+            scope: IAudioScope;
+            startIdx: number;
+            endIdx: number;
+            slideIds: string[];
+        }> = [];
+
+        let i = 0;
+        while (i < visualTimeline.length) {
+            const item = visualTimeline[i];
+            if (item.slide?.type !== 'hymn') {
+                i++;
+                continue;
+            }
+            const firstSlide = item.slide as IHymnSlide;
+            if (firstSlide.includeAudio === false) {
+                i++;
+                continue;
+            }
+            const pres = hymnMap.get(firstSlide.hymnPresentationId);
+            if (!pres?.hymnalId || typeof pres.metadata?.hymnOrder !== 'number') {
+                i++;
+                continue;
+            }
+            const startIdx = i;
+            const slideIds = [firstSlide.id];
+            const variant: HymnalAudioVariant = firstSlide.audioVariant === 'plus' ? 'plus' : 'minus';
+            let j = i + 1;
+            while (j < visualTimeline.length) {
+                const next = visualTimeline[j];
+                if (
+                    next.slide?.type === 'hymn'
+                    && (next.slide as IHymnSlide).hymnPresentationId === firstSlide.hymnPresentationId
+                    && (next.slide as IHymnSlide).includeAudio !== false
+                ) {
+                    slideIds.push(next.slide.id);
+                    j++;
+                } else {
+                    break;
+                }
+            }
+            const endIdx = j - 1;
+            // Skip if an explicit DB audio scope already overlaps this run
+            const overlapped = allScopes.some(s => s.startIdx <= endIdx && s.endIdx >= startIdx);
+            if (!overlapped) {
+                runs.push({
+                    startIdx,
+                    endIdx,
+                    slideIds,
+                    scope: {
+                        id: `hymn-ref-audio:${firstSlide.id}:${variant}`,
+                        presentationId: activePresentationId || '',
+                        startSlideId: firstSlide.id,
+                        endSlideId: visualTimeline[endIdx].slide!.id,
+                        fileId: buildHymnalAudioFileId(pres.hymnalId, pres.metadata.hymnOrder, variant),
+                        fileName: `${pres.name} (${variant === 'plus' ? '+' : '-'}).ogg`,
+                        volume: 1,
+                        loop: false,
+                        strategy: firstSlide.audioStrategy ?? 'auto',
+                        audioVariant: variant,
+                    },
+                });
+            }
+            i = j;
+        }
+        return runs;
+    }, [referencedHymns, visualTimeline, allScopes, activePresentationId]);
+
+    const handleSwitchHymnRunVariant = useCallback(async (slideIds: string[], targetVariant: HymnalAudioVariant) => {
+        if (!activePresentationId || !activePresentation?.slides) return;
+        const idSet = new Set(slideIds);
+        const updatedSlides = activePresentation.slides.map(slide => {
+            if (slide.type === 'hymn' && idSet.has(slide.id)) {
+                return { ...slide, audioVariant: targetVariant };
+            }
+            return slide;
+        });
+        await updatePresentationSlides(activePresentationId, updatedSlides);
+    }, [activePresentationId, activePresentation?.slides, updatePresentationSlides]);
 
     const [isDraggingOver, setIsDraggingOver] = React.useState(false);
 
@@ -227,12 +334,12 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
 
     return (
         <div
-            onDragOver={handleDragOver}
-            onDragLeave={handleMouseLeave}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeaveContainer}
+            onDragOver={readOnly ? undefined : handleDragOver}
+            onDragLeave={readOnly ? undefined : handleMouseLeave}
+            onMouseMove={readOnly ? undefined : handleMouseMove}
+            onMouseLeave={readOnly ? undefined : handleMouseLeaveContainer}
             onPointerDown={() => setLatestArea('audio')}
-            onDrop={handleDrop}
+            onDrop={readOnly ? undefined : handleDrop}
             className={cn(
                 'relative shrink-0 transition-all rounded-xl',
                 isDraggingOver ? 'outline outline-2 outline-purple-500/50 outline-dashed bg-purple-500/10' : ''
@@ -251,7 +358,8 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
             )}
 
             {/* Hover Highlight & Plus Button */}
-            {!isDraggingOver &&
+            {!readOnly &&
+                !isDraggingOver &&
                 hoveredSlotIdx !== null &&
                 visualTimeline[hoveredSlotIdx]?.type === 'slide' &&
                 visualTimeline[hoveredSlotIdx]?.slide &&
@@ -309,6 +417,20 @@ const AudioTrack: React.FC<AudioTrackProps> = ({ visualTimeline }) => {
                     endIdx={endIdx}
                     visualTimeline={visualTimeline}
                     tileGap={TILE_GAP}
+                    readOnly={readOnly}
+                />
+            ))}
+
+            {hymnVirtualScopes.map(({ scope, startIdx, endIdx, slideIds }) => (
+                <AudioScopeBlock
+                    key={scope.id}
+                    scope={scope}
+                    startIdx={startIdx}
+                    endIdx={endIdx}
+                    visualTimeline={visualTimeline}
+                    tileGap={TILE_GAP}
+                    readOnly={true}
+                    onSwitchAudioVariant={(targetVariant) => handleSwitchHymnRunVariant(slideIds, targetVariant)}
                 />
             ))}
         </div>

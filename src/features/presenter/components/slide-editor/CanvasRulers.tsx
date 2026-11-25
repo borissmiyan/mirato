@@ -213,7 +213,7 @@ export const CanvasRulers: React.FC<CanvasRulersProps> = React.memo(({
 
                     {/* Top Ruler (Horizontal) */}
                     <div
-                        className="absolute top-0 left-[18px] right-0 h-[18px] bg-stone-900/90 backdrop-blur-xs border-b border-white/10 cursor-ns-resize pointer-events-auto select-none overflow-hidden"
+ className="absolute top-0 left-[18px] right-0 h-[18px] bg-stone-900 border-b border-white/10 cursor-ns-resize pointer-events-auto select-none overflow-hidden"
                         onPointerDown={handleTopRulerDown}
                         title="Click and drag down to create a Horizontal Guide"
                     >
@@ -246,7 +246,7 @@ export const CanvasRulers: React.FC<CanvasRulersProps> = React.memo(({
 
                     {/* Left Ruler (Vertical) */}
                     <div
-                        className="absolute top-[18px] left-0 bottom-0 w-[18px] bg-stone-900/90 backdrop-blur-xs border-r border-white/10 cursor-ew-resize pointer-events-auto select-none overflow-hidden"
+ className="absolute top-[18px] left-0 bottom-0 w-[18px] bg-stone-900 border-r border-white/10 cursor-ew-resize pointer-events-auto select-none overflow-hidden"
                         onPointerDown={handleLeftRulerDown}
                         title="Click and drag right to create a Vertical Guide"
                     >

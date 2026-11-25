@@ -21,7 +21,7 @@ export const RemoteLogin: React.FC<RemoteLoginProps> = ({ pin, setPin, onConnect
 
     return (
         <div className="flex flex-col items-center justify-center min-h-dvh p-6 bg-stone-950 text-white selection:bg-accent/30 overflow-hidden touch-none">
-            <div className="w-full max-w-sm p-10 bg-stone-900/40 backdrop-blur-3xl rounded-[2.5rem] border border-white/5 shadow-2xl animate-in fade-in zoom-in-95 duration-700 relative z-10">
+            <div className="w-full max-w-sm p-10 bg-stone-900 rounded-[2.5rem] border border-white/5 shadow-2xl animate-in fade-in zoom-in-95 duration-700 relative z-10">
                 <div className="flex justify-center mb-8 relative">
                     <div className="p-5 bg-stone-950/50 rounded-3xl border border-white/5">
                         <Smartphone size={42} strokeWidth={1.5} className="text-accent" />
@@ -67,7 +67,7 @@ export const RemoteLogin: React.FC<RemoteLoginProps> = ({ pin, setPin, onConnect
             </div>
 
             <p className="mt-12 text-[10px] font-black uppercase tracking-[0.3em] text-stone-700">
-                Deck.CE <span className="text-stone-800">v{import.meta.env.VITE_APP_VERSION || '2.2.2'}</span>
+                Mirato <span className="text-stone-800">v{import.meta.env.VITE_APP_VERSION || '2.4.3'}</span>
             </p>
         </div>
     );

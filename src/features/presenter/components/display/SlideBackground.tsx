@@ -78,7 +78,7 @@ const LayerRenderer: React.FC<{ layer: IStyleLayer; zIndex: number; isPreview?: 
         return () => {
             isMounted = false;
         };
-    }, [mediaId, isFromDb, hasBgEntry, isPreview, canvasResolution]);
+    }, [mediaId, isFromDb, hasBgEntry, isPreview, canvasResolution, layer.type]);
 
     if (layer.visible === false) return null;
 

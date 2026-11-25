@@ -103,7 +103,7 @@ export const ControllerLayout: React.FC = () => {
             {state.isMultiVerseMode ? (
               <button
                 onClick={handleExitMultiVerse}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs shadow-2xl transition-all active:scale-95 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 backdrop-blur-xl"
+ className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-xs shadow-2xl transition-all active:scale-95 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20"
               >
                 <Trash2 className="w-4 h-4" />
                 <span className="uppercase tracking-widest">{t('exit_mode', 'Exit Mode')}</span>

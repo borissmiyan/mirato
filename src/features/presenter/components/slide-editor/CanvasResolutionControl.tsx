@@ -159,7 +159,7 @@ export const CanvasResolutionControl: React.FC<{ className?: string }> = memo(({
                     ref={popoverRef}
                     role="dialog"
                     aria-label={t('canvas_resolution_title', 'Качество холста')}
-                    className="fixed z-[9999] w-[280px] p-2 rounded-2xl bg-stone-900/95 backdrop-blur-2xl border border-white/10 shadow-2xl text-stone-100 select-none animate-in fade-in zoom-in-95 duration-150 ease-out"
+ className="fixed z-[9999] w-[280px] p-2 rounded-2xl bg-stone-900 border border-white/10 shadow-2xl text-stone-100 select-none animate-in fade-in zoom-in-95 duration-150 ease-out"
                     style={{
                         bottom: `${popoverPos.bottom}px`,
                         left: `${popoverPos.left}px`,

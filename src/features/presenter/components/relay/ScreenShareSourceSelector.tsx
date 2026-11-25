@@ -34,7 +34,7 @@ export const ScreenShareSourceSelector: React.FC<ScreenShareSourceSelectorProps>
     }, [sources, sourceTypeFilter]);
 
     return (
-        <div className="p-5 rounded-2xl bg-stone-900/40 border border-white/5 backdrop-blur-xl space-y-4">
+        <div className="p-5 rounded-2xl bg-stone-900 border border-white/5 space-y-4">
             <div className="flex items-center justify-between pb-2 border-b border-white/5">
                 <div className="flex items-center gap-3">
                     <div className={cn(
@@ -135,7 +135,7 @@ export const ScreenShareSourceSelector: React.FC<ScreenShareSourceSelectorProps>
                                             {isScreen ? <Monitor className="w-5 h-5" /> : <AppWindow className="w-5 h-5" />}
                                         </div>
                                     )}
-                                    <div className="absolute top-1 left-1 px-1 py-0.5 rounded bg-black/70 backdrop-blur-xs text-[8px] font-bold text-stone-300 flex items-center gap-0.5">
+                                    <div className="absolute top-1 left-1 px-1 py-0.5 rounded bg-stone-950 text-[8px] font-bold text-stone-300 flex items-center gap-0.5">
                                         {isScreen ? <Monitor className="w-2 h-2" /> : <AppWindow className="w-2 h-2" />}
                                         <span>{isScreen ? 'Экран' : 'Окно'}</span>
                                     </div>

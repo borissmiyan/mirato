@@ -42,7 +42,7 @@ export const WirelessRelaySidebar: React.FC<WirelessRelaySidebarProps> = React.m
     ];
 
     return (
-        <aside className="w-72 bg-stone-950/40 backdrop-blur-xl border-r border-white/5 flex flex-col p-6 gap-6 relative overflow-hidden select-none shrink-0">
+        <aside className="w-72 bg-stone-950 border-r border-white/5 flex flex-col p-6 gap-6 relative overflow-hidden select-none shrink-0">
             {/* Glossy Overlay */}
             <div className="absolute inset-0 bg-linear-to-b from-white/5 to-transparent pointer-events-none" />
 
@@ -50,7 +50,7 @@ export const WirelessRelaySidebar: React.FC<WirelessRelaySidebarProps> = React.m
                 <div className="px-4 mb-6">
                     <h1 className="text-xl font-bold bg-linear-to-r from-white to-stone-500 bg-clip-text text-transparent">
                         {t('wireless_display_title', 'AirDeck')}
-                        <span className="sr-only">Беспроводной экран Deck.CE</span>
+                        <span className="sr-only">Беспроводной экран Mirato</span>
                     </h1>
                     <p className="text-[10px] text-stone-500 uppercase tracking-[0.2em] mt-1 font-semibold">
                         {t('wireless_display_subtitle', 'Беспроводная трансляция')}

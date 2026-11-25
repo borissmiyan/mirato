@@ -4,8 +4,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { 
     Tv, Lock, Play, Square, 
     ChevronLeft, ChevronRight, CheckCircle2, 
-    Layers, RefreshCw, AlertCircle, Wifi, WifiOff, ArrowRight
+    RefreshCw, AlertCircle, Wifi, WifiOff, ArrowRight
 } from 'lucide-react';
+import { CustomSlideStackIcon } from '@/shared/ui/SlideIcons';
 import { PinInput } from '@/shared/ui/PinInput';
 import { Switch } from '@/shared/ui/Switch';
 import { Button } from '@/shared/ui/Button';
@@ -117,7 +118,7 @@ export const DeckCastTab: React.FC<DeckCastTabProps> = React.memo(({
     return (
         <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in duration-200">
             {/* Header info banner */}
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-stone-900/50 border border-white/5 backdrop-blur-md">
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-stone-900 border border-white/5">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-accent/15 border border-accent/20 flex items-center justify-center text-accent">
                         <Tv className="w-5 h-5" />
@@ -162,7 +163,7 @@ export const DeckCastTab: React.FC<DeckCastTabProps> = React.memo(({
 
             {/* If NOT connected -> Connect UI */}
             {!isConnected ? (
-                <div className="p-6 rounded-2xl bg-stone-900/30 border border-white/5 backdrop-blur-xl space-y-6">
+                <div className="p-6 rounded-2xl bg-stone-900 border border-white/5 space-y-6">
                     <div className="flex items-center justify-between p-3.5 rounded-xl bg-stone-900/60 border border-white/5 text-xs">
                         <div className="flex items-center gap-2.5">
                             <Wifi className={cn(
@@ -229,7 +230,7 @@ export const DeckCastTab: React.FC<DeckCastTabProps> = React.memo(({
                 </div>
             ) : isCastingLive && activePresentation ? (
                 /* LIVE PRESENTATION CONTROL VIEW */
-                <div className="p-6 rounded-2xl bg-stone-900/40 border border-accent/20 backdrop-blur-xl space-y-6">
+                <div className="p-6 rounded-2xl bg-stone-900 border border-accent/20 space-y-6">
                     <div className="flex items-center justify-between pb-4 border-b border-white/5">
                         <div className="flex items-center gap-3">
                             <div className="w-3 h-3 rounded-full bg-accent animate-pulse" />
@@ -284,7 +285,7 @@ export const DeckCastTab: React.FC<DeckCastTabProps> = React.memo(({
                 /* CONNECTED READY VIEW: Screen Sharing Hub & Launch Presentation */
                 <div className="space-y-6">
                     {/* Top Status Banner */}
-                    <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/30 to-stone-900/60 border border-emerald-500/20 backdrop-blur-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-950/30 to-stone-900/60 border border-emerald-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3.5">
                             <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
                                 <CheckCircle2 className="w-5 h-5" />
@@ -350,7 +351,7 @@ export const DeckCastTab: React.FC<DeckCastTabProps> = React.memo(({
                                                 "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors",
                                                 isSelected ? "bg-accent text-accent-foreground font-bold" : "bg-stone-800 text-stone-400"
                                             )}>
-                                                <Layers className="w-4 h-4" />
+                                                <CustomSlideStackIcon className="w-4 h-4" />
                                             </div>
                                             <div className="min-w-0 flex-1">
                                                 <h5 className="text-xs font-bold truncate text-white">
@@ -366,7 +367,7 @@ export const DeckCastTab: React.FC<DeckCastTabProps> = React.memo(({
                             </div>
                         ) : (
                             <div className="p-8 rounded-xl bg-stone-900/40 border border-white/5 text-center text-xs text-stone-400 space-y-2">
-                                <Layers className="w-6 h-6 text-stone-600 mx-auto" />
+                                <CustomSlideStackIcon className="w-6 h-6 text-stone-600 mx-auto" />
                                 <p>{t('no_local_presentations', 'В библиотеке нет созданных презентаций')}</p>
                             </div>
                         )}

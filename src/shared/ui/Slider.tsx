@@ -20,7 +20,7 @@ export interface SliderProps {
 }
 
 /**
- * Standardized Slider component for Deck.CE:
+ * Standardized Slider component for Mirato:
  * - mode="track": thin ether scrubber for live toolbar, volume, media players. Zero-latency drag, hover-expand.
  * - mode="block": 48px (sm canon) height block slider for slide properties, fonts, opacity, speed.
  */

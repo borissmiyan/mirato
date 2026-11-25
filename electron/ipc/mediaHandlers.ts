@@ -137,6 +137,29 @@ export function registerMediaHandlers(): void {
         try {
             if (!fileId && !fileName) return null;
 
+            // Deterministic hymnal audio pack resolver:
+            // - hymnal-audio://<hymnalId>/<track>.ogg -> userData/hymnal-audio/<hymnalId>/<track>.ogg
+            // - hymnal-audio://<hymnalId>/plus/<track>.ogg -> userData/hymnal-audio/<hymnalId>__plus/<track>.ogg (fallback: <hymnalId>/plus/<track>.ogg)
+            if (fileId && fileId.startsWith('hymnal-audio://')) {
+                const rel = fileId.slice('hymnal-audio://'.length).replace(/^\/+/, '');
+                const safeRel = path.normalize(rel).replace(/^(\.\.(\/|\\|$))+/, '');
+                const audioRoot = path.join(app.getPath('userData'), 'hymnal-audio');
+                const segments = safeRel.split(/[\\/]/).filter(Boolean);
+
+                const candidates: string[] = [];
+                if (segments.length === 3 && segments[1] === 'plus') {
+                    candidates.push(path.join(audioRoot, `${segments[0]}__plus`, segments[2]));
+                }
+                candidates.push(path.join(audioRoot, safeRel));
+
+                for (const candidate of candidates) {
+                    if (candidate.startsWith(audioRoot) && fs.existsSync(candidate)) {
+                        return candidate;
+                    }
+                }
+                return null;
+            }
+
             if (fileId) {
                 const candidates = [
                     path.join(MEDIA_AUDIO_DIR, fileId),

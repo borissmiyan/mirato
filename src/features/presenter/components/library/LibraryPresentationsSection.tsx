@@ -1,5 +1,6 @@
 import React from 'react';
-import { Folder, FolderPlus, MoreVertical, Presentation, Trash2, Edit2, Download } from 'lucide-react';
+import { Folder, FolderPlus, MoreVertical, Trash2, Edit2, Download } from 'lucide-react';
+import { CustomSlideStackIcon } from '@/shared/ui';
 import { cn } from '@/core/utils/cn';
 import { IPresentationFile, IPresentationBin } from '@/core/types';
 import PresentationSelector from './PresentationSelector';
@@ -128,7 +129,7 @@ export const LibraryPresentationsSection: React.FC<ILibraryPresentationsSectionP
                                 <img src={p.thumbnailUrl} alt={p.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
                             ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-stone-800/40">
-                                    <Presentation className="w-6 h-6 text-stone-600 group-hover:text-accent/60 transition-colors" />
+                                    <CustomSlideStackIcon className="w-6 h-6 text-stone-600 group-hover:text-accent/60 transition-colors" />
                                 </div>
                             )}
                             <div className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-t from-black/80 to-transparent" />
@@ -144,7 +145,7 @@ export const LibraryPresentationsSection: React.FC<ILibraryPresentationsSectionP
                     ))
                 ) : (
                     <EmptyState
-                        icon={Presentation}
+                        icon={CustomSlideStackIcon}
                         title={t('no_presentations', 'No presentations')}
                         description={t('no_presentations_desc', 'Import files or drag them from the service selector to build your library')}
                         size="sm"

@@ -1,5 +1,6 @@
 import React from 'react';
-import { Layers, Layout, type LucideIcon, Presentation, Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus } from 'lucide-react';
+import { Layers, Layout, Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus } from 'lucide-react';
+import { CustomSlideStackIcon } from '@/shared/ui';
 import { cn } from '@/core/utils/cn';
 import { ITemplate, ITemplateSlide, IBlock, ISlide } from '@/core/types';
 import { GraceLibBin } from './GraceLibBin';
@@ -10,8 +11,8 @@ import { ITemplateNav, LibraryContextMenuData } from './types';
 
 export type { ITemplateNav };
 
-const ICON_MAP: Record<string, LucideIcon> = {
-    Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus, Presentation, Layers, Layout
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+    Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus, Presentation: CustomSlideStackIcon, Layers, Layout
 };
 
 interface ILibraryTemplatesSectionProps {
@@ -213,7 +214,7 @@ export const LibraryTemplatesSection: React.FC<ILibraryTemplatesSectionProps> = 
                             key={block.id}
                             id={block.id}
                             name={isRu ? block.nameRu : block.name}
-                            icon={block.icon ? (ICON_MAP[block.icon] || Presentation) : Presentation}
+                            icon={block.icon ? (ICON_MAP[block.icon] || CustomSlideStackIcon) : CustomSlideStackIcon}
                             isActive={false}
                             onClick={() => pushTemplateNav({
                                 id: block.id,

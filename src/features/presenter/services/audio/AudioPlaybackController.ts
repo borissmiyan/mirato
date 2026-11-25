@@ -69,6 +69,30 @@ export function setTrackVolume(track: IActiveTrack, volume: number, audioContext
 }
 
 /**
+ * Sets playback speed on an active track while preserving accurate progress tracking.
+ */
+export function setTrackSpeed(track: IActiveTrack, speed: number, audioContext: AudioContext | null): void {
+    const clamped = Math.max(0.25, Math.min(4, speed));
+
+    // Snapshot current position before changing rate so elapsed time calculation never jumps
+    if (!track.mediaElement && !track.isPaused && audioContext) {
+        const progress = getTrackProgress(track, audioContext);
+        if (progress) {
+            track.startOffset = progress.currentTime;
+            track.startTime = audioContext.currentTime;
+        }
+    }
+
+    track.scope.speed = clamped;
+
+    if (track.mediaElement) {
+        track.mediaElement.playbackRate = clamped;
+    } else if (track.source instanceof AudioBufferSourceNode && audioContext) {
+        track.source.playbackRate.setValueAtTime(clamped, audioContext.currentTime);
+    }
+}
+
+/**
  * Reconfigures a BufferSource track for a new seek position in-place.
  */
 export function seekBufferSourceTrack(
@@ -91,6 +115,7 @@ export function seekBufferSourceTrack(
     // Re-create buffer source node in-place on existing track without deleting activeTracks entry
     const newSource = audioContext.createBufferSource();
     newSource.buffer = buffer;
+    newSource.playbackRate.value = Math.max(0.25, Math.min(4, track.scope.speed ?? 1));
     newSource.loop = track.source.loop;
     if (newSource.loop) {
         newSource.loopStart = track.source.loopStart;

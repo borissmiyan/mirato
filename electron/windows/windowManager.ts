@@ -1,7 +1,8 @@
-import { app, BrowserWindow, screen, ipcMain, Menu } from 'electron';
+import { app, BrowserWindow, screen, ipcMain } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { buildApplicationMenu } from './appMenu';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // audit-ignore: Node.js main process environment
@@ -29,6 +30,9 @@ let projectorWindow: BrowserWindow | null = null;
 let stageWindow: BrowserWindow | null = null;
 let lastDisplaySettings: ElectronDisplaySettings | null = null;
 let lastStageDisplaySettings: ElectronDisplaySettings | null = null;
+let isMainWindowClosing = false;
+let isProjectorLoaded = false;
+let prewarmTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function getMainWindow(): BrowserWindow | null {
     return mainWindow;
@@ -43,78 +47,7 @@ export function getStageWindow(): BrowserWindow | null {
 }
 
 export function createMenu(): void {
-    const template: Electron.MenuItemConstructorOptions[] = [
-        {
-            label: 'File',
-            submenu: [
-                {
-                    label: 'GraceLib',
-                    submenu: [
-                        {
-                            label: 'Export GraceLib...',
-                            click: () => {
-                                mainWindow?.webContents.send('menu:export-gracelib');
-                            }
-                        },
-                        {
-                            label: 'Export GraceLib Presentations...',
-                            click: () => {
-                                mainWindow?.webContents.send('menu:export-presentations');
-                            }
-                        },
-                        {
-                            label: 'Export GraceLib Templates...',
-                            click: () => {
-                                mainWindow?.webContents.send('menu:export-templates');
-                            }
-                        },
-                    ]
-                },
-                { type: 'separator' },
-                { role: 'quit' }
-            ]
-        },
-        {
-            label: 'Edit',
-            submenu: [
-                { role: 'undo' },
-                { role: 'redo' },
-                { type: 'separator' },
-                { role: 'cut' },
-                { role: 'copy' },
-                { role: 'paste' },
-                { role: 'selectAll' }
-            ]
-        },
-        {
-            label: 'View',
-            submenu: [
-                { role: 'reload' },
-                { role: 'forceReload' },
-                { role: 'toggleDevTools' },
-                { type: 'separator' },
-                { role: 'resetZoom' },
-                { role: 'zoomIn' },
-                { role: 'zoomOut' },
-                { type: 'separator' },
-                { role: 'togglefullscreen' }
-            ]
-        },
-        {
-            label: 'Window',
-            submenu: [
-                { role: 'minimize' },
-                { role: 'zoom' },
-                { type: 'separator' },
-                { role: 'front' },
-                { type: 'separator' },
-                { role: 'window' }
-            ]
-        }
-    ];
-
-    const menu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(menu);
+    buildApplicationMenu(getMainWindow);
 }
 
 export function createMainWindow(): void {
@@ -138,11 +71,18 @@ export function createMainWindow(): void {
         mainWindow.webContents.openDevTools({ mode: 'detach' });
     }
 
-    // Test active push message to Renderer-process
+    // Test active push message to Renderer-process + pre-warm hidden projector window for instant 0ms open
     mainWindow.webContents.on('did-finish-load', () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('main-process-message', (new Date).toLocaleString());
         }
+        if (prewarmTimer) clearTimeout(prewarmTimer);
+        prewarmTimer = setTimeout(() => {
+            prewarmTimer = null;
+            if (!isMainWindowClosing && mainWindow && !mainWindow.isDestroyed() && (!projectorWindow || projectorWindow.isDestroyed())) {
+                createProjectorWindow(null, true);
+            }
+        }, 1200);
     });
 
     if (VITE_DEV_SERVER_URL) {
@@ -153,8 +93,14 @@ export function createMainWindow(): void {
     }
 
     mainWindow.on('close', () => {
+        isMainWindowClosing = true;
+        if (prewarmTimer) {
+            clearTimeout(prewarmTimer);
+            prewarmTimer = null;
+        }
         if (projectorWindow && !projectorWindow.isDestroyed()) {
-            projectorWindow.close();
+            projectorWindow.destroy();
+            projectorWindow = null;
         }
         if (stageWindow && !stageWindow.isDestroyed()) {
             stageWindow.close();
@@ -166,7 +112,7 @@ export function createMainWindow(): void {
     });
 }
 
-export function createProjectorWindow(displaySettings?: ElectronDisplaySettings | null): void {
+export function createProjectorWindow(displaySettings?: ElectronDisplaySettings | null, hiddenPrewarm = false): void {
     if (displaySettings) {
         lastDisplaySettings = displaySettings;
     } else {
@@ -202,33 +148,45 @@ export function createProjectorWindow(displaySettings?: ElectronDisplaySettings 
     }
 
     const isMultiScreen = displays.length > 1;
+    const targetRatio = targetDisplay.bounds.width / Math.max(1, targetDisplay.bounds.height);
 
-    // 2. If projector window already exists:
+    // 2. If projector window already exists (warm/hidden or visible): show instantly (< 16ms)
     if (projectorWindow && !projectorWindow.isDestroyed()) {
+        if (hiddenPrewarm) return;
         projectorWindow.setBounds({
             x: targetDisplay.bounds.x,
             y: targetDisplay.bounds.y,
             width: targetDisplay.bounds.width,
             height: targetDisplay.bounds.height
         });
-        projectorWindow.setFullScreen(true);
+        if (process.platform === 'darwin') {
+            projectorWindow.setSimpleFullScreen(true);
+        } else {
+            projectorWindow.setFullScreen(true);
+        }
         projectorWindow.setAlwaysOnTop(isMultiScreen);
         projectorWindow.show();
         projectorWindow.focus();
+        if (isProjectorLoaded && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('projector-ready', { ratio: targetRatio, isResize: false });
+        }
         return;
     }
 
+    isProjectorLoaded = false;
     projectorWindow = new BrowserWindow({
         x: targetDisplay.bounds.x,
         y: targetDisplay.bounds.y,
         width: targetDisplay.bounds.width,
         height: targetDisplay.bounds.height,
-        fullscreen: true,
+        show: !hiddenPrewarm,
+        fullscreen: !hiddenPrewarm && process.platform !== 'darwin',
+        simpleFullscreen: !hiddenPrewarm && process.platform === 'darwin',
         autoHideMenuBar: true,
         frame: false,
-        alwaysOnTop: isMultiScreen,
+        alwaysOnTop: !hiddenPrewarm && isMultiScreen,
         backgroundColor: '#000000',
-        title: 'Deck.CE — Live Output',
+        title: 'Mirato — Live Output',
         webPreferences: {
             preload: getPreloadPath(),
             nodeIntegration: false,
@@ -238,7 +196,7 @@ export function createProjectorWindow(displaySettings?: ElectronDisplaySettings 
         },
     });
 
-    console.log('Main Process: Projector Window Created on display', targetDisplay.id, targetDisplay.bounds, { isMultiScreen });
+    console.log('Main Process: Projector Window Created on display', targetDisplay.id, targetDisplay.bounds, { isMultiScreen, hiddenPrewarm });
 
     if (VITE_DEV_SERVER_URL) {
         const baseUrl = VITE_DEV_SERVER_URL.replace(/\/+$/, '');
@@ -248,19 +206,44 @@ export function createProjectorWindow(displaySettings?: ElectronDisplaySettings 
         projectorWindow.loadFile(path.join(process.env.DIST || '', 'projector.html'));
     }
 
-    // Reliably notify main window when projector page is loaded (Electron-level event)
+    // Reliably notify main window when projector page is loaded (only if actually visible, not during silent prewarm)
     projectorWindow.webContents.on('did-finish-load', () => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('projector-ready');
+        isProjectorLoaded = true;
+        if (projectorWindow && !projectorWindow.isDestroyed() && projectorWindow.isVisible() && mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('projector-ready', { ratio: targetRatio, isResize: false });
+        }
+    });
+
+    // Keep projector warm/hidden when closed so subsequent opens are instant (0ms)
+    projectorWindow.on('close', (e) => {
+        if (!isMainWindowClosing && projectorWindow && !projectorWindow.isDestroyed()) {
+            e.preventDefault();
+            hideProjectorWindow();
         }
     });
 
     projectorWindow.on('closed', () => {
         projectorWindow = null;
+        isProjectorLoaded = false;
         if (mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('projector-closed');
         }
     });
+}
+
+function hideProjectorWindow(): void {
+    if (!projectorWindow || projectorWindow.isDestroyed()) return;
+    projectorWindow.webContents.send('projector-command', 'clear');
+    if (process.platform === 'darwin') {
+        if (projectorWindow.isSimpleFullScreen()) projectorWindow.setSimpleFullScreen(false);
+    } else if (projectorWindow.isFullScreen()) {
+        projectorWindow.setFullScreen(false);
+    }
+    projectorWindow.setAlwaysOnTop(false);
+    projectorWindow.hide();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('projector-closed');
+    }
 }
 
 export function createStageWindow(displaySettings?: ElectronDisplaySettings | null): void {
@@ -380,6 +363,18 @@ export function broadcastAspectRatio() {
 }
 
 export function setupWindowIpc(): void {
+    app.on('before-quit', () => {
+        isMainWindowClosing = true;
+        if (prewarmTimer) {
+            clearTimeout(prewarmTimer);
+            prewarmTimer = null;
+        }
+        if (projectorWindow && !projectorWindow.isDestroyed()) {
+            projectorWindow.destroy();
+            projectorWindow = null;
+        }
+    });
+
     ipcMain.handle('open-projector', (_event, displaySettings) => {
         createProjectorWindow(displaySettings);
         return true;
@@ -410,7 +405,7 @@ export function setupWindowIpc(): void {
     });
 
     ipcMain.on('projector-ready', (_event, payload) => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
+        if (projectorWindow && !projectorWindow.isDestroyed() && projectorWindow.isVisible() && mainWindow && !mainWindow.isDestroyed()) {
             mainWindow.webContents.send('projector-ready', payload);
         }
     });
@@ -434,10 +429,7 @@ export function setupWindowIpc(): void {
     });
 
     ipcMain.handle('close-projector', () => {
-        if (projectorWindow && !projectorWindow.isDestroyed()) {
-            projectorWindow.close();
-            projectorWindow = null;
-        }
+        hideProjectorWindow();
         return true;
     });
 
@@ -458,7 +450,7 @@ export function setupWindowIpc(): void {
 
     const handleDisplayChange = () => {
         broadcastAspectRatio();
-        if (projectorWindow && !projectorWindow.isDestroyed()) {
+        if (projectorWindow && !projectorWindow.isDestroyed() && projectorWindow.isVisible()) {
             console.log('Main Process: Display changed, updating projector window...');
             createProjectorWindow();
         }

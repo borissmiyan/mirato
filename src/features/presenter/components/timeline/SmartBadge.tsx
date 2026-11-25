@@ -24,7 +24,7 @@ const SmartBadge: React.FC<SmartBadgeProps> = ({ slide }) => {
         <div className="absolute top-1 left-7 flex gap-1 animate-in fade-in duration-200">
             {hasDuration && (
                 <div
-                    className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 backdrop-blur-md text-[8px] font-black text-blue-300"
+ className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-[8px] font-black text-blue-300"
                     title={t('auto_advance_timer', 'Auto-advance timer')}
                 >
                     <Timer className="w-2.5 h-2.5" />
@@ -34,7 +34,7 @@ const SmartBadge: React.FC<SmartBadgeProps> = ({ slide }) => {
 
             {hasTransition && (
                 <div
-                    className="flex items-center justify-center w-4 h-4 rounded bg-purple-500/20 border border-purple-500/30 backdrop-blur-md text-purple-300"
+ className="flex items-center justify-center w-4 h-4 rounded bg-purple-500/20 border border-purple-500/30 text-purple-300"
                     title={t('custom_transition', 'Custom transition')}
                 >
                     <ArrowRightLeft className="w-2.5 h-2.5" />

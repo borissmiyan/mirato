@@ -1,5 +1,5 @@
 /**
- * Deck.CE Design Tokens
+ * Mirato Design Tokens
  * 
  * Centralized design system definitions for sizes, spacing, radiuses, colors, and shadows.
  * All UI primitives (Button, Input, Card, Modal, Slider, Dropdown, ContextMenu, etc.)
@@ -90,10 +90,10 @@ export const radiusTokens = {
 export type RadiusToken = keyof typeof radiusTokens;
 
 export const colorTokens = {
-  // Surface and Backgrounds
+  // Surface and Backgrounds (Strictly solid opaque surfaces — no glassmorphism)
   background: 'bg-stone-950',
-  surface: 'bg-stone-900/60 backdrop-blur-md',
-  surfaceElevated: 'bg-stone-900/80 backdrop-blur-xl',
+  surface: 'bg-stone-900',
+  surfaceElevated: 'bg-stone-900',
   surfaceSolid: 'bg-stone-900',
   surfaceHover: 'hover:bg-white/10',
   surfaceActive: 'active:bg-white/15',

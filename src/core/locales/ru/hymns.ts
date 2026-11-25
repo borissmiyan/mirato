@@ -1,6 +1,10 @@
 const hymns = {
     title: 'Гимны',
+    hymnals: 'Сборники гимнов',
     search_placeholder: 'Поиск гимнов...',
+    search_hymnals_placeholder: 'Поиск сборников и языков...',
+    create_custom: 'Как создать свой сборник',
+    import_custom: 'Добавить сборник',
     select_hymnal: 'Выбрать сборник',
     select_hymnal_prompt: 'Выберите сборник гимнов',
     no_results: 'Ничего не найдено',

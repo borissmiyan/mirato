@@ -1,11 +1,10 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { Folder, FolderOpen, ChevronRight, ChevronDown, Eye, MoreVertical, Play, Pause } from 'lucide-react';
 import { IMediaItem, IMediaBin } from '@/core/types';
 import { cn } from '@/core/utils/cn';
 import { TypeIcon, getTypeAccent } from '../MediaItemCard';
 import { TAG_COLORS } from '../MediaPoolContextMenu';
-import { useMediaUrl } from '@/core/hooks/useMediaUrl';
 
 interface MediaPoolTreeViewProps {
   allBins: IMediaBin[];
@@ -48,8 +47,6 @@ const TreeFileRow: React.FC<{
   onContextMenu,
   onTogglePlayback
 }) => {
-  const displayUrl = useMediaUrl(item);
-
   return (
     <div
       draggable
@@ -119,7 +116,13 @@ const TreeFileRow: React.FC<{
   );
 });
 
-export const MediaPoolTreeView: React.FC<MediaPoolTreeViewProps> = ({
+TreeFileRow.displayName = 'TreeFileRow';
+
+type FlatTreeNode =
+  | { kind: 'bin'; bin: IMediaBin; level: number; itemsCount: number }
+  | { kind: 'item'; item: IMediaItem; level: number };
+
+export const MediaPoolTreeView: React.FC<MediaPoolTreeViewProps> = React.memo(({
   allBins,
   mediaItems,
   selectedIds,
@@ -136,7 +139,7 @@ export const MediaPoolTreeView: React.FC<MediaPoolTreeViewProps> = ({
   onItemContextMenu,
   onTogglePlayback
 }) => {
-  const { t } = useTranslation();
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [expandedBinIds, setExpandedBinIds] = useState<Set<string>>(() => new Set(allBins.map(b => b.id)));
 
   const toggleBin = useCallback((binId: string) => {
@@ -148,122 +151,54 @@ export const MediaPoolTreeView: React.FC<MediaPoolTreeViewProps> = ({
     });
   }, []);
 
-  // Organize bins into tree: Map parentId -> bins
-  const binsByParent = useMemo(() => {
-    const map = new Map<string | undefined, IMediaBin[]>();
-    allBins.forEach(bin => {
+  // Flatten visible tree nodes for O(visible) virtualized rendering
+  const flatNodes = useMemo<FlatTreeNode[]>(() => {
+    const binsByParent = new Map<string | undefined, IMediaBin[]>();
+    for (const bin of allBins) {
       const parent = bin.parentId;
-      if (!map.has(parent)) map.set(parent, []);
-      map.get(parent)!.push(bin);
-    });
-    return map;
-  }, [allBins]);
+      const arr = binsByParent.get(parent);
+      if (arr) arr.push(bin);
+      else binsByParent.set(parent, [bin]);
+    }
 
-  // Map binId -> items
-  const itemsByBin = useMemo(() => {
-    const map = new Map<string | undefined, IMediaItem[]>();
-    mediaItems.forEach(item => {
+    const itemsByBin = new Map<string | undefined, IMediaItem[]>();
+    for (const item of mediaItems) {
       const binId = item.binId;
-      if (!map.has(binId)) map.set(binId, []);
-      map.get(binId)!.push(item);
-    });
-    return map;
-  }, [mediaItems]);
+      const arr = itemsByBin.get(binId);
+      if (arr) arr.push(item);
+      else itemsByBin.set(binId, [item]);
+    }
 
-  const renderBinTree = (parentId: string | undefined, level: number = 0): React.ReactNode => {
-    const childBins = binsByParent.get(parentId) || [];
-    const directItems = itemsByBin.get(parentId) || [];
+    const result: FlatTreeNode[] = [];
+    const walk = (parentId: string | undefined, level: number) => {
+      const childBins = binsByParent.get(parentId) || [];
+      for (const bin of childBins) {
+        const itemsCount = (itemsByBin.get(bin.id) || []).length;
+        result.push({ kind: 'bin', bin, level, itemsCount });
+        if (expandedBinIds.has(bin.id)) {
+          walk(bin.id, level + 1);
+        }
+      }
+      const directItems = itemsByBin.get(parentId) || [];
+      for (const item of directItems) {
+        result.push({ kind: 'item', item, level });
+      }
+    };
 
-    return (
-      <div className="flex flex-col gap-0.5">
-        {/* Render folders at this level */}
-        {childBins.map(bin => {
-          const isExpanded = expandedBinIds.has(bin.id);
-          const isDraggingOver = draggingOverId === bin.id;
-          const binItemsCount = (itemsByBin.get(bin.id) || []).length;
+    walk(undefined, 0);
+    return result;
+  }, [allBins, mediaItems, expandedBinIds]);
 
-          return (
-            <div key={bin.id} className="flex flex-col">
-              <div
-                style={{ paddingLeft: `${level * 16 + 4}px` }}
-                onClick={() => toggleBin(bin.id)}
-                onDragOver={(e) => { e.preventDefault(); onSetDraggingOverId(bin.id); }}
-                onDragLeave={() => onSetDraggingOverId(null)}
-                onDrop={(e) => {
-                  if (e.dataTransfer.types.includes('Files')) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onSetDraggingOverId(null);
-                    onImportDroppedFiles(e.dataTransfer.files, bin.id);
-                  } else {
-                    onBinDrop(e, bin.id);
-                  }
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  onBinContextMenu(e, bin);
-                }}
-                className={cn(
-                  "group flex items-center gap-1.5 py-1 pr-2 rounded-xl transition-all cursor-pointer select-none text-xs",
-                  isDraggingOver
-                    ? "bg-accent/20 text-accent font-semibold ring-1 ring-accent"
-                    : "hover:bg-white/5 text-stone-200"
-                )}
-              >
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleBin(bin.id);
-                  }}
-                  className="p-0.5 text-stone-500 hover:text-white"
-                >
-                  {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                </button>
-
-                {isExpanded ? (
-                  <FolderOpen className="w-4 h-4 text-amber-500 shrink-0" />
-                ) : (
-                  <Folder className="w-4 h-4 text-amber-500 shrink-0" />
-                )}
-
-                <span className="truncate flex-1 min-w-0 font-medium">{bin.name}</span>
-                <span className="text-[10px] text-stone-500 font-mono">{binItemsCount}</span>
-              </div>
-
-              {/* Render items inside this bin if expanded */}
-              {isExpanded && (
-                <div className="flex flex-col">
-                  {renderBinTree(bin.id, level + 1)}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Render files at this level */}
-        {directItems.map(item => (
-          <TreeFileRow
-            key={item.id}
-            item={item}
-            level={level}
-            isSelected={selectedIds.has(item.id)}
-            isPlaying={playingItemId === item.id}
-            mediaTime={mediaTimes[item.id]}
-            onClick={(e) => onItemClick(item.id, e)}
-            onDoubleClick={() => onDoubleClick(item)}
-            onDragStart={(e) => onDragStart(e, item)}
-            onContextMenu={(e) => onItemContextMenu(e, item)}
-            onTogglePlayback={(e) => onTogglePlayback(e, item)}
-          />
-        ))}
-      </div>
-    );
-  };
+  const rowVirtualizer = useVirtualizer({
+    count: flatNodes.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 30,
+    overscan: 8,
+    initialRect: { width: 320, height: 500 },
+  });
 
   return (
-    <div className="flex-1 overflow-y-auto no-scrollbar min-h-0 px-1 pt-1 pb-4">
-      {/* Root Drop Zone Indicator if dragging over root */}
+    <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar min-h-0 px-1 pt-1 pb-4">
       <div
         onDragOver={(e) => { e.preventDefault(); onSetDraggingOverId('__root__'); }}
         onDragLeave={() => onSetDraggingOverId(null)}
@@ -273,8 +208,100 @@ export const MediaPoolTreeView: React.FC<MediaPoolTreeViewProps> = ({
           draggingOverId === '__root__' && "bg-accent/10 ring-2 ring-accent"
         )}
       >
-        {renderBinTree(undefined, 0)}
+        <div
+          style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const node = flatNodes[virtualRow.index];
+            if (!node) return null;
+            return (
+              <div
+                key={node.kind === 'bin' ? `bin-${node.bin.id}` : node.item.id}
+                data-index={virtualRow.index}
+                ref={rowVirtualizer.measureElement}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  transform: `translateY(${virtualRow.start}px)`,
+                  paddingBottom: '2px',
+                }}
+              >
+                {node.kind === 'bin' ? (
+                  <div
+                    style={{ paddingLeft: `${node.level * 16 + 4}px` }}
+                    onClick={() => toggleBin(node.bin.id)}
+                    onDragOver={(e) => { e.preventDefault(); onSetDraggingOverId(node.bin.id); }}
+                    onDragLeave={() => onSetDraggingOverId(null)}
+                    onDrop={(e) => {
+                      if (e.dataTransfer.types.includes('Files')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onSetDraggingOverId(null);
+                        onImportDroppedFiles(e.dataTransfer.files, node.bin.id);
+                      } else {
+                        onBinDrop(e, node.bin.id);
+                      }
+                    }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      onBinContextMenu(e, node.bin);
+                    }}
+                    className={cn(
+                      "group flex items-center gap-1.5 py-1 pr-2 rounded-xl transition-all cursor-pointer select-none text-xs",
+                      draggingOverId === node.bin.id
+                        ? "bg-accent/20 text-accent font-semibold ring-1 ring-accent"
+                        : "hover:bg-white/5 text-stone-200"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleBin(node.bin.id);
+                      }}
+                      className="p-0.5 text-stone-500 hover:text-white"
+                    >
+                      {expandedBinIds.has(node.bin.id)
+                        ? <ChevronDown className="w-3.5 h-3.5" />
+                        : <ChevronRight className="w-3.5 h-3.5" />}
+                    </button>
+
+                    {expandedBinIds.has(node.bin.id) ? (
+                      <FolderOpen className="w-4 h-4 text-amber-500 shrink-0" />
+                    ) : (
+                      <Folder className="w-4 h-4 text-amber-500 shrink-0" />
+                    )}
+
+                    <span className="truncate flex-1 min-w-0 font-medium">{node.bin.name}</span>
+                    <span className="text-[10px] text-stone-500 font-mono">{node.itemsCount}</span>
+                  </div>
+                ) : (
+                  <TreeFileRow
+                    item={node.item}
+                    level={node.level}
+                    isSelected={selectedIds.has(node.item.id)}
+                    isPlaying={playingItemId === node.item.id}
+                    mediaTime={mediaTimes[node.item.id]}
+                    onClick={(e) => onItemClick(node.item.id, e)}
+                    onDoubleClick={() => onDoubleClick(node.item)}
+                    onDragStart={(e) => onDragStart(e, node.item)}
+                    onContextMenu={(e) => onItemContextMenu(e, node.item)}
+                    onTogglePlayback={(e) => onTogglePlayback(e, node.item)}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
-};
+});
+
+MediaPoolTreeView.displayName = 'MediaPoolTreeView';

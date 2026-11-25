@@ -37,7 +37,7 @@ const AboutSettings: React.FC = () => {
                         {t('app_title')}
                     </h1>
 
-                    <div className="flex items-center gap-3 px-6 py-2.5 bg-accent/10 border border-accent/20 rounded-full shadow-lg shadow-accent/5 backdrop-blur-md">
+                    <div className="flex items-center gap-3 px-6 py-2.5 bg-accent/10 border border-accent/20 rounded-full shadow-lg shadow-accent/5">
                         <span className="w-2 h-2 rounded-full bg-accent animate-pulse shadow-[0_0_8px_rgba(var(--accent-rgb),0.8)]" />
                         <span className="text-xs font-black text-accent tracking-[0.25em] uppercase">
                             {changelogEntries?.[0]?.version} {changelogEntries?.[0]?.title}
@@ -126,7 +126,7 @@ const AboutSettings: React.FC = () => {
                         {t('crafted_with_passion')}
                     </p>
                     <div className="flex items-center justify-center gap-4 text-[9px] text-stone-800 font-medium uppercase tracking-[0.2em]">
-                        <span>Deck.CE</span>
+                        <span>Mirato. Church Edition</span>
                         <span className="w-1 h-1 rounded-full bg-stone-900" />
                         <span>Soli Deo Gloria</span>
                         <span className="w-1 h-1 rounded-full bg-stone-900" />

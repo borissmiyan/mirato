@@ -18,6 +18,8 @@ export const ChapterGrid: React.FC<ChapterGridProps> = React.memo(({
 }) => {
   const { t } = useTranslation();
 
+  const colors = currentBook ? getSectionColors(currentBook.bookId) : null;
+
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0">
       <div className="px-4 py-3 flex items-center justify-between shrink-0">
@@ -35,10 +37,9 @@ export const ChapterGrid: React.FC<ChapterGridProps> = React.memo(({
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-4 pb-4 min-h-0">
-        {currentBook ? (
+        {currentBook && colors ? (
           <div className="grid grid-cols-5 gap-2">
             {currentBook.chapters.map((chap) => {
-              const colors = getSectionColors(currentBook.bookId);
               const isSelected = currentChapter === chap;
               return (
                 <button

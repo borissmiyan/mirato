@@ -6,7 +6,7 @@ import { Layers } from 'lucide-react';
 import SlideContentRenderer from '../slide-editor/SlideContentRenderer';
 import { NavLevel } from '../../hooks/useTemplatePickerData';
 
-import { EmptyState } from '@/shared/ui';
+import { EmptyState, CustomSlideStackIcon } from '@/shared/ui';
 
 interface TemplatePickerGridProps {
   currentView: NavLevel;
@@ -67,7 +67,7 @@ export const TemplatePickerGrid: React.FC<TemplatePickerGridProps> = ({
               >
                 <SlideContentRenderer template={template} block={currentBlock || blocksMap.get(template.category)} variables={{}} lang={lang} isPreview={true} scale={180 / 1920} canvasItems={template.canvasItems || []} showLockBadge={!template.isUserCreated} hideOverlays={true} />
                 <div className="absolute bottom-0 left-0 right-0 bg-linear-to-t from-black/70 to-transparent px-2 py-1.5"><span className={cn("text-[8px] font-bold uppercase tracking-tight line-clamp-1", isActive ? "text-accent" : "text-white/70")}>{isRu ? template.nameRu : template.name}</span></div>
-                <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded flex items-center gap-1 bg-black/60 backdrop-blur-md border border-white/10 z-20"><Layers className="w-2.5 h-2.5 text-stone-300" /><span className="text-[8px] font-bold text-stone-300">{totalSlides}</span></div>
+                <div className="absolute top-2 left-2 px-1.5 py-0.5 rounded flex items-center gap-1 bg-stone-950 border border-white/10 z-20"><CustomSlideStackIcon className="w-2.5 h-2.5 text-stone-300" /><span className="text-[8px] font-bold text-stone-300">{totalSlides}</span></div>
               </button>
             </div>
           );

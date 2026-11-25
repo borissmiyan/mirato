@@ -2,11 +2,11 @@ import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
-import { X, ChevronRight, ArrowLeft } from 'lucide-react';
+import { X, ChevronRight, ArrowLeft, Languages } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { cn } from '@/core/utils/cn';
 import { SearchInput } from '@/shared/ui/SearchInput';
 import { Button } from '@/shared/ui/Button';
+import { PickerOptionCard } from './PickerOptionCard';
 
 interface TranslationPickerProps {
     currentTranslationId: string | null;
@@ -113,7 +113,7 @@ const TranslationPicker: React.FC<TranslationPickerProps> = ({
     }, [triggerRect, view, search, selectedLang, pickerData, translations]);
 
     return createPortal(
-        <div className="fixed inset-0 z-9999 pointer-events-none">
+        <div className="fixed inset-0 z-[10010] pointer-events-none">
             {/* Backdrop - Transparent for dropdown feel */}
             <div
                 className="absolute inset-0 bg-transparent pointer-events-auto"
@@ -122,10 +122,10 @@ const TranslationPicker: React.FC<TranslationPickerProps> = ({
 
             {/* Dropdown Content */}
             <div
-                className="absolute bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl flex flex-col max-h-[520px] overflow-hidden animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
+ className="absolute bg-stone-900 border border-white/10 rounded-xl shadow-2xl flex flex-col max-h-[520px] overflow-hidden animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
                 style={position}
             >
-                <div className="p-3 border-b border-white/5 flex items-center justify-between bg-stone-950/40 gap-2">
+                <div className="p-3 border-b border-white/5 flex items-center justify-between bg-[#141210] gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                         {view === 'translations' && (
                             <Button
@@ -153,7 +153,7 @@ const TranslationPicker: React.FC<TranslationPickerProps> = ({
                     </Button>
                 </div>
 
-                <div className="p-3 border-b border-white/5 bg-stone-950/20">
+                <div className="p-3 border-b border-white/5 bg-[#141210]">
                     <SearchInput
                         size="sm"
                         autoFocus
@@ -164,78 +164,55 @@ const TranslationPicker: React.FC<TranslationPickerProps> = ({
                     />
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-1.5 flex flex-col gap-1 no-scrollbar min-h-0">
+                <div className="flex-1 overflow-y-auto p-1.5 flex flex-col gap-0.5 no-scrollbar min-h-0">
                     {search ? (
                         pickerData.uniqueLangs.flatMap(langKey =>
                             pickerData.groups[langKey].map(tr => (
-                                <button
+                                <PickerOptionCard
                                     key={tr.id}
-                                    type="button"
+                                    title={<SearchHighlight text={tr.name} query={search} />}
+                                    titleTooltip={tr.name}
+                                    subtitle={
+                                        <>
+                                            <SearchHighlight text={tr.id} query={search} /> • {tr.language}
+                                        </>
+                                    }
+                                    leading={<Languages className="w-4 h-4" />}
+                                    isActive={currentTranslationId === tr.id}
                                     onClick={() => {
                                         onSelect(tr.id);
                                         onClose();
                                     }}
-                                    className={cn(
-                                        "w-full flex flex-col gap-1 p-2.5 rounded-xl transition-all group text-left border cursor-pointer apple-press",
-                                        currentTranslationId === tr.id
-                                            ? "bg-accent/15 border-accent/30 text-accent"
-                                            : "hover:bg-white/5 border-transparent hover:border-white/10"
-                                    )}
-                                >
-                                    <div className="flex items-center justify-between gap-2">
-                                        <span className={cn("text-xs font-bold truncate", currentTranslationId === tr.id ? "text-accent" : "text-stone-200")}>
-                                            <SearchHighlight text={tr.name} query={search} />
-                                        </span>
-                                        <span className="text-[10px] font-mono font-bold text-stone-400 bg-white/5 px-1.5 py-0.5 rounded-full uppercase shrink-0">{tr.language}</span>
-                                    </div>
-                                    <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider leading-none">
-                                        <SearchHighlight text={tr.id} query={search} />
-                                    </span>
-                                </button>
+                                />
                             ))
                         )
                     ) : view === 'languages' ? (
                         pickerData.uniqueLangs.map(langKey => (
-                            <button
+                            <PickerOptionCard
                                 key={langKey}
-                                type="button"
+                                title={langKey}
+                                subtitle={`${pickerData.groups[langKey].length}`}
+                                leading={<Languages className="w-4 h-4" />}
+                                trailing={<ChevronRight className="w-3.5 h-3.5 text-stone-500 group-hover:translate-x-0.5 transition-transform" />}
                                 onClick={() => {
                                     setSelectedLang(langKey);
                                     setView('translations');
                                 }}
-                                className="w-full flex items-center justify-between p-2.5 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/10 transition-all group text-left cursor-pointer apple-press"
-                            >
-                                <span className="text-xs font-bold text-stone-200 group-hover:text-white uppercase tracking-wider">{langKey}</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-mono text-stone-500 font-bold">{pickerData.groups[langKey].length}</span>
-                                    <ChevronRight className="w-3.5 h-3.5 text-stone-500 group-hover:translate-x-0.5 transition-transform" />
-                                </div>
-                            </button>
+                            />
                         ))
                     ) : (
                         (selectedLang ? pickerData.groups[selectedLang] || [] : translations).map(tr => (
-                            <button
+                            <PickerOptionCard
                                 key={tr.id}
-                                type="button"
+                                title={tr.name}
+                                subtitle={tr.id.toUpperCase()}
+                                leading={<Languages className="w-4 h-4" />}
+                                isActive={currentTranslationId === tr.id}
                                 onClick={() => {
                                     onSelect(tr.id);
                                     onClose();
                                 }}
-                                className={cn(
-                                    "w-full flex flex-col gap-1 p-2.5 rounded-xl transition-all group text-left border cursor-pointer apple-press",
-                                    currentTranslationId === tr.id
-                                        ? "bg-accent/15 border-accent/30 text-accent"
-                                        : "hover:bg-white/5 border-transparent hover:border-white/10"
-                                )}
-                            >
-                                <div className="flex items-center justify-between gap-2">
-                                    <span className={cn("text-xs font-bold truncate", currentTranslationId === tr.id ? "text-accent" : "text-stone-200")}>
-                                        {tr.name}
-                                    </span>
-                                    {currentTranslationId === tr.id && <div className="w-2 h-2 rounded-full bg-accent shadow-[0_0_8px_rgba(234,179,8,0.5)] shrink-0" />}
-                                </div>
-                                <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider leading-none">{tr.id.toUpperCase()}</span>
-                            </button>
+                            />
                         ))
                     )}
                 </div>

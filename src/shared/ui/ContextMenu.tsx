@@ -64,7 +64,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, onClose, children }) =>
         <div
             ref={menuRef}
             className={cn(
-                "fixed z-[1000000] min-w-[230px] bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl p-1.5 overflow-hidden transition-opacity duration-200",
+"fixed z-[1000000] min-w-[230px] bg-stone-900 border border-white/10 rounded-2xl shadow-2xl p-1.5 overflow-hidden transition-opacity duration-200",
                 isVisible ? "opacity-100" : "opacity-0",
                 "animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150"
             )}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Edit2, Trash2, FolderOpen, RefreshCw, Presentation, CopyPlus, XCircle, Eye, Image as ImageIcon, Download, X } from 'lucide-react';
+import { Edit2, Trash2, FolderOpen, RefreshCw, CopyPlus, XCircle, Eye, Image as ImageIcon, Download, X } from 'lucide-react';
+import { CustomSlideStackIcon } from '@/shared/ui';
 import { db } from '@/core/db';
 import { IMediaItem, IMediaBin, MediaColorTag } from '@/core/types';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
@@ -226,7 +227,7 @@ export const MediaPoolContextMenu: React.FC<MediaPoolContextMenuProps> = ({
           {isMultiple ? (
             <>
               <ContextMenuItem
-                icon={<Presentation className="w-3 h-3 text-accent" />}
+                icon={<CustomSlideStackIcon className="w-3 h-3 text-accent" />}
                 label={t('media_pool.create_presentation_multiple', 'Create Presentation ({{count}})', { count: targetItems.length })}
                 onClick={() => {
                   handleCreatePresentation(targetItems);
@@ -332,7 +333,7 @@ export const MediaPoolContextMenu: React.FC<MediaPoolContextMenuProps> = ({
               />
               <div className="my-1 border-t border-white/5" />
               <ContextMenuItem
-                icon={<Presentation className="w-3 h-3 text-accent" />}
+                icon={<CustomSlideStackIcon className="w-3 h-3 text-accent" />}
                 label={t('media_pool.create_presentation', 'Create Presentation from Media')}
                 onClick={() => {
                   handleCreatePresentation([contextMenu.item]);

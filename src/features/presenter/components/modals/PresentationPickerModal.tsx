@@ -1,5 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -7,13 +6,13 @@ import { db } from '@/core/db';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { ISlide, ICanvasSlide, IPresentationFile, IAudioScope } from '@/core/types';
-import { Layers, Monitor, Music, Plus, Edit2, Copy, Download, Trash2 } from 'lucide-react';
+import { Monitor, Music, Plus, Edit2, Copy, Download, Trash2 } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import SlideContentRenderer from '../slide-editor/SlideContentRenderer';
 import { useContainFit } from '@/core/hooks/useContainFit';
 import TrackContainer from '../timeline/TrackContainer';
 import ContextMenu, { ContextMenuItem } from '@/shared/ui/ContextMenu';
-import Button from '@/shared/ui/Button';
+import { Button, CustomSlideStackIcon, PickerModalShell, SearchInput } from '@/shared/ui';
 import { getUniquePresentationName } from '@/core/utils/nameUtils';
 import { GraceLibExportService } from '@/features/presenter/services/GraceLibExportService';
 import PresentationPickerSidebar from './PresentationPickerSidebar';
@@ -56,7 +55,7 @@ const PresentationPickerModal: React.FC = () => {
     const allTemplates = useLiveQuery(() => (isOpen ? db.templates.toArray() : []), [isOpen]);
     const allBlocks = useLiveQuery(() => (isOpen ? db.blocks.toArray() : []), [isOpen]);
 
-    const templatesMap = useMemo(() => new Map((allTemplates || []).map(t => [t.id, t])), [allTemplates]);
+    const templatesMap = useMemo(() => new Map((allTemplates || []).map(tpl => [tpl.id, tpl])), [allTemplates]);
     const blocksMap = useMemo(() => new Map((allBlocks || []).map(b => [b.id, b])), [allBlocks]);
 
     // Filter for current service's presentations
@@ -98,16 +97,15 @@ const PresentationPickerModal: React.FC = () => {
 
     const visualTimeline = useMemo(() => {
         const items: Array<{
-            id: string,
-            width: number,
-            x: number,
-            type: 'slide',
-            slide: ISlide,
+            id: string;
+            width: number;
+            x: number;
+            type: 'slide';
+            slide: ISlide;
         }> = [];
 
-        const TILE_WIDTH = 160;
-        const TILE_GAP = 12;
-
+        const TILE_WIDTH = 121;
+        const TILE_GAP = 10;
         let currentX = 0;
 
         for (const slide of slides) {
@@ -147,7 +145,11 @@ const PresentationPickerModal: React.FC = () => {
                         const eIdx = slideToIndexMap.get(scope.endSlideId);
 
                         if (sIdx !== undefined && eIdx !== undefined) {
-                            scopes.push({ scope: { ...scope, fileName: scope.fileName || scope.fileId.split('/').pop() }, startIdx: sIdx, endIdx: eIdx });
+                            scopes.push({
+                                scope: { ...scope, fileName: scope.fileName || scope.fileId.split('/').pop() },
+                                startIdx: sIdx,
+                                endIdx: eIdx,
+                            });
                             seenScopeIds.add(scope.id);
                         }
                     }
@@ -168,9 +170,12 @@ const PresentationPickerModal: React.FC = () => {
 
     const { width: fitWidth, height: fitHeight, containerRef } = useContainFit(16 / 9, 32);
 
-    if (!isOpen) return null;
+    const handleClose = useCallback(() => {
+        setContextMenu(null);
+        closeModal(ModalType.PRESENTATION_PICKER);
+    }, [closeModal]);
 
-    const handleAdd = () => {
+    const handleAdd = useCallback(() => {
         if (!selectedPresentationId) return;
 
         // Find insertion index: after the currently selected slide
@@ -186,216 +191,17 @@ const PresentationPickerModal: React.FC = () => {
 
         addPresentationToTimeline(selectedPresentationId, insertionIndex);
         closeModal(ModalType.PRESENTATION_PICKER);
-    };
+    }, [selectedPresentationId, addPresentationToTimeline, closeModal]);
+
+    const handleModalKeyDown = useCallback((e: KeyboardEvent) => {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey || (!searchQuery && selectedPresentationId))) {
+            e.preventDefault();
+            handleAdd();
+        }
+    }, [handleAdd, searchQuery, selectedPresentationId]);
 
     const currentPreviewSlide = slides.find(s => s.id === previewSlideId) || slides[0];
 
-    const mainPortal = createPortal(
-        <div className="fixed inset-0 z-10001 flex items-center justify-center apple-backdrop bg-stone-950/75 backdrop-blur-xl p-6">
-            <div className="bg-stone-900 border border-white/10 ring-1 ring-white/5 rounded-2xl w-full max-w-7xl h-[90vh] flex overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)] apple-modal">
-
-                {/* Left Sidebar - Presentation Selection */}
-                <PresentationPickerSidebar
-                    searchQuery={searchQuery}
-                    onSearchQueryChange={setSearchQuery}
-                    onClose={() => closeModal(ModalType.PRESENTATION_PICKER)}
-                    availablePresentations={availablePresentations}
-                    selectedPresentationId={selectedPresentationId}
-                    onSelectPresentation={setSelectedPresentationId}
-                    onContextMenu={(e, presentation) => {
-                        setContextMenu({ x: e.clientX, y: e.clientY, presentation });
-                    }}
-                />
-
-                {/* Right Area - Preview */}
-                <div className="flex-1 flex flex-col overflow-hidden bg-black/20">
-                    {/* Top: Large Preview Area */}
-                    <div
-                        ref={containerRef}
-                        className="flex-1 flex flex-col items-center justify-center relative overflow-hidden group/main-preview"
-                    >
-                        {!activePresentation ? (
-                            <div className="text-stone-700 flex flex-col items-center gap-6">
-                                <div className="w-24 h-24 rounded-2xl bg-white/5 flex items-center justify-center border border-white/5">
-                                    <Layers className="w-10 h-10 opacity-20" />
-                                </div>
-                                <p className="text-sm font-black uppercase tracking-widest opacity-30">{t('select_to_preview')}</p>
-                            </div>
-                        ) : currentPreviewSlide && fitWidth && fitHeight ? (
-                            <>
-                                {/* Background Decor */}
-                                <div className="absolute inset-0 opacity-10 pointer-events-none">
-                                    <div className="absolute inset-0 bg-radial-gradient from-accent/30 to-transparent scale-150" />
-                                </div>
-
-                                <div
-                                    className="relative shadow-[0_40px_100px_rgba(0,0,0,0.6)] rounded-xl overflow-hidden border border-white/10 ring-4 ring-white/5 animate-in fade-in zoom-in-95 duration-700 pointer-events-none"
-                                    style={{ width: fitWidth, height: fitHeight }}
-                                >
-                                    <SlideContentRenderer
-                                        template={templatesMap.get(currentPreviewSlide.templateId)}
-                                        block={blocksMap.get(currentPreviewSlide.blockId)}
-                                        variables={currentPreviewSlide.type === 'normal' ? (currentPreviewSlide as ICanvasSlide).content?.variables : undefined}
-                                        lang={lang}
-                                        backgroundOverride={currentPreviewSlide.type === 'normal' ? (currentPreviewSlide as ICanvasSlide).backgroundOverride : undefined}
-                                        canvasItems={currentPreviewSlide.type === 'normal' ? (currentPreviewSlide as ICanvasSlide).content?.canvasItems : []}
-                                        slide={currentPreviewSlide}
-                                        scale={fitWidth / 1920}
-                                    />
-
-                                    <div className="absolute bottom-8 left-8 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-2xl px-5 py-3 shadow-2xl">
-                                        <p className="text-xs font-black text-white uppercase tracking-widest mb-1">
-                                            {(currentPreviewSlide.type === 'normal' ? (currentPreviewSlide as ICanvasSlide).content?.variables?.title : undefined) || t('no_title')}
-                                        </p>
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-accent" />
-                                            <p className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">
-                                                {blocksMap.get(currentPreviewSlide.blockId)?.name || currentPreviewSlide.blockId}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="text-stone-700 flex flex-col items-center gap-6 animate-pulse">
-                                <div className="w-24 h-24 rounded-[32px] bg-white/5 flex items-center justify-center border border-white/5">
-                                    <Monitor className="w-10 h-10 opacity-20" />
-                                </div>
-                                <p className="text-sm font-black uppercase tracking-widest opacity-30">{t('preparing_preview')}</p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Bottom: Horizontal Timeline Area */}
-                    <div className={cn(
-                        "h-[240px] shrink-0 bg-stone-950 border-t border-white/10 flex flex-col relative shadow-[0_-20px_50px_rgba(0,0,0,0.4)] z-10 transition-opacity duration-300",
-                        activePresentation ? "opacity-100" : "opacity-50 pointer-events-none grayscale"
-                    )}>
-                        <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between bg-stone-900/40 backdrop-blur-md">
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-black text-stone-500 uppercase tracking-widest">
-                                    {t('timeline')}
-                                </span>
-                                <div className="w-px h-3 bg-white/10" />
-                                <span className="text-[9px] font-bold text-stone-600 uppercase tracking-widest">
-                                    {t('slides_count', { count: slides.length, defaultValue: '{{count}} slides' })}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 relative flex">
-                            {/* Track Names */}
-                            <div className="w-16 shrink-0 border-r border-white/5 bg-stone-900/40 flex flex-col z-20 backdrop-blur-md">
-                                <div className="h-[104px] flex flex-col items-center justify-center gap-1 opacity-40">
-                                    <Monitor className="w-4 h-4 text-stone-400" />
-                                    <span className="text-[7px] font-black uppercase tracking-widest text-stone-500">{t('slides')}</span>
-                                </div>
-                                <div className="h-14 border-t border-white/5 flex flex-col items-center justify-center gap-1 bg-purple-500/5 opacity-50">
-                                    <Music className="w-3 h-3 text-purple-400" />
-                                    <span className="text-[7px] font-black uppercase tracking-widest text-purple-500">{t('audio')}</span>
-                                </div>
-                            </div>
-
-                            <div className="flex-1 overflow-hidden relative">
-                                <TrackContainer className="px-8">
-                                    <div className="flex flex-col min-w-full py-4 gap-2">
-                                        {/* Slides Lane */}
-                                        <div className="flex gap-3 relative h-24">
-                                            {visualTimeline.map((item, index) => {
-                                                const slide = item.slide;
-                                                const template = templatesMap.get(slide.templateId);
-                                                const block = blocksMap.get(slide.blockId);
-                                                const isCurrent = previewSlideId === slide.id;
-
-                                                return (
-                                                    <div
-                                                        key={slide.id}
-                                                        data-slide-id={slide.id}
-                                                        className={cn(
-                                                            "group relative shrink-0 rounded-2xl border-2 transition-all cursor-pointer overflow-hidden leading-none",
-                                                            isCurrent
-                                                                ? "border-accent ring-4 ring-accent/10 scale-105 z-10 shadow-xl shadow-accent/10"
-                                                                : "border-white/5 hover:border-white/20 bg-stone-900"
-                                                        )}
-                                                        style={{ width: item.width }}
-                                                        onClick={() => setPreviewSlideId(slide.id)}
-                                                    >
-                                                        <div className="absolute inset-0 z-0 pointer-events-none">
-                                                            <SlideContentRenderer
-                                                                template={template}
-                                                                block={block}
-                                                                variables={slide.type === 'normal' ? (slide as ICanvasSlide).content?.variables : undefined}
-                                                                lang={lang}
-                                                                isPreview={true}
-                                                                scale={item.width / 1920}
-                                                                backgroundOverride={slide.type === 'normal' ? (slide as ICanvasSlide).backgroundOverride : undefined}
-                                                                canvasItems={slide.type === 'normal' ? (slide as ICanvasSlide).content?.canvasItems : []}
-                                                                slide={slide}
-                                                            />
-                                                        </div>
-
-                                                        <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-xl bg-black/40 backdrop-blur-md border border-white/5 text-[8px] font-black text-stone-400 z-10 tracking-widest">
-                                                            {(slide.order || index) + 1}
-                                                        </div>
-
-                                                        <div className="absolute inset-x-0 bottom-0 h-8 bg-linear-to-t from-black/80 to-transparent z-10 p-2 flex flex-col justify-end">
-                                                            <p className="text-[7px] font-black text-white/80 uppercase truncate">
-                                                                {(slide.type === 'normal' ? (slide as ICanvasSlide).content?.variables?.title : undefined) || `${t('slide')} ${index + 1}`}
-                                                            </p>
-                                                        </div>
-
-                                                        <div className={cn(
-                                                            "absolute inset-0 bg-accent/5 transition-opacity duration-300",
-                                                            isCurrent ? "opacity-100" : "opacity-0"
-                                                        )} />
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-
-                                        {/* Audio Lane */}
-                                        <div className="flex relative h-14 bg-purple-500/5 rounded-2xl border border-purple-500/5 mt-1">
-                                            {allScopes.map(({ scope, startIdx, endIdx }) => (
-                                                <ModalAudioScope
-                                                    key={scope.id}
-                                                    scope={scope}
-                                                    startIdx={startIdx}
-                                                    endIdx={endIdx}
-                                                    visualTimeline={visualTimeline}
-                                                />
-                                            ))}
-                                            {allScopes.length === 0 && (
-                                                <div className="absolute inset-0 flex items-center justify-center opacity-20">
-                                                    <span className="text-[8px] text-stone-500 font-bold uppercase tracking-widest">{t('no_audio_tracks')}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </TrackContainer>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="px-8 py-5 border-t border-white/5 bg-stone-900 flex items-center justify-end shrink-0 shadow-[0_-10px_40px_rgba(0,0,0,0.3)] z-20">
-                        <Button
-                            variant="primary"
-                            size="md"
-                            onClick={handleAdd}
-                            disabled={!selectedPresentationId}
-                            leftIcon={<Plus className={cn("w-5 h-5 transition-transform group-hover:rotate-90 duration-500", !selectedPresentationId && "opacity-20")} />}
-                            className="px-10 py-3.5 uppercase tracking-widest font-black"
-                        >
-                            {t('add_to_timeline')}
-                        </Button>
-                    </div>
-                </div>
-            </div>
-        </div>,
-        document.body
-    );
-
-    // ContextMenu portals itself internally — render it in the component tree (not in another createPortal)
     const contextMenuEl = contextMenu ? (
         <ContextMenu
             x={contextMenu.x}
@@ -474,8 +280,201 @@ const PresentationPickerModal: React.FC = () => {
         </ContextMenu>
     ) : null;
 
-    return <>{mainPortal}{contextMenuEl}</>;
+    return (
+        <PickerModalShell
+            isOpen={isOpen}
+            onClose={handleClose}
+            onKeyDown={handleModalKeyDown}
+            disableEscapeClose={!!contextMenu}
+            sidebarIcon={<CustomSlideStackIcon className="w-4 h-4" />}
+            sidebarTitle={t('add_nested_presentation', 'Вставить презентацию')}
+            sidebarHeaderExtra={
+                <SearchInput
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onClear={() => setSearchQuery('')}
+                    placeholder={t('search_presentations', 'Поиск презентаций...')}
+                    autoFocus
+                />
+            }
+            sidebarBody={
+                <PresentationPickerSidebar
+                    searchQuery={searchQuery}
+                    availablePresentations={availablePresentations}
+                    selectedPresentationId={selectedPresentationId}
+                    onSelectPresentation={setSelectedPresentationId}
+                    onContextMenu={(e, presentation) => {
+                        setContextMenu({ x: e.clientX, y: e.clientY, presentation });
+                    }}
+                />
+            }
+            contentTitle={activePresentation?.name || t('select_to_preview', 'Выберите презентацию')}
+            contentBadge={
+                slides.length > 0 ? (
+                    <span
+                        title={t('slides_count', { count: slides.length, defaultValue: `${slides.length} слайдов` })}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/[0.06] border border-white/10 rounded-md text-[10px] font-semibold text-stone-400 shrink-0 tabular-nums"
+                    >
+                        <CustomSlideStackIcon className="w-3 h-3 opacity-75 shrink-0" />
+                        <span>{slides.length}</span>
+                    </span>
+                ) : undefined
+            }
+            preview={
+                <div
+                    ref={containerRef}
+                    className="flex-1 flex flex-col items-center justify-center relative overflow-hidden group/main-preview p-6 min-h-0"
+                >
+                    {!activePresentation ? (
+                        <div className="text-stone-600 flex flex-col items-center gap-4">
+                            <div className="w-16 h-16 rounded-2xl bg-white/[0.03] flex items-center justify-center border border-white/5">
+                                <CustomSlideStackIcon className="w-8 h-8 opacity-30" />
+                            </div>
+                            <p className="text-xs font-semibold uppercase tracking-widest opacity-40">
+                                {t('select_to_preview', 'Выберите презентацию')}
+                            </p>
+                        </div>
+                    ) : currentPreviewSlide ? (() => {
+                        const w = fitWidth || 800;
+                        const h = fitHeight || Math.round(w / (16 / 9));
+                        return (
+                            <div
+                                className="relative shadow-[0_24px_70px_rgba(0,0,0,0.75)] rounded-xl overflow-hidden border border-white/10 shrink-0 pointer-events-none"
+                                style={{ width: w, height: h }}
+                            >
+                                <SlideContentRenderer
+                                    template={templatesMap.get(currentPreviewSlide.templateId)}
+                                    block={blocksMap.get(currentPreviewSlide.blockId)}
+                                    variables={currentPreviewSlide.type === 'normal' ? (currentPreviewSlide as ICanvasSlide).content?.variables : undefined}
+                                    lang={lang}
+                                    backgroundOverride={currentPreviewSlide.type === 'normal' ? (currentPreviewSlide as ICanvasSlide).backgroundOverride : undefined}
+                                    canvasItems={currentPreviewSlide.type === 'normal' ? (currentPreviewSlide as ICanvasSlide).content?.canvasItems : []}
+                                    slide={currentPreviewSlide}
+                                    scale={w / 1920}
+                                />
+                            </div>
+                        );
+                    })() : (
+                        <div className="text-stone-600 flex flex-col items-center gap-4 animate-pulse">
+                            <div className="w-16 h-16 rounded-2xl bg-white/[0.03] flex items-center justify-center border border-white/5">
+                                <Monitor className="w-8 h-8 opacity-30" />
+                            </div>
+                            <p className="text-xs font-semibold uppercase tracking-widest opacity-40">
+                                {t('preparing_preview', 'Подготовка превью...')}
+                            </p>
+                        </div>
+                    )}
+                </div>
+            }
+            tray={
+                slides.length > 0 ? (
+                    <div className="shrink-0 bg-[#141210] border-t border-white/[0.06] flex flex-col">
+                        <TrackContainer className="px-6">
+                            <div className="flex flex-col min-w-full py-3.5 gap-2">
+                                {/* Slides Strip (matches HymnPickerModal carousel geometry) */}
+                                <div className="flex gap-2.5 relative h-[68px]">
+                                    {visualTimeline.map((item, index) => {
+                                        const slide = item.slide;
+                                        const template = templatesMap.get(slide.templateId);
+                                        const block = blocksMap.get(slide.blockId);
+                                        const isCurrent = previewSlideId === slide.id;
 
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={slide.id}
+                                                data-slide-id={slide.id}
+                                                onClick={() => setPreviewSlideId(slide.id)}
+                                                className={cn(
+                                                    'relative h-[68px] aspect-video rounded-lg border overflow-hidden shrink-0 transition-all cursor-pointer group apple-press',
+                                                    isCurrent
+                                                        ? 'border-accent ring-2 ring-accent/30 shadow-lg shadow-black/50'
+                                                        : 'border-white/10 hover:border-white/25 opacity-65 hover:opacity-100 bg-black'
+                                                )}
+                                                style={{ width: item.width }}
+                                            >
+                                                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                                                    <SlideContentRenderer
+                                                        template={template}
+                                                        block={block}
+                                                        variables={slide.type === 'normal' ? (slide as ICanvasSlide).content?.variables : undefined}
+                                                        lang={lang}
+                                                        isPreview={true}
+                                                        scale={item.width / 1920}
+                                                        backgroundOverride={slide.type === 'normal' ? (slide as ICanvasSlide).backgroundOverride : undefined}
+                                                        canvasItems={slide.type === 'normal' ? (slide as ICanvasSlide).content?.canvasItems : []}
+                                                        slide={slide}
+                                                    />
+                                                </div>
+
+                                                <div className={cn(
+                                                    'absolute top-1 right-1 px-1.5 py-0.5 rounded text-[9px] font-bold z-10 tabular-nums leading-none',
+                                                    isCurrent
+                                                        ? 'bg-accent text-stone-950'
+                                                        : 'bg-black/70 text-stone-300 border border-white/10'
+                                                )}>
+                                                    {(slide.order || index) + 1}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Optional Audio Lane (only shown when presentation actually has audio tracks) */}
+                                {allScopes.length > 0 && (
+                                    <div className="flex relative h-10 bg-purple-500/[0.06] rounded-lg border border-purple-500/15">
+                                        {allScopes.map(({ scope, startIdx, endIdx }) => (
+                                            <ModalAudioScope
+                                                key={scope.id}
+                                                scope={scope}
+                                                startIdx={startIdx}
+                                                endIdx={endIdx}
+                                                visualTimeline={visualTimeline}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </TrackContainer>
+                    </div>
+                ) : undefined
+            }
+            footerLeft={
+                activePresentation ? (
+                    <div className="flex items-center gap-2 text-xs text-stone-400">
+                        <span className="inline-flex items-center gap-1.5 tabular-nums">
+                            <CustomSlideStackIcon className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                            <span>{t('slides_count', { count: slides.length, defaultValue: `${slides.length} слайдов` })}</span>
+                        </span>
+                        {allScopes.length > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-500/10 border border-purple-500/20 text-[11px] font-semibold text-purple-300 tabular-nums">
+                                <Music className="w-3 h-3 shrink-0" />
+                                <span>{allScopes.length}</span>
+                            </span>
+                        )}
+                    </div>
+                ) : (
+                    <span className="text-xs text-stone-500">
+                        {t('select_to_preview', 'Выберите презентацию')}
+                    </span>
+                )
+            }
+            footerRight={
+                <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleAdd}
+                    disabled={!selectedPresentationId}
+                    leftIcon={<Plus className="w-4 h-4" />}
+                    className="px-5 font-bold tracking-wide shrink-0"
+                >
+                    {t('add_to_timeline', 'Добавить на таймлайн')}
+                </Button>
+            }
+            extra={contextMenuEl}
+        />
+    );
 };
 
 export default PresentationPickerModal;

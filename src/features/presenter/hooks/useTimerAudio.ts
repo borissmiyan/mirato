@@ -131,6 +131,8 @@ export const useTimerAudio = (id: string, settings: ITimerSettings, isLive: bool
                 else audioService.playTrack(stableScopeId);
             } else if (command === 'seek' && typeof value === 'number') {
                 audioService.seekTrack(stableScopeId, value);
+            } else if (command === 'speed' && typeof value === 'number') {
+                audioService.setTrackSpeed(stableScopeId, value);
             }
         });
 

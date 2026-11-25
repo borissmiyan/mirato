@@ -7,6 +7,7 @@ import {
 import { ThumbnailService } from './ThumbnailService';
 import { APP_VERSION, EKT_SCHEMA_VERSION } from '@/core/constants';
 import { IpcService } from '@/core/services/ipcService';
+import { toMiratoFilename } from '@/core/utils/fileExtensions';
 import { 
     sha256, collectMediaRefs, patchMediaIds, 
     getMediaBlob, mimeToExt, MediaManifest 
@@ -234,7 +235,7 @@ export const EktmpService = {
             const template = await db.templates.get(templateId);
             if (!template) return;
             const blob = await this.pack(templateId);
-            await IpcService.templates.write(`${template.id}.ektmp`, new Uint8Array(await blob.arrayBuffer()));
+            await IpcService.templates.write(`${template.id}.mrtmp`, new Uint8Array(await blob.arrayBuffer()));
         } catch (error) {
             console.error('Save failed:', error);
         }
@@ -243,7 +244,8 @@ export const EktmpService = {
     async deleteFromFilesystem(templateId: string) {
         if (!IpcService.isElectron()) return;
         try {
-            await IpcService.templates.delete(`${templateId}.ektmp`);
+            await IpcService.templates.delete(`${templateId}.mrtmp`);
+            await IpcService.templates.delete(`${templateId}.ektmp`).catch(() => {});
         } catch (error) {
             console.error('Delete failed:', error);
         }
@@ -253,7 +255,7 @@ export const EktmpService = {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = filename.endsWith('.ektmp') ? filename : `${filename}.ektmp`;
+        link.download = toMiratoFilename(filename, 'template');
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);

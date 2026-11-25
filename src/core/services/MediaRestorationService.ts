@@ -158,7 +158,7 @@ export class MediaRestorationService {
                 const ektpFiles = await IpcService.invoke<{ id: string; name: string; url: string }[]>(
                     'read-directory-recursive',
                     dir,
-                    ['.ektp']
+                    ['.mrtp', '.ektp']
                 );
 
                 if (Array.isArray(ektpFiles)) {

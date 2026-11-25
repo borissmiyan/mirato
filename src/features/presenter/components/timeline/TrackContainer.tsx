@@ -37,7 +37,14 @@ const TrackContainer = forwardRef<TrackContainerHandle, TrackContainerProps>(
                 if (el) {
                     const containerRect = container.getBoundingClientRect();
                     const elRect = el.getBoundingClientRect();
-                    
+
+                    // Do not yank the scrollbar if the target slide is already comfortably visible
+                    const margin = 24;
+                    const isAlreadyVisible =
+                        elRect.left >= containerRect.left + margin &&
+                        elRect.right <= containerRect.right - margin;
+                    if (isAlreadyVisible) return;
+
                     const relativeLeft = elRect.left - containerRect.left + container.scrollLeft;
                     const scrollLeft = relativeLeft - (container.clientWidth / 2) + (elRect.width / 2);
                     

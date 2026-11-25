@@ -46,14 +46,12 @@ export const TransitionSeparator: React.FC<TransitionSeparatorProps> = ({
 
     return (
         <div className={cn(
-            "absolute top-0 bottom-0 w-8 flex items-center justify-center group/sep z-50",
-            isEnd ? "-right-[20px]" : "-left-[20px]"
+            "absolute inset-y-4 w-4 flex items-center justify-center group/sep z-30",
+            isEnd ? "-right-[14px]" : "-left-[14px]"
         )}>
-            {/* Wider hit area */}
-            <div className="absolute inset-y-0 -inset-x-2 cursor-pointer" />
-
             <button
                 type="button"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                     e.stopPropagation();
                     if (!targetId) return;
@@ -66,7 +64,7 @@ export const TransitionSeparator: React.FC<TransitionSeparatorProps> = ({
                     setPanelOpen(true);
                 }}
                 className={cn(
-                    "w-7 h-7 rounded-xl flex items-center justify-center transition-all shadow-xl backdrop-blur-md cursor-pointer z-20 border apple-press",
+                    "w-6 h-6 shrink-0 rounded-lg flex items-center justify-center transition-all shadow-xl cursor-pointer z-20 border apple-press",
                     isSelected
                         ? "bg-accent border-accent text-stone-900 scale-110"
                         : hasTransition
@@ -76,12 +74,12 @@ export const TransitionSeparator: React.FC<TransitionSeparatorProps> = ({
                 title={isEnd ? t('configure_end_transition', 'Configure End Transition') : t('configure_transition', 'Configure Transition')}
                 aria-label={isEnd ? t('configure_end_transition', 'Configure End Transition') : t('configure_transition', 'Configure Transition')}
             >
-                <ArrowRightLeft className={cn("w-3.5 h-3.5", isSelected && "animate-pulse")} />
+                <ArrowRightLeft className={cn("w-3 h-3", isSelected && "animate-pulse")} />
             </button>
 
             {/* Vertical indicator line on hover */}
             <div className={cn(
-                "absolute inset-y-4 left-1/2 -translate-x-1/2 w-0.5 rounded-full transition-opacity pointer-events-none",
+                "absolute inset-y-0 left-1/2 -translate-x-1/2 w-0.5 rounded-full transition-opacity pointer-events-none",
                 isSelected ? "bg-accent opacity-40" : "bg-accent/30 opacity-0 group-hover/sep:opacity-100"
             )} />
         </div>

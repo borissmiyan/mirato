@@ -1,11 +1,11 @@
 import React from 'react';
-import { LucideIcon, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 
 interface GraceLibBinProps {
     id: string;
     name: string;
-    icon: LucideIcon;
+    icon: React.ComponentType<{ className?: string }>;
     count?: number;
     isActive?: boolean;
     onClick: () => void;

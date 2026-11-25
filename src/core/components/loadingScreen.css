@@ -1,0 +1,166 @@
+/* Mirato Splash Screen — Zero-Snap 3-Card Logo Choreography & Soft Feathered Portal Reveal */
+
+/* 1. Silky-smooth bottom-to-center entrance (single deceleration curve, no overshoot slam) */
+@keyframes mirato-card-rise-back {
+  0% {
+    transform: translate3d(-16px, 74vh, 0) rotate(-9deg) scale(0.9);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes mirato-card-rise-mid {
+  0% {
+    transform: translate3d(16px, 76vh, 0) rotate(8deg) scale(0.91);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes mirato-card-rise-front {
+  0% {
+    transform: translate3d(0px, 78vh, 0) rotate(-5deg) scale(0.92);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0) rotate(0deg) scale(1);
+  }
+}
+
+@keyframes mirato-loader-rise {
+  0% {
+    transform: translate3d(0px, 56vh, 0) scale(0.94);
+  }
+  100% {
+    transform: translate3d(0px, 0px, 0) scale(1);
+  }
+}
+
+/* 2. Continuous organic levitation starting from exact rest pose (0,0,0deg) — never snaps */
+@keyframes mirato-card-back-float {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-4px, -7px, 0px) rotate(-1.5deg);
+  }
+}
+
+@keyframes mirato-card-mid-float {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(5px, -9px, 0px) rotate(1.3deg);
+  }
+}
+
+@keyframes mirato-card-front-float {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0px) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-2px, -11px, 0px) rotate(-0.8deg);
+  }
+}
+
+/* 3. Sculpted loading pill internal shimmer */
+@keyframes mirato-loader-shimmer {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(260%);
+  }
+}
+
+/* 4. Single-arc curved pointer cursor flight (split X/Y ease curves -> smooth natural arc, zero mid-flight jerk) */
+@keyframes mirato-cursor-arc-x {
+  0% {
+    transform: translate3d(56vw, 0, 0);
+  }
+  100% {
+    transform: translate3d(6px, 0, 0);
+  }
+}
+
+@keyframes mirato-cursor-arc-y {
+  0% {
+    transform: translate3d(0, 52vh, 0) rotate(12deg) scale(1.04);
+  }
+  100% {
+    transform: translate3d(0, 8px, 0) rotate(0deg) scale(1);
+  }
+}
+
+/* 5. Soft feathered circular portal expanding well past all viewport corners */
+@keyframes mirato-portal-expand {
+  0% {
+    r: 0px;
+  }
+  100% {
+    r: 175vmax;
+  }
+}
+
+.mirato-card-enter-back {
+  animation: mirato-card-rise-back 1100ms cubic-bezier(0.16, 1, 0.3, 1) 140ms both;
+}
+
+.mirato-card-enter-mid {
+  animation: mirato-card-rise-mid 1100ms cubic-bezier(0.16, 1, 0.3, 1) 70ms both;
+}
+
+.mirato-card-enter-front {
+  animation: mirato-card-rise-front 1100ms cubic-bezier(0.16, 1, 0.3, 1) 0ms both;
+}
+
+.mirato-loader-enter {
+  animation: mirato-loader-rise 1100ms cubic-bezier(0.16, 1, 0.3, 1) 180ms both;
+}
+
+/* Float begins right as each card gently settles (zero negative delay, zero snap) */
+.mirato-card-float-back {
+  animation: mirato-card-back-float 3.6s cubic-bezier(0.45, 0.05, 0.55, 0.95) 1240ms infinite;
+}
+
+.mirato-card-float-mid {
+  animation: mirato-card-mid-float 3.2s cubic-bezier(0.45, 0.05, 0.55, 0.95) 1170ms infinite;
+}
+
+.mirato-card-float-front {
+  animation: mirato-card-front-float 2.9s cubic-bezier(0.45, 0.05, 0.55, 0.95) 1100ms infinite;
+}
+
+.mirato-loader-shimmer {
+  animation: mirato-loader-shimmer 1.9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.mirato-cursor-enter-x {
+  animation: mirato-cursor-arc-x 760ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.mirato-cursor-enter-y {
+  animation: mirato-cursor-arc-y 760ms cubic-bezier(0.12, 0.9, 0.28, 1) both;
+}
+
+.mirato-portal-circle {
+  animation: mirato-portal-expand 1250ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mirato-card-enter-back,
+  .mirato-card-enter-mid,
+  .mirato-card-enter-front,
+  .mirato-loader-enter,
+  .mirato-card-float-back,
+  .mirato-card-float-mid,
+  .mirato-card-float-front,
+  .mirato-loader-shimmer,
+  .mirato-cursor-enter-x,
+  .mirato-cursor-enter-y,
+  .mirato-portal-circle {
+    animation: none !important;
+  }
+}

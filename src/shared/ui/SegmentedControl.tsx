@@ -57,7 +57,7 @@ export function SegmentedControl<T extends string | number>({
   return (
     <div
       role="radiogroup"
-      className={`inline-flex items-center bg-black/40 border border-white/10 backdrop-blur-md ${
+ className={`inline-flex items-center bg-stone-950 border border-white/10 ${
         cfg.container
       } ${fullWidth ? 'w-full flex' : ''} ${className}`}
     >

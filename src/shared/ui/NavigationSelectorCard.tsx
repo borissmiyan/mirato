@@ -44,7 +44,7 @@ export interface NavigationSelectorCardProps extends React.ButtonHTMLAttributes<
 }
 
 /**
- * Standardized bottom navigation & context selector card conforming to Apple HIG & Deck.CE design tokens:
+ * Standardized bottom navigation & context selector card conforming to Apple HIG & Mirato design tokens:
  * - Fixed height h-14 (56px)
  * - Concentric squircle badge (min-w-10 h-8 rounded-xl)
  * - Standardized typography (text-xs uppercase title, text-[10px] uppercase subtitle)

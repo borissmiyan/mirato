@@ -206,7 +206,7 @@ const CustomizationPanel: React.FC = () => {
                     </div>
 
                     {/* Live Badge */}
-                    <div className="absolute top-6 left-6 flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl animate-pulse">
+                    <div className="absolute top-6 left-6 flex items-center gap-2 px-3 py-1.5 bg-stone-950 border border-white/10 rounded-full shadow-2xl animate-pulse">
                         <div className="w-2 h-2 rounded-full bg-accent" />
                         <span className="text-[10px] font-bold text-white uppercase tracking-widest">{t('live_preview')}</span>
                     </div>
@@ -284,7 +284,7 @@ const CustomizationPanel: React.FC = () => {
                 </div>
 
                 {/* ─── Footer Actions ─── */}
-                <div className="relative z-10 px-6 pb-6 pt-4 border-t border-white/5 bg-stone-950/80 backdrop-blur-xl shrink-0">
+                <div className="relative z-10 px-6 pb-6 pt-4 border-t border-white/5 bg-stone-950 shrink-0">
                     <div className="flex gap-3">
                         <Button
                             variant="secondary"

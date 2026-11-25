@@ -1,7 +1,7 @@
 import { db } from '@/core/db';
+import { isBuiltInHymnPresentation } from '@/features/hymns/services/hymnReadOnlyGuard';
 import { PresentationSliceCreator, PresentationState } from '../types';
 import type { ISlide, IPresentationFile } from '@/core/types';
-import { LiveSyncService } from '@/core/services/liveSyncService';
 import { performDuplicateSlide, performDuplicateSlides } from './slideDuplicationHelpers';
 import { performCopySlides, performPasteSlides } from './slideClipboardHelpers';
 import { performAddHymnToActivePresentation } from './hymnAddOperation';
@@ -55,6 +55,7 @@ async function debouncedDbUpdate(presentationId: string, slides: ISlide[], date:
 
 export const createSlideOperationsSlice: PresentationSliceCreator = (set, get) => ({
     updatePresentationSlides: async (presentationId, slides) => {
+        if (await isBuiltInHymnPresentation(presentationId)) return;
         const now = new Date();
         const { activePresentationId, activePresentation, selectedPresentationId, selectedPresentation } = get();
         const updates: Partial<PresentationState> = {};
@@ -73,26 +74,22 @@ export const createSlideOperationsSlice: PresentationSliceCreator = (set, get) =
             set(updates);
         }
 
-        const liveId = get().liveSlideId;
-        if (liveId) {
-            const updatedLive = slides.find(s => s.id === liveId);
-            if (updatedLive) {
-                LiveSyncService.showSlide(updatedLive, presentationId);
-            }
-        }
-
+        // Live projector sync is handled exclusively by useTimelineLiveSync (staged updates via "Update Live")
         await debouncedDbUpdate(presentationId, slides, now);
     },
 
     duplicateSlide: async (presentationId, slideId) => {
+        if (await isBuiltInHymnPresentation(presentationId)) return;
         await performDuplicateSlide(get, set, presentationId, slideId);
     },
 
     duplicateSlides: async (presentationId, slideIds) => {
+        if (await isBuiltInHymnPresentation(presentationId)) return;
         await performDuplicateSlides(get, set, presentationId, slideIds);
     },
 
     moveSlide: async (presentationId, slideId, direction) => {
+        if (await isBuiltInHymnPresentation(presentationId)) return;
         const pres = await db.presentationFiles.get(presentationId);
         if (!pres) return;
 
@@ -121,6 +118,7 @@ export const createSlideOperationsSlice: PresentationSliceCreator = (set, get) =
     },
 
     moveSlides: async (presentationId, slideIds, direction) => {
+        if (await isBuiltInHymnPresentation(presentationId)) return;
         const pres = await db.presentationFiles.get(presentationId);
         if (!pres || slideIds.length === 0) return;
 
@@ -164,6 +162,7 @@ export const createSlideOperationsSlice: PresentationSliceCreator = (set, get) =
     },
 
     removeSlide: async (presentationId, slideId) => {
+        if (await isBuiltInHymnPresentation(presentationId)) return;
         const pres = await db.presentationFiles.get(presentationId);
         if (!pres) return;
 
@@ -181,6 +180,7 @@ export const createSlideOperationsSlice: PresentationSliceCreator = (set, get) =
     },
 
     removeSlides: async (presentationId, slideIds) => {
+        if (await isBuiltInHymnPresentation(presentationId)) return;
         const pres = await db.presentationFiles.get(presentationId);
         if (!pres) return;
 
@@ -211,8 +211,8 @@ export const createSlideOperationsSlice: PresentationSliceCreator = (set, get) =
         await performPasteSlides(get, set, presentationId, targetIndex);
     },
 
-    addHymnToActivePresentation: async (hymnPresentationId, themeId = 'default', index) => {
-        await performAddHymnToActivePresentation(get, set, hymnPresentationId, themeId, index);
+    addHymnToActivePresentation: async (hymnPresentationId, themeId = 'default', index, options) => {
+        await performAddHymnToActivePresentation(get, set, hymnPresentationId, themeId, index, options);
     },
 
     detachHymnSlide: async (presentationId, slideId, skipAudioConfirmation = false) => {

@@ -93,9 +93,37 @@ contextBridge.exposeInMainWorld('electron', {
             readCover: (hymnalDirPath: string) => ipcRenderer.invoke('hymns:read-cover', hymnalDirPath),
             readManifest: (hymnalDirPath: string) => ipcRenderer.invoke('hymns:read-manifest', hymnalDirPath),
             readEktp: (hymnalDirPath: string, filename: string) => ipcRenderer.invoke('hymns:read-ektp', hymnalDirPath, filename),
+            readMrtpBatch: (hymnalDirPath: string, filenames: string[]) => ipcRenderer.invoke('hymns:read-mrtp-batch', hymnalDirPath, filenames),
             importCustom: () => ipcRenderer.invoke('hymns:import-custom'),
             removeCustom: (dirName: string) => ipcRenderer.invoke('hymns:remove-custom', dirName),
             generateTemplate: () => ipcRenderer.invoke('hymns:generate-template'),
+        },
+        hymnalAudio: {
+            listInstalled: () => ipcRenderer.invoke('hymnal-audio:list-installed'),
+            isInstalled: (hymnalId: string, variant?: 'minus' | 'plus') =>
+                ipcRenderer.invoke('hymnal-audio:is-installed', hymnalId, variant),
+            getAvailableVariants: (hymnalId: string, hymnNumber: number) =>
+                ipcRenderer.invoke('hymnal-audio:get-available-variants', hymnalId, hymnNumber),
+            downloadPack: (params: {
+                hymnalId: string;
+                variant?: 'minus' | 'plus';
+                url?: string;
+                version?: number;
+                expectedSha256?: string;
+                expectedBytes?: number;
+                parts?: Array<{ url: string; sha256?: string; sizeBytes?: number }>;
+            }) => ipcRenderer.invoke('hymnal-audio:download-pack', params),
+            cancelDownload: (hymnalId: string, variant?: 'minus' | 'plus') =>
+                ipcRenderer.invoke('hymnal-audio:cancel-download', hymnalId, variant),
+            installFromFile: (hymnalId: string, version?: number, variant?: 'minus' | 'plus') =>
+                ipcRenderer.invoke('hymnal-audio:install-from-file', hymnalId, version, variant),
+            removePack: (hymnalId: string, variant?: 'minus' | 'plus') =>
+                ipcRenderer.invoke('hymnal-audio:remove-pack', hymnalId, variant),
+            onProgress: (callback: (payload: unknown) => void) => {
+                const sub = (_event: IpcRendererEvent, payload: unknown) => callback(payload);
+                ipcRenderer.on('hymnal-audio:progress', sub);
+                return () => ipcRenderer.removeListener('hymnal-audio:progress', sub);
+            },
         },
     },
 });

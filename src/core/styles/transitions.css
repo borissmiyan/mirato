@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Deck.CE - Transitions & Apple HIG Motion Architecture
+   Mirato - Transitions & Apple HIG Motion Architecture
    Spring physics: cubic-bezier(0.16, 1, 0.3, 1) & cubic-bezier(0.2, 0.8, 0.2, 1)
    Hardware-accelerated transforms & zero main-thread jank (60/120fps ProMotion)
    ========================================================================== */

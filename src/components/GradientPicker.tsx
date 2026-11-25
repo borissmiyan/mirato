@@ -114,7 +114,7 @@ export const GradientPicker: React.FC<GradientPickerProps> = ({ from, to, angle,
                         <button
                             type="button"
                             onClick={swapColors}
-                            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-2 bg-black/40 backdrop-blur-md rounded-full border border-white/10 text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90 apple-press cursor-pointer"
+ className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 p-2 bg-stone-950 rounded-full border border-white/10 text-white opacity-0 group-hover:opacity-100 transition-all hover:scale-110 active:scale-90 apple-press cursor-pointer"
                             title={t('swap_colors')}
                         >
                             <ArrowRightLeft className="w-4 h-4" />

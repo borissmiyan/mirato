@@ -47,6 +47,13 @@ export class AudioBufferLoader {
         if (ongoing) return ongoing;
 
         const resolutionPromise = (async () => {
+            // Deterministic hymnal audio pack path: resolve from userData/hymnal-audio without 404s when not installed
+            if (fileId.startsWith('hymnal-audio://')) {
+                if (!IpcService.isElectron()) return '';
+                const resolvedDiskPath = await IpcService.invoke<string | null>('media:resolve-audio-path', { fileId });
+                return resolvedDiskPath ? this.resolveUrl(resolvedDiskPath) : '';
+            }
+
             // Check if we already have this in DB (e.g. imported media)
             let dbItem = (await db.mediaPool.get(fileId) || await db.backgrounds.get(fileId)) as { data?: Blob, path?: string } | undefined;
             

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { PanelBottomClose, Rows2, Rows3 } from 'lucide-react';
 import { timelineModeAtom, slideDesignPanelOpenAtom, TimelineMode } from '@/core/store/uiAtoms';
 import { cn } from '@/core/utils/cn';
+import { Tooltip } from '@/shared/ui';
 
 /**
  * Floating single-button toggle in the bottom right corner allowing seamless cyclical
@@ -58,28 +59,29 @@ export const TimelineModeToggle: React.FC = memo(() => {
                 rightOffset
             )}
         >
-            <div
-                className={cn(
-                    'flex items-center justify-center p-1.5 h-14 w-14 rounded-xl shadow-2xl transition-all duration-300',
-                    'bg-stone-900/40 backdrop-blur-2xl border border-white/10 ring-1 ring-white/5',
-                    'hover:bg-stone-900/60 hover:border-white/20'
-                )}
-            >
-                <button
-                    type="button"
-                    onClick={handleCycle}
-                    title={current.label}
-                    aria-label={current.label}
+            <Tooltip content={current.label} position="top">
+                <div
                     className={cn(
-                        'flex items-center justify-center w-10 h-10 rounded-lg cursor-pointer transition-all duration-200 apple-press',
-                        isVisible
-                            ? 'bg-accent text-accent-foreground font-semibold shadow-md'
-                            : 'text-stone-400 hover:text-white hover:bg-white/10'
+                        'flex items-center justify-center p-1.5 h-14 w-14 rounded-xl shadow-2xl transition-all duration-300',
+'bg-stone-900 border border-white/10 ring-1 ring-white/5',
+                        'hover:bg-stone-900/60 hover:border-white/20'
                     )}
                 >
-                    <Icon className="w-4 h-4" />
-                </button>
-            </div>
+                    <button
+                        type="button"
+                        onClick={handleCycle}
+                        aria-label={current.label}
+                        className={cn(
+                            'flex items-center justify-center w-10 h-10 rounded-lg cursor-pointer transition-all duration-200 apple-press',
+                            isVisible
+                                ? 'bg-accent text-accent-foreground font-semibold shadow-md'
+                                : 'text-stone-400 hover:text-white hover:bg-white/10'
+                        )}
+                    >
+                        <Icon className="w-4 h-4" />
+                    </button>
+                </div>
+            </Tooltip>
         </div>
     );
 });

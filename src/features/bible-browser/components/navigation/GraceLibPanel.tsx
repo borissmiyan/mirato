@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Layout, LayoutTemplate, Presentation, Music } from 'lucide-react';
+import { Layout, LayoutTemplate, Music } from 'lucide-react';
+import { CustomSlideStackIcon } from '@/shared/ui';
 import { GraceLibBin } from '@/features/presenter/components/library/GraceLibBin';
 
 interface GraceLibPanelProps {
@@ -35,7 +36,7 @@ export const GraceLibPanel: React.FC<GraceLibPanelProps> = React.memo(({
           <GraceLibBin
             id="presentations"
             name={t('presentations', 'Presentations')}
-            icon={Presentation}
+            icon={CustomSlideStackIcon}
             isActive={graceLibSection === 'presentations'}
             onClick={() => onSetGraceLibSection('presentations')}
             description={t('presentations_desc', 'Global .ekt Library')}

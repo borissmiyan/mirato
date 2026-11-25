@@ -2,6 +2,35 @@ export default {
     "changelog": "Changelog",
     "changelog_entries": [
         {
+            "version": "v2.4.3",
+            "title": "Instant Projector, Hymnals & Presentation Export",
+            "date": "November 25, 2026",
+            "description": "A big update for smooth, stress-free services: the projector opens immediately without delay, popular hymnals with backing tracks are now included, presentations can be saved to PowerPoint or PDF, and the launch screen has a fresh new look.",
+            "features": [
+                "Instant projector startup: the audience screen now opens right away, without the 5-second wait the first time you go live",
+                "Save presentations in more formats: export your slides not only for Mirato, but also as PowerPoint, PDF, or LibreOffice files via File → Export or by right-clicking the Export button",
+                "More hymnals & backing tracks: added popular hymnals, the option to hide hymnals you don't use in Settings, fresh themes, and accompaniment audio with speed and volume controls",
+                "Smoother hymns & nested presentations: pressing Enter immediately shows the first slide on the projector, the tile accurately shows the current slide number and live badge, and switching slides feels smooth and predictable",
+                "Dual-translation Bible without flashing: slides with two Bible translations now show both translations together right away",
+                "Live speed & volume controls: adjust music or video playback speed and volume during the service without interrupting the screen",
+                "New Mirato launch screen: a fresh, smooth animated startup with friendly loading messages"
+            ]
+        },
+        {
+            "version": "v2.3.0",
+            "title": "New Mirato Name, Redesigned Media Pool & Easier Text Editing",
+            "date": "October 18, 2026",
+            "description": "A major update introducing the new Mirato name with automatic transfer of all your presentations and settings, a completely redesigned Media Pool, and much smoother text editing on slides.",
+            "features": [
+                "New Mirato name & automatic transfer: all your existing presentations, Bibles, settings, and files carry over automatically on first launch",
+                "Completely redesigned Media Pool: browse images, videos, and audio as a grid, list, or folder tree, with quick preview for any file",
+                "Easier text editing on slides: text boxes now automatically fit your text, and moving or resizing text with the mouse feels smooth and accurate",
+                "Better PowerPoint import: opening PowerPoint files now keeps text colors, styles, and outlines much more faithfully",
+                "Organize your presentations: star important presentations as favorites, group them with tags, and find what you need faster",
+                "Refreshed look & feel: cleaner buttons, switches, and windows throughout the app"
+            ]
+        },
+        {
             "version": "v2.2.6",
             "title": "Major Speed-Up, Storage Optimization & Smart Fonts",
             "date": "September 18, 2026",

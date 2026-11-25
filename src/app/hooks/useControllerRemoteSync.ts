@@ -64,7 +64,11 @@ export function useControllerRemoteSync({
     }, [appMode, activeVerse, projectorIsLive, liveSlideId, previewSlideId, lang, themeAccent, isPlaying, activeOverride, activeLogoUrl, activeLogo, presenterSettings]);
 
     useEffect(() => {
-        updateRemoteState();
+        // Coalesce rapid arrow-key navigation so remote sync never blocks slide switching
+        const timer = setTimeout(() => {
+            updateRemoteState();
+        }, 50);
+        return () => clearTimeout(timer);
     }, [updateRemoteState]);
 
     useEffect(() => {

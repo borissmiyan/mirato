@@ -66,9 +66,26 @@ declare global {
                     readCover: (hymnalDirPath: string) => Promise<string | null>;
                     readManifest: (hymnalDirPath: string) => Promise<unknown | null>;
                     readEktp: (hymnalDirPath: string, filename: string) => Promise<Uint8Array | null>;
+                    readMrtpBatch?: (hymnalDirPath: string, filenames: string[]) => Promise<Array<{
+                        filename: string;
+                        hash?: string;
+                        presentation?: Record<string, unknown>;
+                        needsFullUnpack?: boolean;
+                        error?: boolean;
+                    }>>;
                     importCustom: () => Promise<{ success: boolean; canceled?: boolean; error?: string; manifest?: unknown; dirName?: string }>;
                     removeCustom: (dirName: string) => Promise<boolean>;
                     generateTemplate: () => Promise<{ success: boolean; canceled?: boolean; error?: string }>;
+                };
+                hymnalAudio?: {
+                    listInstalled: () => Promise<Array<{ hymnalId: string; variant?: 'minus' | 'plus'; packKey?: string; version: number; trackCount: number; bytesOnDisk: number; installedAt?: string }>>;
+                    isInstalled: (hymnalId: string, variant?: 'minus' | 'plus') => Promise<boolean>;
+                    getAvailableVariants: (hymnalId: string, hymnNumber: number) => Promise<{ minus: boolean; plus: boolean }>;
+                    downloadPack: (params: { hymnalId: string; variant?: 'minus' | 'plus'; url?: string; version?: number; expectedSha256?: string; expectedBytes?: number; parts?: Array<{ url: string; sha256?: string; sizeBytes?: number }> }) => Promise<{ success: boolean; canceled?: boolean; error?: string; info?: { hymnalId: string; variant?: 'minus' | 'plus'; packKey?: string; version: number; trackCount: number; bytesOnDisk: number } }>;
+                    cancelDownload: (hymnalId: string, variant?: 'minus' | 'plus') => Promise<boolean>;
+                    installFromFile: (hymnalId: string, version?: number, variant?: 'minus' | 'plus') => Promise<{ success: boolean; canceled?: boolean; error?: string; info?: { hymnalId: string; variant?: 'minus' | 'plus'; packKey?: string; version: number; trackCount: number; bytesOnDisk: number } }>;
+                    removePack: (hymnalId: string, variant?: 'minus' | 'plus') => Promise<{ success: boolean; error?: string }>;
+                    onProgress: (callback: (payload: { hymnalId: string; variant?: 'minus' | 'plus'; packKey?: string; phase: 'downloading' | 'verifying' | 'extracting' | 'done' | 'error' | 'canceled'; percent: number; bytesReceived: number; totalBytes: number; speedBytesPerSec?: number; error?: string }) => void) => () => void;
                 };
             };
         };

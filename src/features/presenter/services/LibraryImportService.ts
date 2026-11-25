@@ -40,7 +40,7 @@ export class LibraryImportService {
             const name = (isFile ? item.name : (item as string).split(/[/\\]/).pop() || '').toLowerCase();
             const ext = name.split('.').pop();
 
-            if (ext && ['ektp', 'ektmp', 'ektgl', 'pptx'].includes(ext)) {
+            if (ext && ['mrtp', 'mrtmp', 'mrtgl', 'ektp', 'ektmp', 'ektgl', 'pptx'].includes(ext)) {
                 presentations.push(isFile ? { file: item } : { path: item as string });
             } else {
                 let type: MediaType = 'image';
@@ -87,11 +87,11 @@ export class LibraryImportService {
     ): Promise<void> {
         const name = file.name.toLowerCase();
         
-        if (name.endsWith('.ektgl')) {
+        if (name.endsWith('.mrtgl') || name.endsWith('.ektgl')) {
             await GraceLibExportService.unpackEntireGraceLib(file);
             toast.success(t('gracelib_imported', 'GraceLib imported'));
         } 
-        else if (name.endsWith('.ektp')) {
+        else if (name.endsWith('.mrtp') || name.endsWith('.ektp')) {
             const presentationId = await EktpService.unpack(file, 0, new Set(), currentBinId);
             const presentation = await db.presentationFiles.get(presentationId);
             if (presentation) {
@@ -103,7 +103,7 @@ export class LibraryImportService {
                 toast.success(t('presentation_imported', 'Presentation imported: {{name}}', { name: presentation.name }));
             }
         } 
-        else if (name.endsWith('.ektmp')) {
+        else if (name.endsWith('.mrtmp') || name.endsWith('.ektmp')) {
             await EktmpService.unpack(file);
             toast.success(t('template_imported', 'Template imported: {{name}}', { name: file.name }));
         } 
@@ -148,12 +148,12 @@ export class LibraryImportService {
         const name = nameStr.toLowerCase();
         const ext = name.split('.').pop()?.toLowerCase() || '';
 
-        if (ext === 'ektgl') {
+        if (ext === 'mrtgl' || ext === 'ektgl') {
             const file = await this.pathToLocalFile(path, nameStr, 'application/zip');
             await GraceLibExportService.unpackEntireGraceLib(file);
             toast.success(t('gracelib_imported', 'GraceLib imported'));
         } 
-        else if (ext === 'ektp') {
+        else if (ext === 'mrtp' || ext === 'ektp') {
             const file = await this.pathToLocalFile(path, nameStr, 'application/zip');
             const presentationId = await EktpService.unpack(file, 0, new Set(), currentBinId);
             const presentation = await db.presentationFiles.get(presentationId);
@@ -166,7 +166,7 @@ export class LibraryImportService {
                 toast.success(t('presentation_imported', 'Presentation imported: {{name}}', { name: presentation.name }));
             }
         } 
-        else if (ext === 'ektmp') {
+        else if (ext === 'mrtmp' || ext === 'ektmp') {
             const file = await this.pathToLocalFile(path, nameStr, 'application/zip');
             await EktmpService.unpack(file);
             toast.success(t('template_imported', 'Template imported: {{name}}', { name: nameStr }));
@@ -212,7 +212,7 @@ export class LibraryImportService {
             const input = document.createElement('input');
             input.type = 'file';
             input.multiple = true;
-            input.accept = '.ektp,.ektmp,.ektgl,.pptx,image/*,video/*,audio/*';
+            input.accept = '.mrtp,.mrtmp,.mrtgl,.ektp,.ektmp,.ektgl,.pptx,image/*,video/*,audio/*';
             input.onchange = (e) => {
                 const files = Array.from((e.target as HTMLInputElement).files || []);
                 this.importFiles(files, currentBinId, t);
@@ -225,7 +225,7 @@ export class LibraryImportService {
             const files = await IpcService.selectFile({
                 properties: ['openFile', 'multiSelections'],
                 filters: [
-                    { name: 'Supported Files', extensions: ['ektp', 'ektmp', 'ektgl', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'mp4', 'webm', 'ogg', 'mp3', 'wav', 'm4a', 'aac', 'flac'] }
+                    { name: 'Supported Files', extensions: ['mrtp', 'mrtmp', 'mrtgl', 'ektp', 'ektmp', 'ektgl', 'pptx', 'jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'mp4', 'webm', 'ogg', 'mp3', 'wav', 'm4a', 'aac', 'flac'] }
                 ]
             });
             if (!files) return;
@@ -258,7 +258,7 @@ export class LibraryImportService {
             file = await new Promise<File | null>((resolve) => {
                 const input = document.createElement('input');
                 input.type = 'file';
-                input.accept = '.ektp,.pptx';
+                input.accept = '.mrtp,.ektp,.pptx';
                 input.onchange = (e) => {
                     const files = Array.from((e.target as HTMLInputElement).files || []);
                     resolve(files.length > 0 ? files[0] : null);
@@ -270,7 +270,7 @@ export class LibraryImportService {
                 const files = await IpcService.selectFile({
                     properties: ['openFile'],
                     filters: [
-                        { name: 'Presentation Files', extensions: ['ektp', 'pptx'] }
+                        { name: 'Presentation Files', extensions: ['mrtp', 'ektp', 'pptx'] }
                     ]
                 });
                 if (files && files.length > 0) {
@@ -288,7 +288,7 @@ export class LibraryImportService {
             const name = file.name.toLowerCase();
             let slides: ISlide[] = [];
 
-            if (name.endsWith('.ektp')) {
+            if (name.endsWith('.mrtp') || name.endsWith('.ektp')) {
                 const tempPresId = await EktpService.unpack(file);
                 const tempPres = await db.presentationFiles.get(tempPresId);
                 if (tempPres) {

@@ -1,9 +1,10 @@
 import React, { useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Presentation, Music } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { AppMode } from '@/core/types';
+import { CustomSlideStackIcon, CustomHymnalIcon } from '@/shared/ui';
 
 interface ModePickerProps {
     appMode: AppMode;
@@ -50,8 +51,8 @@ const ModePicker: React.FC<ModePickerProps> = React.memo(({
 
     const modes: { id: AppMode; label: string; icon: React.ReactNode }[] = [
         { id: 'scripture', label: t('scripture'), icon: <BookOpen className="w-4 h-4" /> },
-        { id: 'presentation', label: t('presentation', 'Presentation'), icon: <Presentation className="w-4 h-4" /> },
-        { id: 'hymns', label: t('hymns.title', 'Hymns'), icon: <Music className="w-4 h-4" /> }
+        { id: 'presentation', label: t('presentation', 'Presentation'), icon: <CustomSlideStackIcon className="w-4 h-4" /> },
+        { id: 'hymns', label: t('hymns.title', 'Hymns'), icon: <CustomHymnalIcon className="w-4 h-4" /> }
     ];
 
     return createPortal(
@@ -64,7 +65,7 @@ const ModePicker: React.FC<ModePickerProps> = React.memo(({
 
             {/* Dropdown Content - Concentric macOS squircle (12px outer - 6px padding = 6px inner) */}
             <div
-                className="absolute bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-150 pointer-events-auto flex flex-col gap-0.5"
+ className="absolute bg-stone-900 border border-white/10 rounded-xl shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-150 pointer-events-auto flex flex-col gap-0.5"
                 style={position}
             >
                 {modes.map((mode) => (

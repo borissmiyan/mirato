@@ -65,16 +65,14 @@ export const useTimelineShortcuts = ({
             const isMod = e.metaKey || e.ctrlKey;
             const state = stateRef.current;
 
-            if (isMod && e.key === 'c') {
+            if (isMod && !e.shiftKey && !e.altKey && (e.code === 'KeyC' || e.key.toLowerCase() === 'c')) {
                 if (state.selectedAudioScopeId) {
                     copyAudioScope(state.selectedAudioScopeId);
                 } else if (state.selectedSlideIds.length > 0) {
                     copySlides(state.activePresentationId!, state.selectedSlideIds);
                 }
-            } else if (isMod && e.key === 'v') {
+            } else if (isMod && !e.shiftKey && !e.altKey && (e.code === 'KeyV' || e.key.toLowerCase() === 'v')) {
                 if (state.selectedAudioScopeId) {
-                    // Paste for audio usually happens at a specific slide, but if one is selected, we can try pasting there
-                    // Or if we have a preview slide
                     if (state.previewSlideId) pasteAudioScope(state.previewSlideId);
                 } else if (state.activePresentationId) {
                     let targetIdx: number | undefined = undefined;
@@ -91,30 +89,13 @@ export const useTimelineShortcuts = ({
                     }
                     pasteSlides(state.activePresentationId, targetIdx);
                 }
-            } else if (isMod && e.key === 'd') {
-                if (!isTimelineHoveredRef.current) return;
-                // Command+D for duplication
-                e.preventDefault();
-                e.stopImmediatePropagation?.();
-                if (state.selectedAudioScopeId) {
-                    duplicateAudioScope(state.selectedAudioScopeId);
-                } else if (state.selectedSlideIds.length > 0) {
-                    duplicateSlides(state.activePresentationId!, state.selectedSlideIds);
-                } else if (state.previewSlideId) {
-                    duplicateSlide(state.activePresentationId!, state.previewSlideId);
-                }
-            } else if (isMod && e.key === 'x') {
+            } else if (isMod && !e.shiftKey && !e.altKey && (e.code === 'KeyX' || e.key.toLowerCase() === 'x')) {
                 if (state.selectedSlideIds.length > 0) copySlides(state.activePresentationId!, state.selectedSlideIds, true);
-            } else if (isMod && e.key === 'a') {
+            } else if (isMod && !e.shiftKey && !e.altKey && (e.code === 'KeyA' || e.key.toLowerCase() === 'a')) {
+                if (!isTimelineHoveredRef.current) return;
                 e.preventDefault();
                 setSelectedSlideIds(state.slides.map(s => s.id));
-            } else if (e.key === 'Enter' && isMod && isTimelineHoveredRef.current) {
-                if (state.previewSlideId) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setLiveSlide(state.previewSlideId);
-                }
-            } else if (e.altKey && e.key === 'd') {
+            } else if (e.altKey && !isMod && (e.code === 'KeyD' || e.key.toLowerCase() === 'd')) {
                 // Only deselect when timeline is hovered
                 if (isTimelineHoveredRef.current) {
                     e.preventDefault();

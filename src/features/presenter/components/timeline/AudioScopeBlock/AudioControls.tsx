@@ -25,7 +25,7 @@ export const AudioVolumeBadge: React.FC<AudioVolumeBadgeProps> = ({
         <div
             onPointerDown={onVolumeBadgeDown}
             className={cn(
-                "bg-stone-900/60 h-7 px-2 rounded-xl border border-white/5 backdrop-blur-xl shadow-lg flex items-center gap-2 cursor-ew-resize transition-all hover:bg-stone-800/80 hover:border-white/10 select-none group/vol",
+"bg-stone-900 h-7 px-2 rounded-xl border border-white/5 shadow-lg flex items-center gap-2 cursor-ew-resize transition-all hover:bg-stone-800 hover:border-white/10 select-none group/vol",
                 isEditingVolume && "ring-2 ring-purple-500/50"
             )}
         >

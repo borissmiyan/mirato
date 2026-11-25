@@ -1,10 +1,10 @@
 import React from 'react';
 import { TFunction } from 'i18next';
-import { ChevronRight, Download, LayoutTemplate, Presentation, Music, Layers, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Download, LayoutTemplate, Music } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { IPresentationBin } from '@/core/types';
 import { ITemplateNav } from './LibraryTemplatesSection';
-import { Button, Tooltip } from '@/shared/ui';
+import { Button, Tooltip, CustomSlideStackIcon } from '@/shared/ui';
 
 interface LibraryHeaderProps {
     graceLibSection: string | null;
@@ -61,7 +61,7 @@ export const LibraryHeader: React.FC<LibraryHeaderProps> = ({
                                 presentationBinNavPath.length === 0 ? "text-stone-300" : "text-stone-600 hover:text-accent cursor-pointer active:scale-[0.97]"
                             )}
                         >
-                            <Presentation className="w-3.5 h-3.5" />
+                            <CustomSlideStackIcon className="w-3.5 h-3.5" />
                             {t('grace_presentations', 'Grace Presentations')}
                         </button>
                         {presentationBinNavPath.map((binId, index) => {
@@ -97,7 +97,7 @@ export const LibraryHeader: React.FC<LibraryHeaderProps> = ({
 
                 {!graceLibSection && (
                     <h3 className="text-[9px] font-bold text-stone-300 uppercase tracking-widest flex items-center gap-2">
-                        <Layers className="w-3.5 h-3.5" />
+                        <CustomSlideStackIcon className="w-3.5 h-3.5" />
                         {t('grace_lib', 'GraceLib')}
                     </h3>
                 )}

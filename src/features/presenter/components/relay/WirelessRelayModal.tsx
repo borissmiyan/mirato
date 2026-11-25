@@ -318,7 +318,7 @@ export const WirelessRelayModal: React.FC<WirelessRelayModalProps> = React.memo(
                 {/* Main Content Area */}
                 <div className="flex-1 flex flex-col relative z-10 bg-black/20 overflow-hidden">
                     {/* Integrated Header */}
-                    <div className="h-24 px-8 flex items-center justify-between border-b border-white/5 bg-stone-950/20 backdrop-blur-md relative overflow-hidden group/header shrink-0">
+                    <div className="h-24 px-8 flex items-center justify-between border-b border-white/5 bg-stone-950 relative overflow-hidden group/header shrink-0">
                         <div className="absolute -top-10 left-10 w-40 h-20 bg-accent/10 blur-[60px] rounded-full pointer-events-none" />
 
                         <div className="relative z-10 flex items-center gap-4">

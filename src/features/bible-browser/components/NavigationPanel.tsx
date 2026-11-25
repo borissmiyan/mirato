@@ -102,15 +102,21 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
   const books = useMemo(() => rawBooks ?? [], [rawBooks]);
 
   const rawHymnals = useLiveQuery(() => db.hymnals.toArray());
-  const hymnals = useMemo(() => rawHymnals ?? [], [rawHymnals]);
+  const hymnals = useMemo(() => (rawHymnals ?? []).filter(h => !h.isDisabled), [rawHymnals]);
+  const totalHymnsCount = useMemo(() => hymnals.reduce((sum, h) => sum + (h.itemCount || 0), 0), [hymnals]);
   const currentHymnal = useMemo(
-    () => hymnals.find((h) => h.id === activeHymnalId) ?? null,
+    () => (activeHymnalId === 'ALL' ? null : hymnals.find((h) => h.id === activeHymnalId) ?? null),
     [hymnals, activeHymnalId]
   );
 
-  // Auto-select first hymnal
+  // Auto-select first enabled hymnal (preserving 'ALL' mode when chosen)
   React.useEffect(() => {
-    if (!activeHymnalId && hymnals.length > 0) {
+    if (hymnals.length === 0) {
+      if (activeHymnalId) setActiveHymnalId(null);
+      return;
+    }
+    if (activeHymnalId === 'ALL') return;
+    if (!activeHymnalId || !hymnals.some((h) => h.id === activeHymnalId)) {
       setActiveHymnalId(hymnals[0].id);
     }
   }, [hymnals, activeHymnalId, setActiveHymnalId]);
@@ -189,7 +195,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
   }, [setIsPickerOpen]);
 
   return (
-    <div ref={resizer.containerRef} className="flex flex-col h-full bg-stone-900/80 backdrop-blur-xl border-r border-white/5 relative z-20 @container">
+    <div ref={resizer.containerRef} className="flex flex-col h-full bg-stone-900 border-r border-white/5 relative z-20 @container">
       <NavigationHeader
         appMode={appMode}
         isModePickerOpen={isModePickerOpen}
@@ -215,7 +221,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
         {/* Top Area: Book List or GraceLib Panel */}
         <div 
           style={appMode === 'hymns' ? undefined : { height: `${resizer.percent}%` }} 
-          className={`flex flex-col shrink-0 min-h-0 ${appMode === 'hymns' ? 'flex-1' : ''}`}
+          className={appMode === 'hymns' ? 'flex-1 flex flex-col min-h-0 overflow-hidden' : 'flex flex-col shrink-0 min-h-0'}
         >
           {appMode === 'scripture' ? (
             <BookList
@@ -234,7 +240,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
             <HymnsBrowser 
                 searchQuery={searchQuery} 
                 onAddHymn={(hymnPresentationId, themeId) => {
-                  usePresentationStore.getState().addHymnToActivePresentation(hymnPresentationId, themeId);
+                  usePresentationStore.getState().addHymnToActivePresentation(hymnPresentationId, themeId, undefined, { mode: 'nested-hymn', includeAudio: false });
                 }} 
             />
           )}
@@ -274,6 +280,8 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({ onOpenSettings = () =
         currentChapter={currentChapter}
         activeService={activeService}
         activeHymnal={currentHymnal}
+        isAllHymnals={activeHymnalId === 'ALL'}
+        totalHymnsCount={totalHymnsCount}
         onBadgeClick={handleTranslationBadgeClick}
         lang={lang}
         isRu={isRu}

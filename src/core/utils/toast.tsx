@@ -29,7 +29,7 @@ const PremiumToast = ({ title, description, type, toastId }: ToastProps) => {
     return (
         <div className={cn(
             "group relative flex items-center gap-3 p-4 min-w-[320px] max-w-[420px]",
-            "bg-stone-900/40 backdrop-blur-2xl rounded-3xl border border-white/5 shadow-2xl overflow-hidden",
+"bg-stone-900 rounded-3xl border border-white/5 shadow-2xl overflow-hidden",
             "animate-in fade-in slide-in-from-top-4 duration-500",
             "after:absolute after:inset-px after:rounded-[inherit] after:bg-linear-to-b after:from-white/8 after:to-transparent after:pointer-events-none"
         )}>

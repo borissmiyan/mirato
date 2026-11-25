@@ -12,6 +12,8 @@ export class AutoBackupService {
 
     public static async runScheduledBackup(): Promise<boolean> {
         if (!IpcService.isElectron() || this.isRunning) return false;
+        // Acquire lock synchronously before any await to prevent React StrictMode / concurrent double runs
+        this.isRunning = true;
 
         try {
             const lastBackupSetting = await db.settings.get('last_auto_backup_time');
@@ -22,7 +24,6 @@ export class AutoBackupService {
                 return false;
             }
 
-            this.isRunning = true;
             return await this.createSnapshot();
         } catch (err) {
             console.warn('[AutoBackupService] Scheduled backup check failed:', err);
@@ -36,6 +37,17 @@ export class AutoBackupService {
         if (!IpcService.isElectron()) return false;
 
         try {
+            // Exclude bundled/library hymns from disaster-recovery snapshots:
+            // they live on disk in Hymnals/ and can be 5,000+ items (~80+ MB JSON),
+            // which would spike RAM and freeze low-memory PCs on startup.
+            const readUserPresentations = async () => {
+                if (typeof db.presentationFiles.filter === 'function') {
+                    return db.presentationFiles.filter(p => !p.metadata?.isHymnLibraryItem).toArray();
+                }
+                const all = await db.presentationFiles.toArray();
+                return all.filter(p => !p.metadata?.isHymnLibraryItem);
+            };
+
             const [
                 services,
                 presentations,
@@ -46,7 +58,7 @@ export class AutoBackupService {
                 hymnMap
             ] = await Promise.all([
                 db.serviceFiles.toArray(),
-                db.presentationFiles.toArray(),
+                readUserPresentations(),
                 db.templates.toArray(),
                 db.logos.toArray(),
                 db.settings.toArray(),

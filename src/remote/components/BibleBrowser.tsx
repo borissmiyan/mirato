@@ -282,7 +282,7 @@ export const BibleBrowser: React.FC<IBibleBrowserProps> = ({
                 type="button"
                 key={t.id}
                 onClick={() => handleSelectTranslation(t)}
-                className="w-full p-4 bg-stone-900/50 border border-white/5 rounded-2xl flex items-center justify-between apple-press transition-all cursor-pointer backdrop-blur-2xl animate-in fade-in slide-in-from-bottom-2"
+ className="w-full p-4 bg-stone-900 border border-white/5 rounded-2xl flex items-center justify-between apple-press transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2"
                 style={{ animationDelay: `${idx * 40}ms`, animationFillMode: 'both' }}
               >
                 <div className="flex items-center gap-4">
@@ -313,7 +313,7 @@ export const BibleBrowser: React.FC<IBibleBrowserProps> = ({
               type="button"
               key={b.id}
               onClick={() => handleSelectBook(b)}
-              className="w-full p-4 bg-stone-900/50 border border-white/5 rounded-2xl flex items-center justify-between apple-press transition-all cursor-pointer backdrop-blur-2xl animate-in fade-in slide-in-from-bottom-2 group"
+ className="w-full p-4 bg-stone-900 border border-white/5 rounded-2xl flex items-center justify-between apple-press transition-all cursor-pointer animate-in fade-in slide-in-from-bottom-2 group"
               style={{ animationDelay: `${(idx % 20) * 15}ms`, animationFillMode: 'both' }}
             >
               <div className="flex items-center gap-4">
@@ -345,7 +345,7 @@ export const BibleBrowser: React.FC<IBibleBrowserProps> = ({
               type="button"
               key={c}
               onClick={() => handleSelectChapter(c)}
-              className="aspect-square bg-stone-900/50 border border-white/5 rounded-2xl flex items-center justify-center font-bold text-xl active:bg-accent active:text-accent-foreground apple-press transition-all text-stone-300 backdrop-blur-2xl animate-in fade-in zoom-in-95 cursor-pointer"
+ className="aspect-square bg-stone-900 border border-white/5 rounded-2xl flex items-center justify-center font-bold text-xl active:bg-accent active:text-accent-foreground apple-press transition-all text-stone-300 animate-in fade-in zoom-in-95 cursor-pointer"
               style={{ animationDelay: `${(idx % 20) * 15}ms`, animationFillMode: 'both' }}
             >
               {c}
@@ -375,7 +375,7 @@ export const BibleBrowser: React.FC<IBibleBrowserProps> = ({
                 key={v.id}
                 onClick={() => toggleVerse(v)}
                 className={cn(
-                  "w-full p-4 border transition-all flex flex-col gap-2.5 text-left backdrop-blur-2xl apple-press rounded-2xl group relative overflow-hidden cursor-pointer",
+"w-full p-4 border transition-all flex flex-col gap-2.5 text-left apple-press rounded-2xl group relative overflow-hidden cursor-pointer",
                   isSelected 
                     ? "bg-accent/15 border-accent/40 shadow-sm shadow-accent/10" 
                     : "bg-stone-900/50 border-white/5 hover:border-white/10"

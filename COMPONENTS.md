@@ -45,7 +45,10 @@
 | `IconButton` | `src/shared/ui/IconButton.tsx` | Auto-registered component | stable | 2026-10-25 |
 | `Kbd` | `src/shared/ui/Kbd.tsx` | Auto-registered component | stable | 2026-10-25 |
 | `NavigationSelectorCard` | `src/shared/ui/NavigationSelectorCard.tsx` | Auto-registered component | stable | 2026-10-25 |
+| `PickerOptionCard` | `src/shared/ui/PickerOptionCard.tsx` | Unified option card for Services, Presentations, Hymnals, and Translations dropdown pickers | stable | 2026-11-24 |
 | `PinInput` | `src/shared/ui/PinInput.tsx` | Auto-registered component | stable | 2026-10-25 |
+| `ScrollArea` | `src/shared/ui/ScrollArea.tsx` | Opaque auto-hiding overlay scrollbar with native 120Hz scrolling | stable | 2026-11-25 |
+| `VirtualList` | `src/shared/ui/VirtualList.tsx` | Unified virtualized list (fixed & variable height) wrapping ScrollArea for Hymns, Bible, Presentations, and Services | stable | 2026-11-25 |
 | `SearchInput` | `src/shared/ui/SearchInput.tsx` | Auto-registered component | stable | 2026-10-25 |
 | `SegmentedControl` | `src/shared/ui/SegmentedControl.tsx` | Auto-registered component | stable | 2026-10-25 |
 | `Separator` | `src/shared/ui/Separator.tsx` | Auto-registered component | stable | 2026-10-25 |
@@ -54,4 +57,5 @@
 | `Tooltip` | `src/shared/ui/Tooltip.tsx` | Auto-registered component | stable | 2026-10-25 |
 | `TranslationPicker` | `src/shared/ui/TranslationPicker.tsx` | Auto-registered component | stable | 2026-10-25 |
 | `ConfirmModal` | `src/shared/ui/modals/ConfirmModal.tsx` | Auto-registered component | stable | 2026-10-25 |
+| `PickerModalShell` | `src/shared/ui/modals/PickerModalShell.tsx` | Unified two-pane modal shell shared by Hymn, Presentation, and Bible pickers | stable | 2026-11-25 |
 | `PromptModal` | `src/shared/ui/modals/PromptModal.tsx` | Auto-registered component | stable | 2026-10-25 |

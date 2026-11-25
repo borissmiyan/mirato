@@ -1,5 +1,5 @@
 import { IStyleLayer } from './style';
-import { ICanvasItemText } from './canvas';
+import { ICanvasEffect, ICanvasItemText } from './canvas';
 
 export const SOURCE_THEME_ID = 'source';
 
@@ -22,6 +22,9 @@ export interface IHymnTheme {
   // Typography applied to the text layer of the hymn
   textStyle: Partial<ICanvasItemText>;
 
+  // Optional canvas effects (e.g. drop-shadow) applied to the hymn text item
+  textEffects?: ICanvasEffect[];
+
   // 9-point text positioning anchor on canvas
   textAnchor?: TextAnchor;
 }
@@ -36,6 +39,7 @@ export interface IHymnal {
   itemCount: number; // Number of hymns in the hymnal
   coverImageUrl?: string; // Populated at runtime from cover.jpg via IPC
   isBuiltIn?: boolean; // True if this hymnal is from the bundled-hymnals distribution directory
+  isDisabled?: boolean; // True if user hid this hymnal in Settings -> Data
   customDirName?: string; // The folder name in HYMNALS_DIR/custom where this hymnal is stored (if !isBuiltIn)
   defaultThemeId?: string; // Default IHymnTheme ID for this hymnal
   // Mapping of thematic category name -> array of hymn catalog numbers (e.g. ["1", "42", "143"])

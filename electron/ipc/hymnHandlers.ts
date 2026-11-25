@@ -42,7 +42,7 @@ export function registerHymnHandlers(getMainWindow: () => BrowserWindow | null):
     ipcMain.handle('templates:list', async () => {
         try {
             const files = await fs.promises.readdir(TEMPLATES_DIR);
-            return files.filter(f => f.endsWith('.ektmp'));
+            return files.filter(f => f.endsWith('.mrtmp') || f.endsWith('.ektmp'));
         } catch (error) {
             console.error('Error listing templates:', error);
             return [];
@@ -169,36 +169,76 @@ export function registerHymnHandlers(getMainWindow: () => BrowserWindow | null):
             }
 
             const targetDir = result.filePaths[0];
+            const nowIso = new Date().toISOString();
+            const presId = crypto.randomUUID();
+            const slideId = crypto.randomUUID();
+            const fileName = '1. Пример гимна.mrtp';
+
             const manifest = {
                 id: 'my-custom-hymnal',
-                name: 'My Custom Hymnal',
-                description: 'A custom collection of hymns',
-                language: 'en',
-                version: '1.0.0',
-                publisher: 'Your Name',
+                name: 'Мой сборник гимнов',
+                description: 'Пользовательский сборник гимнов',
+                language: 'ru',
+                manifestVersion: 1,
+                publisher: 'Ваша церковь',
+                year: new Date().getFullYear(),
                 hymns: [
                     {
-                        hymn_id: 'example-1',
+                        id: 'hymn-1',
                         number: 1,
-                        title: 'Amazing Grace',
-                        file: '001-example/index.ektp',
-                        lyrics: 'Amazing grace! How sweet the sound'
+                        title: 'Пример гимна',
+                        file: fileName
                     }
                 ]
             };
 
             const presentation = {
-                id: 'example-1',
-                title: 'Amazing Grace',
+                id: presId,
+                name: '1 — Пример гимна',
+                isMaster: false,
+                createdAt: nowIso,
+                updatedAt: nowIso,
+                lastOpened: nowIso,
+                version: 2,
+                engineVersion: '1.0.0',
+                slideStorageMode: 'inline',
                 slides: [
                     {
-                        id: 's1',
-                        type: 'text',
-                        text: {
-                            content: 'Amazing grace! How sweet the sound\nThat saved a wretch like me!'
+                        id: slideId,
+                        type: 'normal',
+                        order: 0,
+                        blockId: 'default',
+                        templateId: 'default',
+                        content: {
+                            variables: {},
+                            canvasItems: [
+                                {
+                                    id: crypto.randomUUID(),
+                                    type: 'text',
+                                    x: 50,
+                                    y: 50,
+                                    width: 84,
+                                    height: 40,
+                                    rotation: 0,
+                                    opacity: 1,
+                                    zIndex: 1,
+                                    text: {
+                                        content: 'О, благодать, спасён Тобой\nЯ из пучины бед!',
+                                        fontSize: 72,
+                                        fontFamily: 'Cormorant Garamond',
+                                        fontWeight: '600',
+                                        color: '#ffffff',
+                                        align: 'center',
+                                        verticalAlign: 'middle',
+                                        lineHeight: 1.3
+                                    }
+                                }
+                            ]
                         }
                     }
-                ]
+                ],
+                slideIndex: [{ id: slideId, order: 0, type: 'normal' }],
+                audioScopes: []
             };
 
             await fs.promises.writeFile(
@@ -206,14 +246,12 @@ export function registerHymnHandlers(getMainWindow: () => BrowserWindow | null):
                 JSON.stringify(manifest, null, 2)
             );
 
-            const hymnDir = path.join(targetDir, '001-example');
-            await fs.promises.mkdir(hymnDir, { recursive: true });
-
             const zip = new JSZip();
             zip.file('presentation.json', JSON.stringify(presentation, null, 2));
+            zip.file('manifest.json', JSON.stringify({}, null, 2));
             const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
 
-            await fs.promises.writeFile(path.join(hymnDir, 'index.ektp'), zipBuffer);
+            await fs.promises.writeFile(path.join(targetDir, fileName), zipBuffer);
             return { success: true };
         } catch (error) {
             console.error('Failed to generate template:', error);
@@ -237,5 +275,64 @@ export function registerHymnHandlers(getMainWindow: () => BrowserWindow | null):
             console.error('IPC: hymns:read-ektp error:', e);
             return null;
         }
+    });
+
+    /**
+     * Fast main-process batch reader for text-only .mrtp/.ektp hymn archives.
+     * Unzips presentation.json and computes SHA-256 off the renderer UI thread
+     * so importing thousands of hymns stays smooth on low-RAM (2-4 GB) PCs.
+     * Archives containing embedded media/, nested/, split slides, or preview.png
+     * return `{ filename, needsFullUnpack: true }` for fallback to EktpService.unpack.
+     */
+    ipcMain.handle('hymns:read-mrtp-batch', async (_event, hymnalDirPath: string, filenames: string[]) => {
+        const results: Array<{
+            filename: string;
+            hash?: string;
+            presentation?: Record<string, unknown>;
+            needsFullUnpack?: boolean;
+            error?: boolean;
+        }> = [];
+
+        for (const filename of filenames) {
+            try {
+                const filePath = path.join(hymnalDirPath, filename);
+                const buf = await fs.promises.readFile(filePath);
+                const hash = crypto.createHash('sha256').update(buf).digest('hex');
+                const zip = await JSZip.loadAsync(buf);
+
+                // Check if archive has embedded media, nested presentations, preview, or slide thumbnails
+                const entryNames = Object.keys(zip.files);
+                const hasComplexAssets = entryNames.some(
+                    (name) =>
+                        !zip.files[name].dir &&
+                        (name.startsWith('media/') ||
+                            name.startsWith('nested/') ||
+                            name.startsWith('thumbnails/') ||
+                            name === 'preview.png')
+                );
+                if (hasComplexAssets) {
+                    results.push({ filename, hash, needsFullUnpack: true });
+                    continue;
+                }
+
+                const docFile = zip.file('presentation.json') || zip.file('document.json');
+                if (!docFile) {
+                    results.push({ filename, error: true });
+                    continue;
+                }
+
+                const content = await docFile.async('string');
+                const presentation = JSON.parse(content) as Record<string, unknown>;
+                if (presentation.slideStorageMode === 'split') {
+                    results.push({ filename, hash, needsFullUnpack: true });
+                    continue;
+                }
+
+                results.push({ filename, hash, presentation });
+            } catch {
+                results.push({ filename, error: true });
+            }
+        }
+        return results;
     });
 }

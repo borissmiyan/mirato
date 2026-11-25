@@ -203,7 +203,7 @@ export const SlideEditorToolbar: React.FC = () => {
             onClick={() => setToolbarVisible(true)}
             className={cn(
               "flex items-center justify-center w-9 h-9 rounded-xl cursor-pointer apple-press",
-              "bg-stone-900/40 backdrop-blur-xl border border-white/10",
+"bg-stone-900 border border-white/10",
               "hover:bg-stone-900/70 hover:border-white/20 shadow-lg",
               "opacity-60 hover:opacity-100 transition-all duration-300",
               "animate-in fade-in zoom-in-75 duration-300"
@@ -228,7 +228,7 @@ export const SlideEditorToolbar: React.FC = () => {
       <div
         className={cn(
           "flex items-center gap-1.5 px-2 h-14 rounded-xl shadow-2xl transition-all duration-300",
-          "bg-stone-900/40 backdrop-blur-2xl border border-white/10 ring-1 ring-white/5",
+"bg-stone-900 border border-white/10 ring-1 ring-white/5",
           "hover:bg-stone-900/60 hover:border-white/20",
           "animate-in fade-in zoom-in-95 duration-300"
         )}

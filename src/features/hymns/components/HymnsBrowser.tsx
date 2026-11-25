@@ -1,16 +1,16 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Music } from 'lucide-react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { CustomHymnalIcon, VirtualList, VirtualListHandle } from '@/shared/ui';
 import { useTranslation } from 'react-i18next';
 import { db } from '@/core/db';
 import { IHymnal } from '@/core/types/hymn';
-import { ISlide, ICanvasSlide } from '@/core/types/presentation';
+import { ISlide } from '@/core/types/presentation';
 import { useAtom } from 'jotai';
 import { hymnModalReturnStateAtom, activeHymnalIdAtom } from '@/core/store/uiAtoms';
 import { HymnalInfoModal } from './HymnalInfoModal';
 import { hymnLibraryService } from '../services/hymnLibraryService';
 import { getOrderedHymnSlides } from '../services/hymnMigrationUtils';
+import { useHymnIndex } from '../services/hymnIndexCache';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { HymnListItem, HymnRowData } from './HymnListItem';
 
@@ -39,7 +39,7 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
     const [hymnReturnState, setHymnReturnState] = useAtom(hymnModalReturnStateAtom);
 
     // Refs
-    const listRef = useRef<HTMLDivElement>(null);
+    const listRef = useRef<VirtualListHandle>(null);
     const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Clean up click timer on unmount
@@ -51,34 +51,67 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
         };
     }, []);
 
-    // DB Data
+    // DB Data (only enabled hymnals are visible in browser)
     const rawHymnals = useLiveQuery(() => db.hymnals.toArray());
-    const hymnals = useMemo(() => rawHymnals ?? [], [rawHymnals]);
+    const hymnals = useMemo(() => (rawHymnals ?? []).filter(h => !h.isDisabled), [rawHymnals]);
 
     const rawThemes = useLiveQuery(() => db.hymnThemes.toArray());
     const themes = useMemo(() => rawThemes ?? [], [rawThemes]);
 
-    const rawHymnPresentations = useLiveQuery(
-        () => activeHymnalId
-            ? db.presentationFiles.where('hymnalId').equals(activeHymnalId).sortBy('name')
-            : Promise.resolve([]),
-        [activeHymnalId]
-    );
-    const hymnPresentations = useMemo(() => rawHymnPresentations ?? [], [rawHymnPresentations]);
+    // Instant in-memory hymn index (~2-3 MB total, shared with HymnPickerModal)
+    const { entries: allIndexedEntries } = useHymnIndex(Boolean(activeHymnalId));
 
-    const currentHymnPres = useMemo(() => {
-        return hymnPresentations.find(p => p.id === activeHymnId) ?? null;
-    }, [hymnPresentations, activeHymnId]);
+    const indexedHymns = useMemo(() => {
+        if (!activeHymnalId) return [];
+        const enabledMap = new Map(hymnals.map(h => [h.id, h]));
+        const matching = activeHymnalId === 'ALL'
+            ? allIndexedEntries.filter(e => enabledMap.has(e.hymnalId))
+            : allIndexedEntries.filter(e => e.hymnalId === activeHymnalId);
+
+        const sorted = [...matching].sort((a, b) => {
+            if (activeHymnalId === 'ALL' && a.hymnalId !== b.hymnalId) {
+                const aName = enabledMap.get(a.hymnalId)?.name || '';
+                const bName = enabledMap.get(b.hymnalId)?.name || '';
+                const cmp = aName.localeCompare(bName);
+                if (cmp !== 0) return cmp;
+            }
+            return a.order - b.order;
+        });
+
+        return sorted.map((e) => {
+            const hymnalName = activeHymnalId === 'ALL' ? enabledMap.get(e.hymnalId)?.name : undefined;
+            const row: HymnRowData = {
+                id: e.id,
+                number: e.number,
+                title: e.title,
+                presentationId: e.presentationId,
+                matchedSnippet: hymnalName,
+            };
+            return { row, titleLower: e.titleLower, rawTexts: e.rawTexts, lowerTexts: e.lowerTexts };
+        });
+    }, [activeHymnalId, hymnals, allIndexedEntries]);
+
+    // Load full slide data ONLY for the single currently selected hymn
+    const currentHymnPres = useLiveQuery(
+        () => activeHymnId ? db.presentationFiles.get(activeHymnId) : Promise.resolve(undefined),
+        [activeHymnId]
+    ) ?? null;
 
     const verses: ISlide[] = useMemo(() => {
         if (!currentHymnPres?.slides) return [];
         return getOrderedHymnSlides(currentHymnPres);
     }, [currentHymnPres]);
 
-    // Presentation store actions
+    // Presentation store actions + single live-hymn check (avoids per-row useLiveQuery during scroll)
     const setLiveSlide = usePresentationStore(s => s.setLiveSlide);
     const setPreviewSlide = usePresentationStore(s => s.setPreviewSlide);
     const setActivePresentation = usePresentationStore(s => s.setActivePresentation);
+    const liveSlideId = usePresentationStore(s => s.liveSlideId);
+    const liveRootPresentationId = usePresentationStore(s => s.liveRootPresentationId);
+    const liveHymnPresId = useMemo(() => {
+        if (!liveSlideId) return null;
+        return liveRootPresentationId;
+    }, [liveSlideId, liveRootPresentationId]);
 
     // Sync activeHymnId with presentationStore so the timeline knows what to render
     useEffect(() => {
@@ -87,65 +120,33 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
         }
     }, [activeHymnId, setActivePresentation]);
 
-    // Derived Hymns
-    const hymns: HymnRowData[] = useMemo(() => {
-        const sorted = [...hymnPresentations].sort((a, b) => {
-            const aOrder = a.metadata?.hymnOrder ?? 9999;
-            const bOrder = b.metadata?.hymnOrder ?? 9999;
-            return aOrder - bOrder;
-        });
-        return sorted.map((p) => {
-            const match = p.name.match(/^(\d+)\s*[—–-]\s*(.+)$/);
-            return {
-                id: p.id,
-                number: match ? match[1] : String(p.metadata?.hymnOrder ?? ''),
-                title: match ? match[2] : (p.metadata?.hymnTitle ?? p.name),
-                presentationId: p.id,
-            };
-        });
-    }, [hymnPresentations]);
-
     const filteredHymns = useMemo(() => {
-        if (!searchQuery.trim()) return hymns;
-        const q = searchQuery.toLowerCase();
+        const trimmed = searchQuery.trim();
+        if (!trimmed) return indexedHymns.map(entry => entry.row);
+        const q = trimmed.toLowerCase();
+        const results: HymnRowData[] = [];
 
-        return hymns.map(h => {
-            if (h.title.toLowerCase().includes(q) || h.number.includes(q)) {
-                return h;
+        for (const entry of indexedHymns) {
+            if (entry.titleLower.includes(q) || entry.row.number.includes(q)) {
+                results.push(entry.row);
+                continue;
             }
-
-            const pres = hymnPresentations.find(p => p.id === h.presentationId);
-            if (pres?.slides) {
-                for (const slide of pres.slides) {
-                    const content = slide.type === 'normal' ? (slide as ICanvasSlide).content : undefined;
-                    if (content?.canvasItems) {
-                        for (const item of content.canvasItems) {
-                            if (item.type === 'text' && item.text?.content) {
-                                const textLower = item.text.content.toLowerCase();
-                                const idx = textLower.indexOf(q);
-                                if (idx !== -1) {
-                                    const rawText = item.text.content;
-                                    const start = Math.max(0, idx - 20);
-                                    const end = Math.min(rawText.length, idx + q.length + 20);
-                                    let snippet = rawText.substring(start, end);
-
-                                    // Remove newlines from snippet for single line display
-                                    snippet = snippet.replace(/[\r\n]+/g, ' ');
-
-                                    if (start > 0) snippet = '...' + snippet;
-                                    if (end < rawText.length) snippet = snippet + '...';
-
-                                    return { ...h, matchedSnippet: snippet };
-                                }
-                            }
-                        }
-                    }
+            for (let i = 0; i < entry.lowerTexts.length; i++) {
+                const idx = entry.lowerTexts[i].indexOf(q);
+                if (idx !== -1) {
+                    const rawText = entry.rawTexts[i];
+                    const start = Math.max(0, idx - 20);
+                    const end = Math.min(rawText.length, idx + q.length + 20);
+                    let snippet = rawText.substring(start, end).replace(/[\r\n]+/g, ' ');
+                    if (start > 0) snippet = '...' + snippet;
+                    if (end < rawText.length) snippet = snippet + '...';
+                    results.push({ ...entry.row, matchedSnippet: snippet });
+                    break;
                 }
             }
-
-            return null;
-        }).filter(Boolean) as HymnRowData[];
-    }, [hymns, searchQuery, hymnPresentations]);
+        }
+        return results;
+    }, [indexedHymns, searchQuery]);
 
     useEffect(() => {
         if (!selectedThemeId && themes.length > 0) {
@@ -153,6 +154,18 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
             setSelectedThemeId(defaultTheme.id);
         }
     }, [themes, selectedThemeId]);
+
+    // Auto-select a valid enabled hymnal if activeHymnalId is empty, disabled, or removed (preserve 'ALL')
+    useEffect(() => {
+        if (hymnals.length === 0) {
+            if (activeHymnalId) setActiveHymnalId(null);
+            return;
+        }
+        if (activeHymnalId === 'ALL') return;
+        if (!activeHymnalId || !hymnals.some(h => h.id === activeHymnalId)) {
+            setActiveHymnalId(hymnals[0].id);
+        }
+    }, [hymnals, activeHymnalId, setActiveHymnalId]);
 
     useEffect(() => {
         setActiveHymnId(null);
@@ -184,23 +197,35 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
         });
     }, []);
 
-    const rowVirtualizer = useVirtualizer({
-        count: filteredHymns.length,
-        getScrollElement: () => listRef.current,
-        estimateSize: () => 48,
-        overscan: 6,
-    });
+    const hasSearchSnippets = Boolean(searchQuery.trim()) || activeHymnalId === 'ALL';
+    const rowHeight = hasSearchSnippets ? 66 : 52;
 
     const handleSelectFromThematic = useCallback((hymnalId: string, hymnNumber: string) => {
         setActiveHymnalId(hymnalId);
         setTimeout(() => {
             const idx = filteredHymns.findIndex(h => h.number === hymnNumber);
             if (idx !== -1) {
-                rowVirtualizer.scrollToIndex(idx, { align: 'center' });
+                listRef.current?.scrollToIndex(idx, 'center');
                 setActiveHymnId(filteredHymns[idx].id);
             }
         }, 200);
-    }, [setActiveHymnalId, filteredHymns, rowVirtualizer]);
+    }, [setActiveHymnalId, filteredHymns]);
+
+    const getHymnKey = useCallback((hymn: HymnRowData) => hymn.id, []);
+
+    const renderHymnItem = useCallback((hymn: HymnRowData) => (
+        <HymnListItem
+            hymn={hymn}
+            isActive={activeHymnId === hymn.id}
+            isLive={liveHymnPresId === hymn.presentationId}
+            searchQuery={searchQuery}
+            themes={themes}
+            selectedThemeId={selectedThemeId}
+            onThemeChange={setSelectedThemeId}
+            onSelect={handleSelectHymn}
+            lang={lang}
+        />
+    ), [activeHymnId, liveHymnPresId, searchQuery, themes, selectedThemeId, handleSelectHymn, lang]);
 
     const handleInsert = useCallback(() => {
         if (!activeHymnId || !selectedThemeId || !onAddHymn) return;
@@ -323,63 +348,35 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
 
     return (
         <div className="flex flex-col h-full bg-stone-900 overflow-hidden">
-            <div ref={listRef} className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar px-3 py-3 space-y-0.5 min-h-0">
-                {!activeHymnalId ? (
-                    <div className="flex flex-col items-center justify-center h-full text-stone-500 py-12">
-                        <Music className="w-12 h-12 mb-4 opacity-50" />
-                        <p className="text-sm text-center">{t('hymns.select_hymnal_prompt', 'Выберите сборник гимнов')}</p>
-                    </div>
-                ) : filteredHymns.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-stone-500">
-                        <Music className="w-8 h-8 mb-3 opacity-40" />
-                        <p className="text-xs text-center">
-                            {searchQuery
-                                ? t('hymns.no_results', 'Ничего не найдено')
-                                : t('hymns.library_empty_desc', 'В этом сборнике нет гимнов')
-                            }
-                        </p>
-                    </div>
-                ) : (
-                    <div
-                        style={{
-                            height: `${rowVirtualizer.getTotalSize()}px`,
-                            width: '100%',
-                            position: 'relative',
-                        }}
-                    >
-                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                            const hymn = filteredHymns[virtualRow.index];
-                            if (!hymn) return null;
-                            return (
-                                <div
-                                    key={hymn.id}
-                                    data-index={virtualRow.index}
-                                    ref={rowVirtualizer.measureElement}
-                                    style={{
-                                        position: 'absolute',
-                                        top: 0,
-                                        left: 0,
-                                        width: '100%',
-                                        transform: `translateY(${virtualRow.start}px)`,
-                                        paddingBottom: '2px',
-                                    }}
-                                >
-                                    <HymnListItem
-                                        hymn={hymn}
-                                        isActive={activeHymnId === hymn.id}
-                                        searchQuery={searchQuery}
-                                        themes={themes}
-                                        selectedThemeId={selectedThemeId}
-                                        onThemeChange={setSelectedThemeId}
-                                        onClick={() => handleSelectHymn(hymn.id)}
-                                        lang={lang}
-                                    />
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
+            {!activeHymnalId ? (
+                <div className="flex flex-col items-center justify-center flex-1 text-stone-500 py-12 px-3">
+                    <CustomHymnalIcon className="w-12 h-12 mb-4 opacity-50" />
+                    <p className="text-sm text-center">{t('hymns.select_hymnal_prompt', 'Выберите сборник гимнов')}</p>
+                </div>
+            ) : (
+                <VirtualList
+                    listRef={listRef}
+                    items={filteredHymns}
+                    getItemKey={getHymnKey}
+                    renderItem={renderHymnItem}
+                    itemHeight={rowHeight}
+                    gap={6}
+                    overscan={14}
+                    resetKey={`${activeHymnalId}:${searchQuery}`}
+                    className="px-3 py-3"
+                    emptyState={
+                        <div className="flex flex-col items-center justify-center py-12 text-stone-500">
+                            <CustomHymnalIcon className="w-8 h-8 mb-3 opacity-40" />
+                            <p className="text-xs text-center">
+                                {searchQuery
+                                    ? t('hymns.no_results', 'Ничего не найдено')
+                                    : t('hymns.library_empty_desc', 'В этом сборнике нет гимнов')
+                                }
+                            </p>
+                        </div>
+                    }
+                />
+            )}
 
             {infoModal && (
                 <HymnalInfoModal

@@ -19,7 +19,7 @@ export const RemoteOverrides: React.FC<RemoteOverridesProps> = ({
     const { t } = useTranslation();
 
     return (
-        <div className={cn("flex items-center justify-center gap-2 bg-stone-900/60 py-2.5 px-3 rounded-4xl border border-white/5 backdrop-blur-md", className)}>
+        <div className={cn("flex items-center justify-center gap-2 bg-stone-900 py-2.5 px-3 rounded-4xl border border-white/5", className)}>
             <button
                 type="button"
                 aria-label={t('remote.blackout_char')}

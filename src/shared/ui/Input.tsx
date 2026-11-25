@@ -66,16 +66,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
   // Design tokens for size
   const token = sizeTokens[size] || sizeTokens.md;
 
-  // Specific left/right padding adjustments when icons are present
+  // Specific left/right padding adjustments when icons are present.
+  // Base token.px MUST come before pl-*/pr-* so tailwind-merge preserves icon padding when only one side has an icon.
   const hasRightSlot = Boolean(rightIcon || (hasError && !hideErrorIcon));
   const iconPaddingClasses = cn(
-    leftIcon 
-      ? (size === 'xs' ? 'pl-9' : size === 'sm' ? 'pl-11' : size === 'md' ? 'pl-13' : size === 'lg' ? 'pl-15' : 'pl-16') 
-      : token.px,
-    hasRightSlot 
-      ? (size === 'xs' ? 'pr-9' : size === 'sm' ? 'pr-11' : size === 'md' ? 'pr-13' : size === 'lg' ? 'pr-15' : 'pr-16') 
-      : token.px,
-    token.py
+    token.px,
+    token.py,
+    leftIcon && (size === 'xs' ? 'pl-9' : size === 'sm' ? 'pl-11' : size === 'md' ? 'pl-13' : size === 'lg' ? 'pl-15' : 'pl-16'),
+    hasRightSlot && (size === 'xs' ? 'pr-9' : size === 'sm' ? 'pr-11' : size === 'md' ? 'pr-13' : size === 'lg' ? 'pr-15' : 'pr-16')
   );
 
   // Border radius tokens matching buttons (canonical squircle rounded-xl = 8px)
@@ -134,7 +132,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(({
           aria-errormessage={hasError && resolvedErrorText ? errorId : undefined}
           aria-describedby={computedAriaDescribedBy}
           className={cn(
-            'w-full bg-stone-900/60 backdrop-blur-md border text-white font-medium',
+'w-full bg-stone-900 border text-white font-medium',
             'placeholder:text-stone-500 transition-all duration-150 outline-hidden',
             token.height,
             token.text,

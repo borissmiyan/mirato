@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { db } from '@/core/db';
-import { X, Plus, Check, Edit3, Trash2, Upload, Download, Layers } from 'lucide-react';
+import { X, Plus, Check, Edit3, Trash2, Upload, Download } from 'lucide-react';
+import { CustomServiceIcon, PickerOptionCard, VirtualList } from '@/shared/ui';
 import { useTranslation } from 'react-i18next';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { cn } from '@/core/utils/cn';
@@ -47,7 +47,6 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
 
     const liveServices = useLiveQuery(() => db.serviceFiles.orderBy('updatedAt').reverse().toArray());
     const services = useMemo(() => liveServices || [], [liveServices]);
-    const listRef = useRef<HTMLDivElement>(null);
 
     const filteredServices = useMemo(() => {
         if (!search) return services;
@@ -179,8 +178,8 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
             if (window.showSaveFilePicker) {
                 try {
                     const handle = await window.showSaveFilePicker({
-                        suggestedName: `${service.name}.ekt`,
-                        types: [{ description: 'Service File', accept: { 'application/zip': ['.ekt'] } }]
+                        suggestedName: `${service.name}.mrt`,
+                        types: [{ description: 'Mirato Service File', accept: { 'application/zip': ['.mrt', '.ekt'] } }]
                     });
                     const writable = await handle.createWritable();
                     await writable.write(blob);
@@ -203,7 +202,7 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
         try {
             if (!window.showOpenFilePicker) throw new Error('File System Access API not supported');
             const [handle] = await window.showOpenFilePicker({
-                types: [{ description: 'Service File', accept: { 'application/zip': ['.ekt'] } }],
+                types: [{ description: 'Mirato Service File', accept: { 'application/zip': ['.mrt', '.ekt'] } }],
                 multiple: false
             });
             const file = await handle.getFile();
@@ -237,12 +236,8 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
         }
     };
 
-    const rowVirtualizer = useVirtualizer({
-        count: filteredServices.length,
-        getScrollElement: () => listRef.current,
-        estimateSize: () => 48,
-        overscan: 5,
-    });
+    const getServiceKey = useCallback((s: IServiceFile) => s.id, []);
+    const estimateServiceSize = useCallback(() => 50, []);
 
     return createPortal(
         <div className="fixed inset-0 z-9999 pointer-events-none">
@@ -254,7 +249,7 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
             />
 
             <div
-                className="absolute bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl flex flex-col max-h-[520px] overflow-hidden animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
+ className="absolute bg-stone-900 border border-white/10 rounded-xl shadow-2xl flex flex-col max-h-[520px] overflow-hidden animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
                 style={position}
             >
                 {/* Header */}
@@ -325,117 +320,76 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
                 )}
 
                 {/* Services List */}
-                <div ref={listRef} className="flex-1 overflow-y-auto p-1.5 no-scrollbar min-h-0">
-                    {filteredServices.length > 0 ? (
-                        <div
-                            style={{
-                                height: `${rowVirtualizer.getTotalSize()}px`,
-                                width: '100%',
-                                position: 'relative',
-                            }}
-                        >
-                            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                                const service = filteredServices[virtualRow.index];
-                                if (!service) return null;
-                                const isCurrent = currentServiceId === service.id;
-                                const serviceTitle = isRu ? (service.nameRu || service.name) : service.name;
-
-                                return (
-                                    <div
-                                        key={service.id}
-                                        data-index={virtualRow.index}
-                                        ref={rowVirtualizer.measureElement}
-                                        style={{
-                                            position: 'absolute',
-                                            top: 0,
-                                            left: 0,
-                                            width: '100%',
-                                            transform: `translateY(${virtualRow.start}px)`,
-                                            paddingBottom: '2px',
-                                        }}
-                                    >
-                                        <div
-                                            className={cn(
-                                                "group w-full flex items-center justify-between p-2 rounded-xl transition-all text-left border cursor-pointer apple-press",
-                                                isCurrent ? "bg-accent/10 border-accent/20" : "hover:bg-white/5 border-transparent hover:border-white/5"
-                                            )}
-                                            onClick={() => { if (renamingId !== service.id) { onSelect(service.id); onClose(); } }}
-                                            onContextMenu={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                setContextMenu({ x: e.clientX, y: e.clientY, service });
-                                            }}
-                                        >
-                                            {renamingId === service.id ? (
-                                                <div className="flex-1 flex items-center gap-1.5 min-w-0" onClick={(e) => e.stopPropagation()}>
-                                                    <Input
-                                                        size="xs"
-                                                        autoFocus
-                                                        value={renameValue}
-                                                        onChange={(e) => setRenameValue(e.target.value)}
-                                                        onKeyDown={(e) => {
-                                                            if (e.key === 'Enter') handleRenameService(service.id);
-                                                            if (e.key === 'Escape') setRenamingId(null);
-                                                        }}
-                                                        className="flex-1"
-                                                    />
-                                                    <Button size="xs" square variant="ghost" onClick={handleSaveCurrentRename} title={t('save', 'Save')}>
-                                                        <Check className="w-3.5 h-3.5 text-accent" />
-                                                    </Button>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <div className="flex-1 flex items-center gap-3 min-w-0">
-                                                        <div className={cn(
-                                                            "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors",
-                                                            isCurrent ? "bg-accent/20 text-accent" : "bg-stone-800/50 text-stone-600 group-hover:text-stone-400"
-                                                        )}>
-                                                            <Layers className="w-4 h-4" />
-                                                        </div>
-                                                        <div className="flex flex-col min-w-0 flex-1">
-                                                            <span
-                                                                title={serviceTitle}
-                                                                className={cn("text-xs font-bold truncate", isCurrent ? "text-accent" : "text-stone-300")}
-                                                            >
-                                                                {serviceTitle}
-                                                            </span>
-                                                            <span className="text-[9px] font-bold text-stone-500 uppercase tracking-widest leading-none mt-1">
-                                                                {t('presentations_count', { count: service.presentationIds.length, defaultValue: '{{count}} presentations' })}
-                                                            </span>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
-                                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleExportService(service.id); }} title={t('export_service', 'Export (.ekt)')}>
-                                                            <Upload className="w-3.5 h-3.5 text-stone-400 hover:text-accent" />
-                                                        </Button>
-                                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); setRenamingId(service.id); setRenameValue(service.name); }} title={t('rename', 'Rename')}>
-                                                            <Edit3 className="w-3.5 h-3.5 text-stone-400" />
-                                                        </Button>
-                                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id); }} title={t('delete', 'Delete')}>
-                                                            <Trash2 className="w-3.5 h-3.5 text-stone-400 hover:text-red-400" />
-                                                        </Button>
-                                                    </div>
-
-                                                    {isCurrent && (
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-accent shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)] ml-2 shrink-0" />
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <div className="py-8 flex flex-col items-center justify-center gap-2 opacity-30">
-                            <Layers className="w-8 h-8 text-stone-500" />
-                            <p className="text-[10px] font-bold uppercase tracking-widest">
+                <VirtualList
+                    items={filteredServices}
+                    getItemKey={getServiceKey}
+                    estimateItemHeight={estimateServiceSize}
+                    gap={2}
+                    overscan={8}
+                    className="p-1.5"
+                    renderItem={(service) => {
+                        const isCurrent = currentServiceId === service.id;
+                        const serviceTitle = isRu ? (service.nameRu || service.name) : service.name;
+                        return renamingId === service.id ? (
+                            <div
+                                className={cn(
+                                    "w-full flex items-center gap-1.5 p-2 rounded-xl border",
+                                    isCurrent ? "bg-accent/10 border-accent/20" : "bg-white/5 border-white/10"
+                                )}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <Input
+                                    size="xs"
+                                    autoFocus
+                                    value={renameValue}
+                                    onChange={(e) => setRenameValue(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleRenameService(service.id);
+                                        if (e.key === 'Escape') setRenamingId(null);
+                                    }}
+                                    className="flex-1"
+                                />
+                                <Button size="xs" square variant="ghost" onClick={handleSaveCurrentRename} title={t('save', 'Save')}>
+                                    <Check className="w-3.5 h-3.5 text-accent" />
+                                </Button>
+                            </div>
+                        ) : (
+                            <PickerOptionCard
+                                title={serviceTitle}
+                                subtitle={t('presentations_count', { count: service.presentationIds.length, defaultValue: '{{count}} presentations' })}
+                                leading={<CustomServiceIcon className="w-4 h-4" />}
+                                isActive={isCurrent}
+                                onClick={() => { onSelect(service.id); onClose(); }}
+                                onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setContextMenu({ x: e.clientX, y: e.clientY, service });
+                                }}
+                                hoverActions={
+                                    <>
+                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleExportService(service.id); }} title={t('export_service', 'Export (.ekt)')}>
+                                            <Upload className="w-3.5 h-3.5 text-stone-400 hover:text-accent" />
+                                        </Button>
+                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); setRenamingId(service.id); setRenameValue(service.name); }} title={t('rename', 'Rename')}>
+                                            <Edit3 className="w-3.5 h-3.5 text-stone-400" />
+                                        </Button>
+                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id); }} title={t('delete', 'Delete')}>
+                                            <Trash2 className="w-3.5 h-3.5 text-stone-400 hover:text-red-400" />
+                                        </Button>
+                                    </>
+                                }
+                            />
+                        );
+                    }}
+                    emptyState={
+                        <div className="py-8 flex flex-col items-center justify-center gap-2.5">
+                            <CustomServiceIcon className="w-8 h-8 text-stone-500/60" />
+                            <p className="text-xs font-medium text-stone-500 tracking-tight">
                                 {search ? t('no_results', 'No results') : t('no_services', 'No services yet')}
                             </p>
                         </div>
-                    )}
-                </div>
+                    }
+                />
 
                 {/* Footer: Import */}
                 <div className="p-2 border-t border-white/5 bg-stone-950/40 shrink-0">

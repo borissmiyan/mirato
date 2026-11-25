@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { Music, ChevronRight, Settings } from 'lucide-react';
+import { ChevronRight, Settings } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
-import { useHymnLiveState } from '../hooks/useHymnLiveState';
-import { DropdownSelector, IconButton } from '@/shared/ui';
+import { CustomHymnStackIcon, DropdownSelector } from '@/shared/ui';
+import { IHymnTheme } from '@/core/types/hymn';
+import { getHymnThemeSwatchBackground } from '../services/hymnThemeConstants';
 
 // ─── SearchHighlight ─────────────────────────────────────────────────────────
 
@@ -33,47 +34,72 @@ export interface HymnRowData {
 export interface HymnListItemProps {
     hymn: HymnRowData;
     isActive: boolean;
+    isLive: boolean;
     searchQuery: string;
-    themes: Array<{ id: string; name: string; nameRu?: string }>;
+    themes: Array<Pick<IHymnTheme, 'id' | 'name' | 'nameRu'> & Partial<Pick<IHymnTheme, 'background' | 'textStyle'>>>;
     selectedThemeId: string;
     onThemeChange: (themeId: string) => void;
-    onClick: () => void;
+    onSelect: (hymnId: string) => void;
     lang: string;
 }
 
 export const HymnListItem: React.FC<HymnListItemProps> = React.memo(({
     hymn,
     isActive,
+    isLive,
     searchQuery,
     themes,
     selectedThemeId,
     onThemeChange,
-    onClick,
+    onSelect,
     lang
 }) => {
-    const { isLive } = useHymnLiveState(hymn.presentationId);
     const [showThemePicker, setShowThemePicker] = useState(false);
     const isRu = lang === 'ru';
 
     const themeOptions = useMemo(() => {
-        return themes.map(t => ({
-            value: t.id,
-            label: isRu && t.nameRu ? t.nameRu : t.name
+        if (!showThemePicker) return [];
+        return themes.map(th => ({
+            value: th.id,
+            label: isRu && th.nameRu ? th.nameRu : th.name,
+            keywords: `${th.name} ${th.nameRu || ''} ${th.textStyle?.fontFamily || ''}`,
+            icon: (
+                <span
+                    className="w-5 h-5 rounded-md border border-white/15 flex items-center justify-center text-[10px] font-bold shrink-0 leading-none"
+                    style={{
+                        background: getHymnThemeSwatchBackground(th),
+                        color: th.textStyle?.color || '#FFFFFF',
+                        fontFamily: th.textStyle?.fontFamily,
+                    }}
+                >
+                    А
+                </span>
+            ),
         }));
-    }, [themes, isRu]);
+    }, [themes, isRu, showThemePicker]);
 
     return (
         <div
-            onClick={onClick}
+            onClick={() => onSelect(hymn.id)}
             className={cn(
-                'w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all duration-200 flex items-center gap-3 border shadow-sm cursor-pointer group',
+                'w-full shrink-0 text-left px-3 rounded-xl text-sm flex items-center gap-3 border cursor-pointer group',
+                hymn.matchedSnippet ? 'h-[60px]' : 'h-[46px]',
                 isActive
-                    ? 'bg-accent/10 border-accent/30 text-accent shadow-[0_4px_12px_rgba(0,0,0,0.15)]'
-                    : 'bg-white/2 border-transparent text-stone-400 hover:bg-white/5 hover:text-stone-200'
+                    ? 'bg-stone-800 border-stone-600 text-stone-100'
+                    : 'bg-[#1f1c1a] border-stone-800/90 text-stone-400 hover:bg-[#262320] hover:border-stone-700 hover:text-stone-200'
             )}
         >
-            <Music className={cn('w-4 h-4 shrink-0 transition-transform duration-200', isActive ? 'scale-110 text-accent' : 'opacity-40')} />
-            <span className={cn("shrink-0 w-8 text-xs font-mono text-right", isActive ? 'text-accent/80 font-bold' : 'text-stone-500')}>{hymn.number}</span>
+            <CustomHymnStackIcon className={cn('w-4 h-4 shrink-0', isActive ? 'text-accent' : 'opacity-40')} />
+            <span
+                className={cn(
+                    "shrink-0 min-w-[34px] h-6 px-1.5 rounded-lg flex items-center justify-center text-[11px] font-mono tabular-nums border",
+                    isActive
+                        ? 'bg-accent text-stone-950 border-accent font-bold'
+                        : 'bg-stone-950 text-stone-400 border-stone-800'
+                )}
+            >
+                {hymn.number}
+            </span>
             <div className="flex-1 min-w-0 flex flex-col">
                 <span className={cn("truncate", isActive ? 'font-bold' : '')}>
                     <SearchHighlight text={hymn.title} query={searchQuery} />
@@ -94,24 +120,28 @@ export const HymnListItem: React.FC<HymnListItemProps> = React.memo(({
             <div className="flex items-center gap-1 shrink-0">
                 {/* audit-ignore: event propagation boundary */}
                 <div onClick={(e) => e.stopPropagation()} className="relative">
-                    <IconButton
-                        icon={Settings}
-                        label="Выбрать тему оформления"
-                        variant="ghost"
-                        size="xs"
+                    <button
+                        type="button"
+                        aria-label="Выбрать тему оформления"
+                        title="Выбрать тему оформления"
                         onClick={() => setShowThemePicker(prev => !prev)}
                         className={cn(
-                            "p-1.5 rounded-xl transition-colors",
+                            "w-7 h-7 inline-flex items-center justify-center rounded-lg cursor-pointer",
                             showThemePicker
                                 ? "bg-accent/20 text-accent"
                                 : "text-stone-400 hover:text-stone-200 hover:bg-white/10"
                         )}
-                    />
+                    >
+                        <Settings className="w-3.5 h-3.5" />
+                    </button>
                     {showThemePicker && (
                         <div className="absolute right-0 top-full mt-1 w-56 z-50">
                             <DropdownSelector
                                 value={selectedThemeId}
                                 options={themeOptions}
+                                searchable
+                                searchPlaceholder={isRu ? 'Поиск темы...' : 'Search themes...'}
+                                size="xs"
                                 onChange={(val) => {
                                     onThemeChange(val);
                                     setShowThemePicker(false);

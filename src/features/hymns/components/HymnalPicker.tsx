@@ -2,9 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
-import { Music, Info, ListTree, Trash2, FolderDown, HelpCircle, Loader2, AlertTriangle } from 'lucide-react';
+import { Info, ListTree, Trash2, FolderDown, HelpCircle, Loader2, AlertTriangle, X, ArrowLeft, ChevronRight, Languages } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { cn } from '@/core/utils/cn';
 import { IHymnal } from '@/core/types/hymn';
 import { useHymnLiveState } from '../hooks/useHymnLiveState';
 import { useSetAtom } from 'jotai';
@@ -14,36 +13,42 @@ import { toast } from 'sonner';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import Button from '@/shared/ui/Button';
 import IconButton from '@/shared/ui/IconButton';
-import { EmptyState } from '@/shared/ui';
+import { CustomHymnalIcon, EmptyState, PickerOptionCard, SearchInput } from '@/shared/ui';
 
 interface HymnalCardProps {
     hymnal: IHymnal;
     isSelected: boolean;
     onSelect: () => void;
-    onOpenInfo: () => void;
-    onOpenThematic: () => void;
+    onOpenInfo?: () => void;
+    onOpenThematic?: () => void;
     onRemove?: () => void;
 }
 
+const formatHymnCountWord = (count: number): string => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    return mod10 === 1 && mod100 !== 11
+        ? 'гимн'
+        : (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
+            ? 'гимна'
+            : 'гимнов';
+};
+
+const formatHymnCountLabel = (count: number, language?: string): string => {
+    const word = formatHymnCountWord(count);
+    const langTag = (language || 'ru').toUpperCase();
+    return `${count} ${word} • ${langTag}`;
+};
+
 const HymnalCard: React.FC<HymnalCardProps> = React.memo(({ hymnal, isSelected, onSelect, onOpenInfo, onOpenThematic, onRemove }) => {
-    const [hovered, setHovered] = useState(false);
     const { isLive } = useHymnLiveState(undefined, hymnal.id);
 
     return (
-        <div
-            className={cn(
-                'relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-all group border apple-press',
-                isSelected
-                    ? 'bg-accent/10 border-accent/30 text-accent'
-                    : 'bg-white/2 border-transparent text-stone-300 hover:bg-white/5 hover:border-white/10'
-            )}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            onClick={onSelect}
-        >
-            {/* Cover thumbnail (2:3 ratio) */}
-            <div className="shrink-0 w-8 rounded-xl overflow-hidden border border-white/10 shadow-md" style={{ aspectRatio: '2/3' }}>
-                {hymnal.coverImageUrl ? (
+        <PickerOptionCard
+            title={hymnal.name}
+            subtitle={formatHymnCountLabel(hymnal.itemCount, hymnal.language)}
+            leading={
+                hymnal.coverImageUrl ? (
                     <img
                         src={hymnal.coverImageUrl}
                         alt={hymnal.name}
@@ -51,63 +56,53 @@ const HymnalCard: React.FC<HymnalCardProps> = React.memo(({ hymnal, isSelected, 
                         onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                     />
                 ) : (
-                    <div className="w-full h-full bg-stone-800 flex items-center justify-center">
-                        <Music className="w-3 h-3 text-stone-600" />
-                    </div>
-                )}
-            </div>
-
-            {/* Info */}
-            <div className="flex-1 min-w-0">
-                <div
-                    title={hymnal.name}
-                    className={cn('text-xs font-bold truncate', isSelected ? 'text-accent' : 'text-stone-200')}
-                >
-                    {hymnal.name}
-                </div>
-                <div className="text-[10px] text-stone-500 truncate">
-                    {hymnal.itemCount} {hymnal.language}
-                </div>
-            </div>
-
-            {isLive && (
-                <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shrink-0 uppercase tracking-wider">
-                    LIVE
-                </span>
-            )}
-
-            {/* Hover action buttons */}
-            <div
-                className={cn(
-                    'flex items-center gap-1 shrink-0 transition-all duration-150',
-                    hovered ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none'
-                )}
-            >
-                <IconButton
-                    icon={<ListTree className="w-3.5 h-3.5" />}
-                    onClick={(e) => { e.stopPropagation(); onOpenThematic(); }}
-                    size="xs"
-                    variant="ghost"
-                    label="Тематическое оглавление"
-                />
-                <IconButton
-                    icon={<Info className="w-3.5 h-3.5" />}
-                    onClick={(e) => { e.stopPropagation(); onOpenInfo(); }}
-                    size="xs"
-                    variant="ghost"
-                    label="Информация о сборнике"
-                />
-                {!hymnal.isBuiltIn && onRemove && (
-                    <IconButton
-                        icon={<Trash2 className="w-3.5 h-3.5" />}
-                        onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                        size="xs"
-                        variant="danger"
-                        label="Удалить сборник"
-                    />
-                )}
-            </div>
-        </div>
+                    <CustomHymnalIcon className="w-4 h-4" />
+                )
+            }
+            leadingBleed={Boolean(hymnal.coverImageUrl)}
+            isActive={isSelected}
+            onClick={onSelect}
+            trailing={
+                isLive ? (
+                    <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded animate-pulse shrink-0 uppercase tracking-wider">
+                        LIVE
+                    </span>
+                ) : undefined
+            }
+            hoverActions={
+                (onOpenThematic || onOpenInfo || (!hymnal.isBuiltIn && onRemove)) ? (
+                    <>
+                        {onOpenThematic && (
+                            <IconButton
+                                icon={<ListTree className="w-3.5 h-3.5" />}
+                                onClick={(e) => { e.stopPropagation(); onOpenThematic(); }}
+                                size="xs"
+                                variant="ghost"
+                                label="Тематическое оглавление"
+                            />
+                        )}
+                        {onOpenInfo && (
+                            <IconButton
+                                icon={<Info className="w-3.5 h-3.5" />}
+                                onClick={(e) => { e.stopPropagation(); onOpenInfo(); }}
+                                size="xs"
+                                variant="ghost"
+                                label="Информация о сборнике"
+                            />
+                        )}
+                        {!hymnal.isBuiltIn && onRemove && (
+                            <IconButton
+                                icon={<Trash2 className="w-3.5 h-3.5" />}
+                                onClick={(e) => { e.stopPropagation(); onRemove(); }}
+                                size="xs"
+                                variant="danger"
+                                label="Удалить сборник"
+                            />
+                        )}
+                    </>
+                ) : undefined
+            }
+        />
     );
 });
 HymnalCard.displayName = 'HymnalCard';
@@ -120,9 +115,34 @@ interface DropdownProps {
     triggerRect: DOMRect;
     onSelect: (id: string) => void;
     onClose: () => void;
-    onOpenInfo: (hymnal: IHymnal) => void;
-    onOpenThematic: (hymnal: IHymnal) => void;
+    onOpenInfo?: (hymnal: IHymnal) => void;
+    onOpenThematic?: (hymnal: IHymnal) => void;
+    showAllOption?: boolean;
 }
+
+const formatLanguageLabel = (lang: string): string => {
+    const code = (lang || 'ru').toLowerCase();
+    const map: Record<string, string> = {
+        ru: 'Русский',
+        en: 'English',
+        de: 'Deutsch',
+        uk: 'Українська',
+        es: 'Español',
+        fr: 'Français',
+    };
+    return map[code] ?? code.toUpperCase();
+};
+
+const formatHymnalCountLabel = (count: number): string => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    const word = mod10 === 1 && mod100 !== 11
+        ? 'сборник'
+        : (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
+            ? 'сборника'
+            : 'сборников';
+    return `${count} ${word}`;
+};
 
 export const HymnalPickerModal: React.FC<DropdownProps> = ({
     hymnals,
@@ -132,20 +152,52 @@ export const HymnalPickerModal: React.FC<DropdownProps> = ({
     onClose,
     onOpenInfo,
     onOpenThematic,
+    showAllOption = true,
 }) => {
     const { t } = useTranslation();
     const setRemoveModal = useSetAtom(removeHymnalModalAtom);
     const setCollisionModal = useSetAtom(importCollisionModalAtom);
     const setInstructionModal = useSetAtom(hymnalInstructionModalAtom);
-    
-    const orphanCount = useLiveQuery(() => db.audioScopes.filter(s => s.needsManualReview === true).count(), []) || 0;
-    
-    const [isImporting, setIsImporting] = useState(false);
 
-    const languages = useMemo(() => Array.from(new Set(hymnals.map(h => h.language || 'ru'))).sort(), [hymnals]);
-    const currentHymnalLang = useMemo(() => hymnals.find(h => h.id === currentHymnalId)?.language || languages[0], [hymnals, currentHymnalId, languages]);
-    const [selectedLang, setSelectedLang] = useState<string>(currentHymnalLang);
-    const filteredHymnals = useMemo(() => hymnals.filter(h => (h.language || 'ru') === selectedLang), [hymnals, selectedLang]);
+    const orphanCount = useLiveQuery(() => db.audioScopes.filter(s => s.needsManualReview === true).count(), []) || 0;
+
+    const [isImporting, setIsImporting] = useState(false);
+    const [search, setSearch] = useState('');
+
+    const visibleHymnals = useMemo(() => hymnals.filter(h => !h.isDisabled), [hymnals]);
+
+    const groupedByLang = useMemo(() => {
+        const groups: Record<string, IHymnal[]> = {};
+        for (const h of visibleHymnals) {
+            const lang = (h.language || 'ru').toLowerCase();
+            if (!groups[lang]) groups[lang] = [];
+            groups[lang].push(h);
+        }
+        const langs = Object.keys(groups).sort();
+        return { groups, langs };
+    }, [visibleHymnals]);
+
+    const initialLang = useMemo(() => {
+        const cur = visibleHymnals.find(h => h.id === currentHymnalId)?.language?.toLowerCase();
+        if (cur && groupedByLang.groups[cur]) return cur;
+        return groupedByLang.langs[0] || 'ru';
+    }, [visibleHymnals, currentHymnalId, groupedByLang]);
+
+    // Open directly on the current language's hymnals; step back to Languages when 2+ languages exist
+    const [view, setView] = useState<'languages' | 'hymnals'>('hymnals');
+    const [selectedLang, setSelectedLang] = useState<string>(initialLang);
+
+    const effectiveLang = groupedByLang.groups[selectedLang] ? selectedLang : initialLang;
+    const filteredHymnals = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        if (q) {
+            return visibleHymnals.filter(h =>
+                h.name.toLowerCase().includes(q) ||
+                (h.language || '').toLowerCase().includes(q)
+            );
+        }
+        return groupedByLang.groups[effectiveLang] ?? [];
+    }, [visibleHymnals, groupedByLang, effectiveLang, search]);
 
     const handleImport = async () => {
         setIsImporting(true);
@@ -187,7 +239,6 @@ export const HymnalPickerModal: React.FC<DropdownProps> = ({
         }
 
         if (triggerRect.top > menuHeight + spacing) {
-            // open upwards
             return {
                 bottom: windowHeight - triggerRect.top + spacing,
                 left,
@@ -201,42 +252,95 @@ export const HymnalPickerModal: React.FC<DropdownProps> = ({
         };
     }, [triggerRect, filteredHymnals]);
 
+    const canSwitchLanguages = groupedByLang.langs.length > 1;
+    const isLanguagesView = view === 'languages' && !search.trim() && canSwitchLanguages;
+    const totalHymnsCount = useMemo(() => hymnals.reduce((acc, h) => acc + (h.itemCount || 0), 0), [hymnals]);
+    const allHymnalsLabel = t('all_hymnals', 'Все сборники');
+    const shouldShowAllCard = showAllOption && hymnals.length > 1 && (
+        !search.trim() || allHymnalsLabel.toLowerCase().includes(search.trim().toLowerCase())
+    );
+
     return createPortal(
-        <div className="fixed inset-0 z-[9999] pointer-events-none">
+        <div className="fixed inset-0 z-[10010] pointer-events-none">
             {/* Backdrop */}
             <div className="absolute inset-0 pointer-events-auto" onClick={onClose} />
 
             {/* Dropdown content */}
             <div
-                className="absolute bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[520px] overflow-hidden animate-in fade-in zoom-in-95 duration-200 pointer-events-auto"
+ className="absolute bg-stone-900 border border-white/10 rounded-xl shadow-2xl flex flex-col max-h-[520px] overflow-hidden animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
                 style={position}
             >
-                {/* Language Tabs */}
-                {languages.length > 1 && (
-                    <div className="flex items-center px-2 pt-2 border-b border-white/10 shrink-0">
-                        {languages.map(lang => (
-                            <button
-                                key={lang}
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); setSelectedLang(lang); }}
-                                className={cn(
-                                    'px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-[1px] apple-press cursor-pointer',
-                                    selectedLang === lang
-                                        ? 'text-accent border-accent bg-accent/10'
-                                        : 'text-stone-400 border-transparent hover:text-stone-200 hover:bg-white/5'
-                                )}
+                {/* Header (unified with TranslationPicker) */}
+                <div className="p-3 border-b border-white/5 flex items-center justify-between bg-stone-950/40 gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                        {!isLanguagesView && canSwitchLanguages && !search.trim() && (
+                            <Button
+                                size="sm"
+                                square
+                                variant="ghost"
+                                onClick={() => setView('languages')}
+                                className="w-8 h-8 text-stone-400 hover:text-white shrink-0"
+                                title={t('languages', 'Языки')}
                             >
-                                {lang.toUpperCase()}
-                            </button>
-                        ))}
+                                <ArrowLeft className="w-4 h-4" />
+                            </Button>
+                        )}
+                        <h3 className="text-xs font-bold text-stone-300 uppercase tracking-wider truncate">
+                            {isLanguagesView
+                                ? t('languages', 'Языки')
+                                : (canSwitchLanguages ? formatLanguageLabel(effectiveLang) : t('hymns.hymnals', 'Сборники гимнов'))}
+                        </h3>
                     </div>
-                )}
+                    <Button
+                        size="sm"
+                        square
+                        variant="ghost"
+                        onClick={onClose}
+                        className="w-8 h-8 text-stone-500 hover:text-white shrink-0"
+                    >
+                        <X className="w-4 h-4" />
+                    </Button>
+                </div>
 
-                <div className="flex-1 overflow-y-auto no-scrollbar p-2 space-y-1">
-                    {filteredHymnals.length === 0 ? (
+                {/* Search */}
+                <div className="p-3 border-b border-white/5 bg-stone-950/20">
+                    <SearchInput
+                        size="sm"
+                        placeholder={t('hymns.search_hymnals_placeholder', 'Поиск сборников...')}
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        onClear={() => setSearch('')}
+                    />
+                </div>
+
+                <div className="flex-1 overflow-y-auto no-scrollbar p-1.5 flex flex-col gap-0.5 min-h-0">
+                    {shouldShowAllCard && (
+                        <PickerOptionCard
+                            title={allHymnalsLabel}
+                            subtitle={`${totalHymnsCount.toLocaleString('ru-RU')} ${formatHymnCountWord(totalHymnsCount)}`}
+                            leading={<CustomHymnalIcon className="w-4 h-4" />}
+                            isActive={currentHymnalId === 'ALL'}
+                            onClick={() => { onSelect('ALL'); onClose(); }}
+                        />
+                    )}
+                    {isLanguagesView ? (
+                        groupedByLang.langs.map((lang) => (
+                            <PickerOptionCard
+                                key={lang}
+                                title={formatLanguageLabel(lang)}
+                                subtitle={`${lang.toUpperCase()} • ${formatHymnalCountLabel(groupedByLang.groups[lang].length)}`}
+                                leading={<Languages className="w-4 h-4" />}
+                                trailing={<ChevronRight className="w-3.5 h-3.5 text-stone-500 group-hover:translate-x-0.5 transition-transform" />}
+                                onClick={() => {
+                                    setSelectedLang(lang);
+                                    setView('hymnals');
+                                }}
+                            />
+                        ))
+                    ) : filteredHymnals.length === 0 ? (
                         <div className="py-6">
                             <EmptyState
-                                icon={Music}
+                                icon={CustomHymnalIcon}
                                 title={t('hymns.no_hymnals', 'Нет доступных сборников')}
                                 size="xs"
                                 border="none"
@@ -249,8 +353,8 @@ export const HymnalPickerModal: React.FC<DropdownProps> = ({
                                 hymnal={hymnal}
                                 isSelected={hymnal.id === currentHymnalId}
                                 onSelect={() => { onSelect(hymnal.id); onClose(); }}
-                                onOpenInfo={() => { onOpenInfo(hymnal); onClose(); }}
-                                onOpenThematic={() => { onOpenThematic(hymnal); onClose(); }}
+                                onOpenInfo={onOpenInfo ? () => { onOpenInfo(hymnal); onClose(); } : undefined}
+                                onOpenThematic={onOpenThematic ? () => { onOpenThematic(hymnal); onClose(); } : undefined}
                                 onRemove={() => { onClose(); setRemoveModal({ isOpen: true, hymnal }); }}
                             />
                         ))

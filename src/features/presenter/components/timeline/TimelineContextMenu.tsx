@@ -4,6 +4,7 @@ import {
     Trash2, Copy, ArrowLeft, ArrowRight, LayoutTemplate, BookOpen,
     ChevronsLeft, ChevronsRight, Unplug, Scissors, Clipboard as ClipboardIcon, CopyPlus, Music, Palette
 } from 'lucide-react';
+import { CustomHymnStackIcon } from '@/shared/ui';
 import { ICanvasSlide, INestedSlide, IPresentationFile } from '@/core/types';
 import { IHymnSlide } from '@/core/types/presentation';
 import ContextMenu, { ContextMenuItem } from '@/shared/ui/ContextMenu';
@@ -13,6 +14,7 @@ import { resolveEffectiveThemeId } from '@/features/hymns/services/hymnThemeReso
 import { useSetAtom } from 'jotai';
 import { slideDesignPanelOpenAtom } from '@/core/store/uiAtoms';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
+import { confirmSlideDeletionIfNeeded } from '@/features/presenter/utils/slideDeletionGuard';
 import { LibraryImportService } from '../../services/LibraryImportService';
 
 interface TimelineContextMenuProps {
@@ -34,6 +36,7 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
     const loadHymnTheme = useHymnThemeEditorStore(s => s.loadTheme);
 
     const selectedSlideIds = usePresentationStore(s => s.selectedSlideIds);
+    const liveSlideId = usePresentationStore(s => s.liveSlideId);
     const clipboard = usePresentationStore(s => s.clipboard);
     const audioClipboard = usePresentationStore(s => s.audioClipboard);
 
@@ -89,7 +92,7 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
 
             {/* Insert Hymn */}
             <ContextMenuItem
-                icon={<Music className="w-4 h-4" />}
+                icon={<CustomHymnStackIcon className="w-4 h-4" />}
                 label={t('insert_hymn', 'Insert Hymn...')}
                 onClick={() => {
                     const slidesArr = currentPresentation?.slides || [];
@@ -282,10 +285,17 @@ export const TimelineContextMenu: React.FC<TimelineContextMenuProps> = ({
                 label={selectedSlideIds.length > 1 ? t('delete_multiple', 'Delete Selected') : t('delete', 'Delete')}
                 danger
                 onClick={() => {
+                    const targetPresId = contextMenu.presentationId;
+                    const targetSlideId = contextMenu.slideId;
                     if (selectedSlideIds.length > 1) {
-                        removeSlides(contextMenu.presentationId, selectedSlideIds);
+                        const ids = [...selectedSlideIds];
+                        confirmSlideDeletionIfNeeded(ids, liveSlideId, () =>
+                            removeSlides(targetPresId, ids)
+                        );
                     } else {
-                        removeSlide(contextMenu.presentationId, contextMenu.slideId);
+                        confirmSlideDeletionIfNeeded([targetSlideId], liveSlideId, () =>
+                            removeSlide(targetPresId, targetSlideId)
+                        );
                     }
                     onClose();
                 }}

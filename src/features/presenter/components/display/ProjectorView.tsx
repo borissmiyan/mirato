@@ -23,7 +23,6 @@ const ProjectorView: React.FC = () => {
     const [multiVerses, setMultiVerses] = useState<Verse[] | null>(null);
     const [isMultiVerseMode, setIsMultiVerseMode] = useState(false);
     const [slide, setSlide] = useState<ISlide | null>(null);
-    const [previewSlide, setPreviewSlide] = useState<ISlide | null>(null);
     const [appMode, setAppMode] = useState<'scripture' | 'presentation'>('scripture');
     const [secondTranslationId, setSecondTranslationId] = useState<string | null>(null);
     const [settings, setSettings] = useState<PresenterSettings>(DEFAULT_SETTINGS);
@@ -38,8 +37,37 @@ const ProjectorView: React.FC = () => {
 
     // Live Overrides
     const [activeOverride, setActiveOverride] = useState<'blackout' | 'whiteout' | 'logo' | null>(null);
+    const [mountedOverrides, setMountedOverrides] = useState<Record<'blackout' | 'whiteout' | 'logo', boolean>>({
+        blackout: false,
+        whiteout: false,
+        logo: false,
+    });
     const [activeLogo, setActiveLogo] = useState<ILogo | null>(null);
     const logoUrl = useLogoUrl(activeLogo);
+
+    // Keep each override layer mounted during its 700ms opacity fade-out so it crossfades
+    // smoothly directly into the slide underneath without flashing black.
+    useEffect(() => {
+        const types: Array<'blackout' | 'whiteout' | 'logo'> = ['blackout', 'whiteout', 'logo'];
+        const timers: ReturnType<typeof setTimeout>[] = [];
+
+        if (activeOverride) {
+            setMountedOverrides(prev => (prev[activeOverride] ? prev : { ...prev, [activeOverride]: true }));
+        }
+
+        for (const type of types) {
+            if (type !== activeOverride) {
+                const timer = setTimeout(() => {
+                    setMountedOverrides(prev => (prev[type] ? { ...prev, [type]: false } : prev));
+                }, 750);
+                timers.push(timer);
+            }
+        }
+
+        return () => {
+            timers.forEach(clearTimeout);
+        };
+    }, [activeOverride]);
 
     // Fetch parallel verse if second translation is active
     const parallelVerse = useLiveQuery(
@@ -59,10 +87,11 @@ const ProjectorView: React.FC = () => {
     useEffect(() => {
         document.body.classList.add('projector-mode');
 
-        const reportRatio = () => {
+        const reportRatio = (isResize = false) => {
             const ratio = window.innerWidth / window.innerHeight;
-            IpcService.send('projector-ready', { ratio });
+            IpcService.send('projector-ready', { ratio, isResize });
         };
+        const handleResize = () => reportRatio(true);
 
         const handleKeyDown = (e: KeyboardEvent) => {
             if (!IpcService.isElectron()) return;
@@ -142,19 +171,9 @@ const ProjectorView: React.FC = () => {
                     }
                     break;
                 }
-                case 'show-preview-slide': {
-                    const previewObj = payload.slide as ISlide | null;
-                    setPreviewSlide(previewObj);
-                    if (previewObj) {
-                        usePresentationStore.getState().setPreviewSlide(
-                            previewObj.id, 
-                            payload.presentationId as string | undefined,
-                            payload.rootPresentationId as string | undefined,
-                            payload.navigationParentSlideId as string | null | undefined
-                        );
-                    }
+                case 'show-preview-slide':
+                    // Ignored on projector: preview stays strictly isolated from live projection
                     break;
-                }
                 case 'set-app-mode':
                     setAppMode(rawPayload as 'scripture' | 'presentation');
                     break;
@@ -170,9 +189,8 @@ const ProjectorView: React.FC = () => {
                         }
                     } else if (payload.url) {
                         setActiveLogo({ id: 'legacy', name: 'Legacy', url: payload.url as string });
-                    } else {
-                        setActiveLogo(null);
                     }
+                    // Retain last activeLogo when turning off override so it stays visible during the 700ms crossfade
                     break;
                 case 'update-theme':
                     document.documentElement.setAttribute('data-theme', String(rawPayload));
@@ -237,15 +255,16 @@ const ProjectorView: React.FC = () => {
             }
         };
 
-        reportRatio();
-        window.addEventListener('resize', reportRatio);
-        window.addEventListener('keydown', handleKeyDown, true);
-
+        // Subscribe BEFORE sending projector-ready so the immediate show-slide response is never missed
         const unsubscribe = PresenterService.subscribeToCommands(handleCommand);
+
+        reportRatio(false);
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('keydown', handleKeyDown, true);
 
         return () => {
             document.body.classList.remove('projector-mode');
-            window.removeEventListener('resize', reportRatio);
+            window.removeEventListener('resize', handleResize);
             window.removeEventListener('keydown', handleKeyDown, true);
             if (webRtcReceiverRef.current) {
                 webRtcReceiverRef.current.cleanup();
@@ -282,10 +301,7 @@ const ProjectorView: React.FC = () => {
                     />
                 </div>
             ) : (
-                <div className={cn(
-                    "w-full h-full transition-opacity duration-500",
-                    activeOverride ? "opacity-0" : "opacity-100"
-                )}>
+                <div className="w-full h-full">
                     <SlideDisplay
                         isProjector={true}
                         activeVerse={verse}
@@ -301,31 +317,40 @@ const ProjectorView: React.FC = () => {
 
 
             {/* Blackout Overlay */}
-            <div className={cn(
-                "absolute inset-0 z-100 transition-opacity duration-700 pointer-events-none",
-                activeOverride === 'blackout' ? "opacity-100" : "opacity-0 invisible"
-            )}>
-                {activeOverride === 'blackout' && (
+            <div
+                data-override-layer="blackout"
+                className={cn(
+                    "absolute inset-0 z-100 transition-opacity duration-700 pointer-events-none",
+                    activeOverride === 'blackout' ? "opacity-100" : "opacity-0"
+                )}
+            >
+                {(activeOverride === 'blackout' || mountedOverrides.blackout) && (
                     <SlideBackground background={settings.overrides.blackout.background} />
                 )}
             </div>
 
             {/* Whiteout Overlay */}
-            <div className={cn(
-                "absolute inset-0 z-101 transition-opacity duration-700 pointer-events-none",
-                activeOverride === 'whiteout' ? "opacity-100" : "opacity-0 invisible"
-            )}>
-                {activeOverride === 'whiteout' && (
+            <div
+                data-override-layer="whiteout"
+                className={cn(
+                    "absolute inset-0 z-101 transition-opacity duration-700 pointer-events-none",
+                    activeOverride === 'whiteout' ? "opacity-100" : "opacity-0"
+                )}
+            >
+                {(activeOverride === 'whiteout' || mountedOverrides.whiteout) && (
                     <SlideBackground background={settings.overrides.whiteout.background} />
                 )}
             </div>
 
             {/* Logo Overlay */}
-            <div className={cn(
-                "absolute inset-0 z-102 transition-opacity duration-700 pointer-events-none",
-                activeOverride === 'logo' ? "opacity-100" : "opacity-0 invisible"
-            )}>
-                {activeOverride === 'logo' && (
+            <div
+                data-override-layer="logo"
+                className={cn(
+                    "absolute inset-0 z-102 transition-opacity duration-700 pointer-events-none",
+                    activeOverride === 'logo' ? "opacity-100" : "opacity-0"
+                )}
+            >
+                {(activeOverride === 'logo' || mountedOverrides.logo) && (
                     <>
                         <SlideBackground background={settings.overrides.logo.background} />
                         <div className="absolute inset-0 flex items-center justify-center p-24">
@@ -337,7 +362,7 @@ const ProjectorView: React.FC = () => {
                                         <div className="w-32 h-32 rounded-full border-4 border-stone-800 flex items-center justify-center opacity-20">
                                             <span className="text-4xl font-black">D</span>
                                         </div>
-                                        <h1 className="text-2xl font-black uppercase tracking-[0.3em] opacity-20">Deck.CE</h1>
+                                        <h1 className="text-2xl font-black uppercase tracking-[0.3em] opacity-20">Mirato</h1>
                                     </div>
                                 )}
                             </div>

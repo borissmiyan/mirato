@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { IHymnTheme, SOURCE_THEME_ID } from '@/core/types/hymn';
+import { IHymnTheme, SOURCE_THEME_ID, TextAnchor } from '@/core/types/hymn';
 import { hymnThemeService, DEFAULT_HYMN_THEME } from '../services/hymnThemeService';
 import { IStyleLayer } from '@/core/types';
 import { ICanvasItemText } from '@/core/types/canvas';
@@ -24,6 +24,7 @@ interface HymnThemeEditorState {
     // Updates
     updateBackground: (background: IStyleLayer[]) => void;
     updateTextStyle: (textStyle: Partial<ICanvasItemText>) => void;
+    updateTextAnchor: (anchor: TextAnchor) => void;
     updateMetadata: (name?: string, isDefault?: boolean) => void;
 }
 
@@ -157,6 +158,22 @@ export const useHymnThemeEditorStore = create<HymnThemeEditorState>((set, get) =
                         ...themeToUpdate.textStyle,
                         ...textStyleUpdate
                     },
+                    updatedAt: Date.now()
+                },
+                isDirty: true
+            };
+        });
+    },
+
+    updateTextAnchor: (textAnchor: TextAnchor) => {
+        set((state) => {
+            if (!state.draftTheme) return state;
+            const themeToUpdate = forkThemeIfNeeded(state.draftTheme);
+
+            return {
+                draftTheme: {
+                    ...themeToUpdate,
+                    textAnchor,
                     updatedAt: Date.now()
                 },
                 isDirty: true

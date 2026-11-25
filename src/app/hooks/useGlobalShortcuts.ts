@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useBibleStore } from '@/features/bible-browser/store/bibleStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
@@ -9,6 +9,7 @@ import { getDefaultStore } from 'jotai';
 import {
     OverrideType,
     slidePreviewHoveredAtom,
+    isTimelineHoveredAtom,
     selectedCanvasItemIdsAtom,
     editingCanvasItemIdAtom,
     vectorEditingItemIdAtom,
@@ -18,6 +19,7 @@ import {
     isQuickLookOpenAtom,
     latestInteractionAreaAtom,
 } from '@/core/store/uiAtoms';
+import { previewLockedAtom } from '@/core/store/liveSyncAtoms';
 import { Verse, IPresentationFile, ICanvasSlide, ICanvasItem } from '@/core/types';
 import { isUserTyping } from '@/core/utils/keyboardUtils';
 import { presentationService } from '@/core/services/presentationService';
@@ -48,6 +50,7 @@ export function useGlobalShortcuts({
     activePresentation,
     activeVerse,
     selectedCanvasItemIds,
+    isTimelineHovered: isTimelineHoveredProp,
     handleNext,
     handlePrev,
     openProjector,
@@ -69,8 +72,11 @@ export function useGlobalShortcuts({
 
         const isMod = e.metaKey || e.ctrlKey;
         const isPreviewHovered = store.get(slidePreviewHoveredAtom);
+        const isTimelineHovered = store.get(isTimelineHoveredAtom) || isTimelineHoveredProp;
+        const interactionArea = store.get(latestInteractionAreaAtom);
+        const isCanvasContext = !isTimelineHovered && (isPreviewHovered || interactionArea === 'canvas');
 
-        // Spacebar: Play / Pause live media (only outside canvas)
+        // Spacebar: Strictly Play / Pause live video & audio (outside canvas pan)
         if (!isMod && !e.shiftKey && !e.altKey && (e.key === ' ' || e.key === 'Spacebar' || e.code === 'Space')) {
             if (isPreviewHovered) {
                 // Priority on canvas: Spacebar pan
@@ -80,13 +86,19 @@ export function useGlobalShortcuts({
             const liveSlideId = usePresentationStore.getState().liveSlideId;
             if (liveSlideId || hasMedia) {
                 e.preventDefault?.();
-                presentationService.toggleLiveMedia();
+                presentationService.toggleLiveMedia('all');
                 return;
             }
+            return;
         }
 
-        // Enter: Contextual Actions or Open Projector
+        // Enter: Contextual Actions (Canvas item edit vs Timeline Go Live)
         if (e.key === 'Enter') {
+            // Let pen tool handler finish path drawing cleanly
+            if (store.get(canvasToolAtom) === 'pen') {
+                return;
+            }
+
             if (store.get(vectorEditingItemIdAtom) !== null) {
                 store.set(vectorEditingItemIdAtom, null);
                 e.preventDefault?.();
@@ -95,9 +107,12 @@ export function useGlobalShortcuts({
 
             if (appMode === 'presentation') {
                 const selectedItemIds = store.get(selectedCanvasItemIdsAtom);
-                if (selectedItemIds.length > 0) {
-                    const slide = activePresentation?.slides?.find(s => s.id === previewSlideId) as any;
-                    const items: any[] = slide?.content?.canvasItems || [];
+                // Only enter canvas item editing when cursor/focus is on canvas (never hijack timeline Enter)
+                if (isCanvasContext && selectedItemIds.length > 0 && !isMod) {
+                    const presState = usePresentationStore.getState();
+                    const pres = presState.selectedPresentation || presState.activePresentation || activePresentation;
+                    const slide = pres?.slides?.find(s => s.id === previewSlideId) as ICanvasSlide | undefined;
+                    const items: ICanvasItem[] = slide?.content?.canvasItems || [];
 
                     // Figma Shift+Enter: Select parent group
                     if (e.shiftKey) {
@@ -122,24 +137,73 @@ export function useGlobalShortcuts({
 
                     const firstId = selectedItemIds[selectedItemIds.length - 1];
                     const item = items.find(i => i.id === firstId);
-                    if (item && (item.type === 'shape' || item.type === 'stroke' || item.type === 'path')) {
-                        store.set(vectorEditingItemIdAtom, firstId);
-                    } else {
-                        store.set(editingCanvasItemIdAtom, firstId);
-                        store.set(canvasToolAtom, 'text');
+                    if (item && !item.locked) {
+                        if (item.type === 'shape' || item.type === 'stroke' || item.type === 'path') {
+                            store.set(vectorEditingItemIdAtom, firstId);
+                            e.preventDefault?.();
+                            return;
+                        }
+                        if (item.type === 'text') {
+                            store.set(editingCanvasItemIdAtom, firstId);
+                            store.set(canvasToolAtom, 'text');
+                            e.preventDefault?.();
+                            return;
+                        }
                     }
+                    // For image/video/effect or locked items on canvas, do not lock editingCanvasItemIdAtom
                     e.preventDefault?.();
                     return;
                 }
+
+                const launchSlide = (targetId: string, forcePreview: boolean) => {
+                    const presState = usePresentationStore.getState();
+                    const containerSlide = presState.activePresentation?.slides?.find(s => s.id === targetId);
+                    const isNestedContainer = Boolean(
+                        containerSlide && (
+                            containerSlide.blockId === 'master-presentation' ||
+                            containerSlide.type === 'nested' ||
+                            (containerSlide.type === 'normal' && (containerSlide as { masterPresentationId?: string }).masterPresentationId)
+                        )
+                    );
+
+                    if (isNestedContainer) {
+                        openProjector();
+                        void setPreviewSlide(targetId, presState.activePresentationId || undefined).then(() => {
+                            const fresh = usePresentationStore.getState();
+                            const resolvedId = fresh.previewSlideId || targetId;
+                            setLiveSlide(
+                                resolvedId,
+                                fresh.selectedPresentationId || undefined,
+                                fresh.activePresentationId || undefined,
+                                fresh.navigationParentSlideId,
+                                fresh.navigationParentPresentationId
+                            );
+                        });
+                        return;
+                    }
+
+                    if (forcePreview || !presState.previewSlideId) {
+                        void setPreviewSlide(targetId);
+                    }
+                    if (presState.selectedPresentationId && presState.selectedPresentationId !== presState.activePresentationId && presState.navigationParentSlideId) {
+                        setLiveSlide(
+                            targetId,
+                            presState.selectedPresentationId,
+                            presState.activePresentationId || undefined,
+                            presState.navigationParentSlideId,
+                            presState.navigationParentPresentationId
+                        );
+                    } else {
+                        setLiveSlide(targetId);
+                    }
+                    openProjector();
+                };
 
                 if (isMod) {
                     const slides = activePresentation?.slides || [];
                     if (slides.length > 0) {
                         e.preventDefault?.();
-                        const firstId = slides[0].id;
-                        setPreviewSlide(firstId);
-                        setLiveSlide(firstId);
-                        openProjector();
+                        launchSlide(slides[0].id, true);
                         return;
                     }
                 }
@@ -147,9 +211,7 @@ export function useGlobalShortcuts({
                 const targetId = previewSlideId || activePresentation?.slides?.[0]?.id;
                 if (targetId) {
                     e.preventDefault?.();
-                    if (!previewSlideId) setPreviewSlide(targetId);
-                    setLiveSlide(targetId);
-                    openProjector();
+                    launchSlide(targetId, false);
                     return;
                 }
             } else {
@@ -177,7 +239,7 @@ export function useGlobalShortcuts({
         }
 
         const hasSelectedCanvasItems = (selectedCanvasItemIds && selectedCanvasItemIds.length > 0) || store.get(selectedCanvasItemIdsAtom).length > 0;
-        if ((isPreviewHovered || store.get(latestInteractionAreaAtom) === 'canvas') && hasSelectedCanvasItems && e.key.startsWith('Arrow')) {
+        if (isCanvasContext && hasSelectedCanvasItems && e.key.startsWith('Arrow')) {
             // Priority: Arrow keys nudge selected items on canvas, do not change slides
             e.preventDefault?.();
             const step = e.shiftKey ? 10 : 1;
@@ -212,21 +274,52 @@ export function useGlobalShortcuts({
 
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             e.preventDefault?.();
-            await handleNext(isMod);
+            const isPreviewLocked = store.get(previewLockedAtom);
+            if (isMod) {
+                // Cmd+Arrows: move Preview only
+                await handleNext(true, false);
+            } else if (e.altKey || isPreviewLocked) {
+                // Alt+Arrows or Unlinked mode: move Live only, keep Preview locked
+                await handleNext(true, true);
+            } else {
+                // Linked mode: anchor to Live slide and move Live & Preview together
+                const presState = usePresentationStore.getState();
+                if (appMode === 'presentation' && presState.liveSlideId && presState.previewSlideId !== presState.liveSlideId) {
+                    presState.syncPreviewToLive();
+                }
+                await handleNext(false, true);
+            }
         }
         if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
             e.preventDefault?.();
-            await handlePrev(isMod);
+            const isPreviewLocked = store.get(previewLockedAtom);
+            if (isMod) {
+                await handlePrev(true, false);
+            } else if (e.altKey || isPreviewLocked) {
+                await handlePrev(true, true);
+            } else {
+                const presState = usePresentationStore.getState();
+                if (appMode === 'presentation' && presState.liveSlideId && presState.previewSlideId !== presState.liveSlideId) {
+                    presState.syncPreviewToLive();
+                }
+                await handlePrev(false, true);
+            }
         }
 
         if (isMod && (e.code === 'KeyH' || e.key.toLowerCase() === 'h')) {
             e.preventDefault?.();
             store.set(historyOpenAtom, (prev: boolean) => !prev);
+            return;
         }
-        if (!isMod && (e.code === 'KeyH' || e.key.toLowerCase() === 'h')) {
-            if (appMode === 'presentation' && previewSlideId) {
+        if (!isMod && !e.shiftKey && !e.altKey && (e.code === 'KeyH' || e.key.toLowerCase() === 'h')) {
+            if (appMode === 'presentation') {
                 e.preventDefault?.();
-                usePresentationStore.getState().syncPreviewToLive();
+                if (isPreviewHovered) {
+                    store.set(canvasToolAtom, 'pan');
+                } else if (previewSlideId) {
+                    usePresentationStore.getState().syncPreviewToLive();
+                }
+                return;
             }
         }
 
@@ -257,7 +350,7 @@ export function useGlobalShortcuts({
         }
 
         if (appMode === 'presentation') {
-            const handled = await executePresentationHotkeys(e, isMod, isPreviewHovered, selectedCanvasItemIds);
+            const handled = await executePresentationHotkeys(e, isMod, isPreviewHovered, selectedCanvasItemIds, isTimelineHovered);
             if (handled) return;
         }
 
@@ -290,13 +383,17 @@ export function useGlobalShortcuts({
         redo,
         toggleOverride,
         selectedCanvasItemIds,
+        isTimelineHoveredProp,
         setPreviewSlide,
         setLiveSlide,
         t
     ]);
 
+    const executeHotkeyRef = useRef(executeHotkey);
+    executeHotkeyRef.current = executeHotkey;
+
     useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => executeHotkey(e);
+        const handleKeyDown = (e: KeyboardEvent) => executeHotkeyRef.current(e);
         window.addEventListener('keydown', handleKeyDown, true);
 
         let unsubscribeRelay: (() => void) | undefined;
@@ -304,11 +401,18 @@ export function useGlobalShortcuts({
             unsubscribeRelay = IpcService.on('relay-keydown', (payload: unknown) => {
                 const data = (payload ?? {}) as Partial<HotkeyEvent>;
                 if (data.key) {
-                    executeHotkey({ ...data, key: data.key, isRelayed: true });
+                    executeHotkeyRef.current({ ...data, key: data.key, isRelayed: true });
                 }
             });
         }
 
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown, true);
+            unsubscribeRelay?.();
+        };
+    }, []);
+
+    useEffect(() => {
         const unsubscribeRemote = registerRemoteCommands({
             handleNext,
             handlePrev,
@@ -321,9 +425,7 @@ export function useGlobalShortcuts({
         });
 
         return () => {
-            window.removeEventListener('keydown', handleKeyDown, true);
-            unsubscribeRelay?.();
             unsubscribeRemote?.();
         };
-    }, [executeHotkey, closeProjector, handleNext, handlePrev, onRequestRemoteUpdate, openProjector, previewSlideId, setLiveSlide, toggleOverride]);
+    }, [closeProjector, handleNext, handlePrev, onRequestRemoteUpdate, openProjector, previewSlideId, setLiveSlide, toggleOverride]);
 }

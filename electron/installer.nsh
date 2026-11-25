@@ -5,25 +5,25 @@
   # 1. Cleanup stale registry entries that cause "Error 2" (File Not Found)
   # This happens if the app was deleted manually but the registry remains.
   # The installer would try to run a non-existent Uninstall.exe and fail.
-  
-  # Check HKLM (All Users)
-  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.ekklesienter.app" "UninstallString"
+
+  # Check HKLM (All Users) for Mirato
+  ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.mirato.app" "UninstallString"
   ${If} $0 != ""
-    ReadRegStr $1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.ekklesienter.app" "InstallLocation"
+    ReadRegStr $1 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.mirato.app" "InstallLocation"
     ${If} $1 != ""
       ${IfNot} ${FileExists} "$1\Uninstall.exe"
-        DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.ekklesienter.app"
+        DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.mirato.app"
       ${EndIf}
     ${EndIf}
   ${EndIf}
 
-  # Check HKCU (Current User)
-  ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.ekklesienter.app" "UninstallString"
+  # Check HKCU (Current User) for Mirato
+  ReadRegStr $0 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.mirato.app" "UninstallString"
   ${If} $0 != ""
-    ReadRegStr $1 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.ekklesienter.app" "InstallLocation"
+    ReadRegStr $1 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.mirato.app" "InstallLocation"
     ${If} $1 != ""
       ${IfNot} ${FileExists} "$1\Uninstall.exe"
-        DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.ekklesienter.app"
+        DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\com.mirato.app"
       ${EndIf}
     ${EndIf}
   ${EndIf}
@@ -32,23 +32,13 @@
   # Kill the app before anything else starts to release file locks.
   ${nsProcess::FindProcess} "Mirato.exe" $R0
   ${If} $R0 == 0
-    ${nsProcess::KillProcess} "Mirato.exe" $R1
-    ExecWait 'taskkill /F /IM "Mirato.exe" /T'
-  ${EndIf}
-  ${nsProcess::FindProcess} "Deck.CE.exe" $R0
-  ${If} $R0 == 0
-    ${nsProcess::KillProcess} "Deck.CE.exe" $R1
-    ExecWait 'taskkill /F /IM "Deck.CE.exe" /T'
-  ${EndIf}
-  ${nsProcess::FindProcess} "Ekklesienter.exe" $R0
-  ${If} $R0 == 0
     # First try graceful/standard kill
-    ${nsProcess::KillProcess} "Ekklesienter.exe" $R1
-    
+    ${nsProcess::KillProcess} "Mirato.exe" $R1
+
     # Fallback to aggressive taskkill for process tree / stubborn background instances
     # /F = force, /T = kill child processes
-    ExecWait 'taskkill /F /IM "Ekklesienter.exe" /T'
-    
+    ExecWait 'taskkill /F /IM "Mirato.exe" /T'
+
     # Wait loop to ensure OS releases file locks
     StrCpy $1 0
     loop_wait:
@@ -73,19 +63,10 @@
 
 !macro customUnInit
   # Kill the app before uninstallation starts
-  ${nsProcess::FindProcess} "Deck.CE.exe" $R0
+  ${nsProcess::FindProcess} "Mirato.exe" $R0
   ${If} $R0 == 0
-    ${nsProcess::KillProcess} "Deck.CE.exe" $R1
-    ExecWait 'taskkill /F /IM "Deck.CE.exe" /T'
-  ${EndIf}
-  ${nsProcess::FindProcess} "Ekklesienter.exe" $R0
-  ${If} $R0 == 0
-    ${nsProcess::KillProcess} "Ekklesienter.exe" $R1
-    ExecWait 'taskkill /F /IM "Ekklesienter.exe" /T'
+    ${nsProcess::KillProcess} "Mirato.exe" $R1
+    ExecWait 'taskkill /F /IM "Mirato.exe" /T'
     Sleep 1000
   ${EndIf}
 !macroend
-
-
-
-

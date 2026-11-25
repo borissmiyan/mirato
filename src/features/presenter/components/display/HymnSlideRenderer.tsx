@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
-import { IHymnSlide, ICanvasSlide, ICanvasItem } from '@/core/types';
-import { SOURCE_THEME_ID } from '@/core/types/hymn';
+import { IHymnSlide, ICanvasSlide, ICanvasItem, IPresentationFile } from '@/core/types';
+import { IHymnTheme, SOURCE_THEME_ID } from '@/core/types/hymn';
 import { hymnLibraryService } from '@/features/hymns/services/hymnLibraryService';
 import { DEFAULT_HYMN_THEME } from '@/features/hymns/services/hymnThemeService';
 import { SlideBackground } from './SlideBackground';
@@ -18,6 +18,10 @@ export interface HymnSlideRendererProps {
     parentWidth?: number;
     parentHeight?: number;
     className?: string;
+    /** Optional pre-loaded source presentation to avoid redundant IndexedDB queries */
+    sourcePresentation?: IPresentationFile | null;
+    /** Optional pre-loaded theme to avoid redundant IndexedDB queries */
+    themeOverride?: IHymnTheme | null;
 }
 
 const BASE_WIDTH = 1920;
@@ -30,31 +34,41 @@ const BASE_HEIGHT = 1080;
  */
 export const HymnSlideRenderer: React.FC<HymnSlideRendererProps> = ({
     slide,
-    isEditing,
+    isEditing: _isEditing,
     scale = 1,
-    className
+    className,
+    sourcePresentation: sourcePresentationProp,
+    themeOverride,
 }) => {
     const { t } = useTranslation();
 
-    // 1. Live query for the theme (if not SOURCE)
-    const theme = useLiveQuery(async () => {
-        if (!slide.themeId || slide.themeId === SOURCE_THEME_ID) return undefined;
+    // 1. Live query for the theme (skipped if themeOverride is provided or theme is SOURCE)
+    const queriedTheme = useLiveQuery(async () => {
+        if (themeOverride !== undefined) return null;
+        if (!slide.themeId || slide.themeId === SOURCE_THEME_ID) return null;
         if (slide.themeId === 'default') {
             const dbDefault = await db.hymnThemes.filter(th => !!th.isDefault).first();
             return dbDefault || DEFAULT_HYMN_THEME;
         }
-        return db.hymnThemes.get(slide.themeId);
-    }, [slide.themeId]);
+        return (await db.hymnThemes.get(slide.themeId)) ?? null;
+    }, [slide.themeId, themeOverride !== undefined]);
 
-    // 2. Live query for the source presentation
-    const sourcePresentation = useLiveQuery(() => {
-        return db.presentationFiles.get(slide.hymnPresentationId);
-    }, [slide.hymnPresentationId]);
+    // 2. Live query for the source presentation (skipped if pre-loaded by parent)
+    // Returns `null` when not found so `undefined` strictly represents the pending loading state.
+    const queriedPresentation = useLiveQuery(async () => {
+        if (sourcePresentationProp !== undefined) return null;
+        if (!slide.hymnPresentationId) return null;
+        return (await db.presentationFiles.get(slide.hymnPresentationId)) ?? null;
+    }, [slide.hymnPresentationId, sourcePresentationProp !== undefined]);
+
+    const isLoadingPresentation = sourcePresentationProp === undefined && queriedPresentation === undefined;
+    const resolvedPresentation = sourcePresentationProp !== undefined ? sourcePresentationProp : queriedPresentation;
+    const resolvedTheme = themeOverride !== undefined ? themeOverride : queriedTheme;
 
     // 3. Resolve the materialization
     const materialized = useMemo(() => {
-        if (!sourcePresentation) return null;
-        const sourceSlide = (sourcePresentation.slides || []).find(s => s.id === slide.sourceSlideId) as ICanvasSlide;
+        if (!resolvedPresentation) return null;
+        const sourceSlide = (resolvedPresentation.slides || []).find(s => s.id === slide.sourceSlideId) as ICanvasSlide;
         if (!sourceSlide) return null;
 
         // If theme is explicitly "source", create a dummy source theme
@@ -62,9 +76,23 @@ export const HymnSlideRenderer: React.FC<HymnSlideRendererProps> = ({
             return hymnLibraryService.materializeTheme(sourceSlide, { ...DEFAULT_HYMN_THEME, id: SOURCE_THEME_ID }, slide.order);
         }
 
-        const activeTheme = theme || DEFAULT_HYMN_THEME;
+        const activeTheme = resolvedTheme || DEFAULT_HYMN_THEME;
         return hymnLibraryService.materializeTheme(sourceSlide, activeTheme, slide.order);
-    }, [sourcePresentation, slide.sourceSlideId, theme, slide.themeId, slide.order]);
+    }, [resolvedPresentation, slide.sourceSlideId, resolvedTheme, slide.themeId, slide.order]);
+
+    // While the async Dexie lookup is still in flight, render a clean dark frame instead of flashing an error
+    if (isLoadingPresentation) {
+        return (
+            <div
+                className={cn('relative overflow-hidden origin-top-left bg-black select-none', className)}
+                style={{
+                    width: BASE_WIDTH,
+                    height: BASE_HEIGHT,
+                    transform: `scale(${scale})`
+                }}
+            />
+        );
+    }
 
     if (!materialized) {
         return (

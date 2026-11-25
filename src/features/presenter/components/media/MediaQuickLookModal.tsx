@@ -262,7 +262,7 @@ export const MediaQuickLookModal: React.FC<MediaQuickLookModalProps> = ({
           <button
             type="button"
             onClick={() => handleNavigate('prev')}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/60 hover:bg-black/85 text-white/80 hover:text-white transition-all backdrop-blur-md flex items-center justify-center apple-press cursor-pointer border border-white/10 shadow-lg"
+ className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-stone-950 hover:bg-black/85 text-white/80 hover:text-white transition-all flex items-center justify-center apple-press cursor-pointer border border-white/10 shadow-lg"
             title="Previous (←)"
             aria-label="Previous file"
           >
@@ -271,7 +271,7 @@ export const MediaQuickLookModal: React.FC<MediaQuickLookModalProps> = ({
           <button
             type="button"
             onClick={() => handleNavigate('next')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-black/60 hover:bg-black/85 text-white/80 hover:text-white transition-all backdrop-blur-md flex items-center justify-center apple-press cursor-pointer border border-white/10 shadow-lg"
+ className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-stone-950 hover:bg-black/85 text-white/80 hover:text-white transition-all flex items-center justify-center apple-press cursor-pointer border border-white/10 shadow-lg"
             title="Next (→)"
             aria-label="Next file"
           >

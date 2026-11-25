@@ -18,6 +18,8 @@ export const VerseItem = React.memo(({
   verse, isActive, isSelected,
   onSelect, onMouseDown, onMouseEnter, onContextMenu,
 }: VerseItemProps) => {
+  const isHighlighted = isActive || isSelected;
+
   return (
     <button
       type="button"
@@ -30,36 +32,37 @@ export const VerseItem = React.memo(({
       onMouseEnter={() => onMouseEnter(verse)}
       onContextMenu={(e) => { if (verse.id) onContextMenu(e, verse.id); }}
       className={cn(
-        'group w-full text-left p-4 transition-all duration-300 relative focus:outline-none border-b border-white/5 select-none',
-        isActive && !isSelected && 'bg-accent/10 shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]',
-        isSelected && !isActive && 'bg-accent/20',
-        isSelected && isActive && 'bg-accent/25',
-        !isActive && !isSelected && 'hover:bg-white/5 [.is-dragging_&]:hover:bg-transparent',
+        'group w-full text-left px-3.5 py-3 rounded-xl border transition-colors duration-150 relative focus:outline-none select-none cursor-pointer',
+        isActive
+          ? 'bg-stone-800 border-stone-600'
+          : isSelected
+            ? 'bg-[#262320] border-stone-700'
+            : 'bg-[#1f1c1a] border-stone-800/90 hover:bg-[#262320] hover:border-stone-700 [.is-dragging_&]:hover:bg-[#1f1c1a] [.is-dragging_&]:hover:border-stone-800/90',
       )}
     >
-      <div className="flex gap-4 pointer-events-none">
-        <div className={cn(
-          'flex flex-col items-center min-w-8 pt-1 transition-colors duration-300',
-          isActive || isSelected ? 'text-accent' : 'text-stone-600 group-hover:text-stone-400',
-        )}>
-          <span className="text-[10px] font-black font-sans tracking-tighter opacity-80 mb-1">
-            {verse.verseNumber}
-          </span>
-          {(isActive || isSelected) && (
-            <div className={cn(
-              'w-1.5 h-1.5 rounded-full bg-accent shadow-glow transition-all',
-              isSelected && !isActive && 'opacity-60 scale-75',
-            )} />
+      <div className="flex items-start gap-3 pointer-events-none">
+        <span
+          className={cn(
+            'min-w-[28px] h-6 px-1.5 rounded-lg flex items-center justify-center shrink-0 font-mono font-bold text-[11px] border tabular-nums transition-colors mt-0.5',
+            isActive
+              ? 'bg-accent text-stone-950 border-accent'
+              : isSelected
+                ? 'bg-stone-700 text-accent border-stone-600'
+                : 'bg-stone-950 text-stone-400 border-stone-800 group-hover:text-stone-200',
           )}
-        </div>
-        <div className={cn(
-          'flex-1 font-serif text-lg leading-relaxed transition-colors duration-300',
-          isActive || isSelected ? 'text-stone-100' : 'text-stone-400 group-hover:text-stone-200',
-        )}>
+        >
+          {verse.verseNumber}
+        </span>
+        <div
+          className={cn(
+            'flex-1 font-serif text-lg leading-relaxed transition-colors duration-150 min-w-0',
+            isHighlighted ? 'text-stone-100' : 'text-stone-300 group-hover:text-stone-100',
+          )}
+        >
           <ReactMarkdown
             components={{
               strong: ({ children }) => (
-                <span className={cn('font-bold', isActive ? 'text-accent/90' : 'text-stone-200')}>
+                <span className={cn('font-bold', isActive ? 'text-accent' : 'text-stone-100')}>
                   {processChildren(children)}
                 </span>
               ),
@@ -71,12 +74,6 @@ export const VerseItem = React.memo(({
           </ReactMarkdown>
         </div>
       </div>
-      <div className={cn(
-        'absolute left-0 top-2 bottom-2 w-1 rounded-r-full transition-all duration-300',
-        isActive ? 'bg-accent opacity-100 scale-y-100 shadow-glow'
-          : isSelected ? 'bg-accent opacity-60 scale-y-90'
-            : 'bg-accent opacity-0 scale-y-50',
-      )} />
     </button>
   );
 }, (prev, next) =>

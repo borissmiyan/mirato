@@ -34,7 +34,7 @@ const VariableEditor: React.FC = () => {
     };
 
     return (
-        <div className="absolute top-6 right-6 w-80 bg-stone-900/40 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-2xl flex flex-col z-40 animate-in fade-in slide-in-from-right-8 duration-500 overflow-hidden">
+        <div className="absolute top-6 right-6 w-80 bg-stone-900 border border-white/10 rounded-3xl shadow-2xl flex flex-col z-40 animate-in fade-in slide-in-from-right-8 duration-500 overflow-hidden">
             {/* Header */}
             <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/2">
                 <h3 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">

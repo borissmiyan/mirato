@@ -89,7 +89,7 @@ export const ShapesDropdown: React.FC<ShapesDropdownProps> = ({
 
       {open && (
         <div className="absolute bottom-full mb-3 left-0 z-50 animate-in fade-in zoom-in-95 duration-200 origin-bottom-left">
-          <div className="bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-xl p-1.5 shadow-2xl flex flex-col gap-1 min-w-[170px]">
+          <div className="bg-stone-900 border border-white/10 rounded-xl p-1.5 shadow-2xl flex flex-col gap-1 min-w-[170px]">
             {SHAPES.map((shape) => {
               const ShapeIcon = shape.icon;
               const isActive = activeShape.type === shape.type;

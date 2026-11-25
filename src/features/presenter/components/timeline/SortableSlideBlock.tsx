@@ -5,6 +5,7 @@ import { ISlide, ICanvasSlide, INestedSlide, IPresentationFile, IBlock, ITemplat
 import { SlideTile } from './SlideTile';
 import { TransitionSeparator } from './TransitionSeparator';
 import NestedPresentationTile from './NestedPresentationTile';
+import { getNestedPresentationFromMap } from './hooks/useExpandedPresentationsMap';
 
 export interface SortableSlideBlockProps {
     slide: ISlide;
@@ -71,7 +72,7 @@ export const SortableSlideBlock = React.memo<SortableSlideBlockProps>(({
 
     const isMaster = slide.blockId === 'master-presentation';
     const masterPresId = slide.type === 'normal' ? (slide as ICanvasSlide).masterPresentationId : (slide.type === 'nested' ? (slide as INestedSlide).presentationId : undefined);
-    const nestedPres = masterPresId ? presentationsMap.get(masterPresId) : null;
+    const nestedPres = getNestedPresentationFromMap(presentationsMap, slide.id, masterPresId);
 
     return (
         <div
@@ -81,7 +82,8 @@ export const SortableSlideBlock = React.memo<SortableSlideBlockProps>(({
                 display: 'flex',
                 gap: '0.75rem',
                 alignItems: 'center',
-                willChange: 'transform',
+                // Only promote to a GPU layer while dragging — 384+ permanent willChange layers exhaust VRAM
+                ...(isCurrentDragging ? { willChange: 'transform' } : {}),
                 // Collapse hidden multi-drag items to zero width — they must not
                 // reserve layout space, otherwise the drop-target gap = N * slide width
                 // instead of always being exactly one slide width.

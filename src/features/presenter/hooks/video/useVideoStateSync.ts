@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { IVideoSettings } from '@/core/types';
-import { LiveSyncService } from '@/core/services/liveSyncService';
 
 export interface IVideoPlaybackState {
   isPlaying: boolean;
@@ -26,9 +25,6 @@ export function useVideoStateSync({
   videoRef,
   settings,
   controlOnly,
-  isPreview,
-  isLive,
-  slideId,
   setState
 }: VideoStateSyncOptions): void {
   useEffect(() => {
@@ -66,16 +62,9 @@ export function useVideoStateSync({
         if (settings.loop) {
           video.currentTime = trimStart;
           video.play().catch(() => {});
-          if (isPreview && isLive) {
-            LiveSyncService.sendVideoCommand(slideId, 'seek', trimStart);
-            LiveSyncService.sendVideoCommand(slideId, 'play', trimStart);
-          }
         } else {
           video.pause();
           video.currentTime = trimEnd;
-          if (isPreview && isLive) {
-            LiveSyncService.sendVideoCommand(slideId, 'pause', trimEnd);
-          }
         }
       }
 
@@ -111,6 +100,6 @@ export function useVideoStateSync({
       video.removeEventListener('seeked', syncState);
       video.removeEventListener('ratechange', syncState);
     };
-  }, [settings.trimStart, settings.trimEnd, settings.loop, settings.mediaId, videoRef, controlOnly, isPreview, isLive, slideId, setState]);
+  }, [settings.trimStart, settings.trimEnd, settings.loop, settings.mediaId, videoRef, controlOnly, setState]);
 }
 

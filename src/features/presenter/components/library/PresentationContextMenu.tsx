@@ -6,8 +6,12 @@ import {
     Copy,
     Edit3,
     Upload,
-    Trash2
+    Trash2,
+    Presentation,
+    FileText,
+    FileSpreadsheet
 } from 'lucide-react';
+import { exportPresentationAs } from '../../services/export/presentationExportService';
 import { IPresentationFile } from '@/core/types';
 import { db } from '@/core/db';
 import { toast } from '@/core/utils/toast';
@@ -122,11 +126,36 @@ export const PresentationContextMenu: React.FC<PresentationContextMenuProps> = (
                     onClose();
                 }}
             />
+            <div className="h-px bg-white/5 my-1 mx-2" />
             <ContextMenuItem
                 icon={<Upload className="w-3 h-3" />}
-                label={t('export_presentation', 'Export (.ektp)')}
+                label={t('export_mrtp', 'Экспорт в MRTP (.mrtp)')}
                 onClick={() => {
                     handleExportPresentation(contextMenu.presentation.id);
+                    onClose();
+                }}
+            />
+            <ContextMenuItem
+                icon={<Presentation className="w-3 h-3" />}
+                label={t('export_pptx', 'Экспорт в PowerPoint (.pptx)')}
+                onClick={() => {
+                    void exportPresentationAs(contextMenu.presentation.id, 'pptx');
+                    onClose();
+                }}
+            />
+            <ContextMenuItem
+                icon={<FileText className="w-3 h-3" />}
+                label={t('export_pdf', 'Экспорт в PDF (.pdf)')}
+                onClick={() => {
+                    void exportPresentationAs(contextMenu.presentation.id, 'pdf');
+                    onClose();
+                }}
+            />
+            <ContextMenuItem
+                icon={<FileSpreadsheet className="w-3 h-3" />}
+                label={t('export_odp', 'Экспорт в OpenDocument (.odp)')}
+                onClick={() => {
+                    void exportPresentationAs(contextMenu.presentation.id, 'odp');
                     onClose();
                 }}
             />

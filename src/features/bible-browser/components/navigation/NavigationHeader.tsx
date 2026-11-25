@@ -1,9 +1,9 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Presentation, Music, ChevronDown, Settings } from 'lucide-react';
+import { BookOpen, ChevronDown, Settings } from 'lucide-react';
 import { cn } from '@/core/utils/cn';
 import { AppMode } from '@/core/types';
-import { Button, SearchInput } from '@/shared/ui';
+import { Button, SearchInput, CustomSlideStackIcon, CustomHymnalIcon } from '@/shared/ui';
 
 interface NavigationHeaderProps {
   appMode: AppMode;
@@ -44,9 +44,9 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = React.memo(({
               {appMode === 'scripture' ? (
                 <BookOpen className="w-4 h-4 text-accent" />
               ) : appMode === 'hymns' ? (
-                <Music className="w-4 h-4 text-accent" />
+                <CustomHymnalIcon className="w-4 h-4 text-accent" />
               ) : (
-                <Presentation className="w-4 h-4 text-accent" />
+                <CustomSlideStackIcon className="w-4 h-4 text-accent" />
               )}
             </div>
             <div className="flex flex-col">

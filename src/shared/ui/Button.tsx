@@ -17,7 +17,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 /**
- * Standardized button component adhering to Deck.CE design tokens:
+ * Standardized button component adhering to Mirato design tokens:
  * - xs: 40px (h-10), equal padding (p-2)
  * - sm: 48px (h-12), equal padding (p-3)
  * - md: 56px (h-14), equal padding (p-4)

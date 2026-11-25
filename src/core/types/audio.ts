@@ -1,3 +1,5 @@
+export type HymnalAudioVariant = 'minus' | 'plus';
+
 export interface IAudioAttachment {
   filename: string;
   path: string;
@@ -26,4 +28,6 @@ export interface IAudioScope {
   delaySeconds?: number;
   onEnded?: () => void;
   needsManualReview?: boolean;
+  /** Audio track variant for hymnal backing tracks ('minus' = instrumental, 'plus' = with vocals). */
+  audioVariant?: HymnalAudioVariant;
 }

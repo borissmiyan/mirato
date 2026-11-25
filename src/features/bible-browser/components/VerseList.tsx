@@ -1,7 +1,6 @@
 import React, { useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { useBibleStore } from '@/features/bible-browser/store/bibleStore';
 import { useShallow } from 'zustand/react/shallow';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { Verse } from '@/core/types';
 import { List, Edit, Trash2, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -12,7 +11,7 @@ import { VerseItem } from './VerseItem';
 import ContextMenu, { ContextMenuItem } from '@/shared/ui/ContextMenu';
 import TranslationPicker from '@/shared/ui/TranslationPicker';
 import IconButton from '@/shared/ui/IconButton';
-import { EmptyState, Badge, NavigationSelectorCard } from '@/shared/ui';
+import { CustomScriptureStackIcon, EmptyState, Badge, NavigationSelectorCard, VirtualList, VirtualListHandle } from '@/shared/ui';
 import { getBookName } from '@/core/data/bookData';
 import { cn } from '@/core/utils/cn';
 
@@ -82,23 +81,32 @@ const VerseList: React.FC = () => {
   );
   const verses = useMemo(() => liveVerses || [], [liveVerses]);
 
-  const parentRef = useRef<HTMLDivElement>(null);
-  const rowVirtualizer = useVirtualizer({
-    count: verses.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 64,
-    overscan: 5,
-  });
+  const listRef = useRef<VirtualListHandle>(null);
+
+  const getItemKey = useCallback(
+    (verse: Verse, index: number) =>
+      verse.id ?? `${verse.translationId}-${verse.bookId}-${verse.chapter}-${verse.verseNumber}-${index}`,
+    []
+  );
+
+  const estimateSize = useCallback(
+    (index: number) => {
+      const textLen = verses[index]?.text?.length ?? 80;
+      const estimatedLines = Math.max(1, Math.ceil(textLen / 42));
+      return 34 + estimatedLines * 29;
+    },
+    [verses]
+  );
 
   const activeVerseId = activeVerse?.id;
   useEffect(() => {
     if (activeVerseId) {
       const idx = verses.findIndex(v => v.id === activeVerseId);
       if (idx !== -1) {
-        rowVirtualizer.scrollToIndex(idx, { align: 'center', behavior: 'smooth' });
+        listRef.current?.scrollToIndex(idx, 'center', 'smooth');
       }
     }
-  }, [activeVerseId, verses, rowVirtualizer]);
+  }, [activeVerseId, verses]);
 
   const lang = useMemo(() => i18n.language?.substring(0, 2) || 'en', [i18n.language]);
 
@@ -206,68 +214,46 @@ const VerseList: React.FC = () => {
   }, [editingId, verses, updateVerseText]);
 
   return (
-    <div className="flex flex-col h-full bg-stone-900/40 backdrop-blur-xl border-r border-white/5 overflow-hidden">
-      <div className="p-4 border-b border-white/5 flex justify-between items-center bg-stone-950/20 backdrop-blur-md">
+    <div className="flex flex-col h-full bg-stone-900 border-r border-white/5 overflow-hidden">
+      <div className="p-4 border-b border-white/5 flex justify-between items-center bg-stone-950">
         <div className="flex items-center gap-2">
           <div className="p-1.5 bg-accent/20 rounded-xl">
-            <List className="w-4 h-4 text-accent" />
+            <CustomScriptureStackIcon className="w-4 h-4 text-accent" />
           </div>
           <h2 className="font-bold text-stone-200 text-sm uppercase">{t('verses')}</h2>
         </div>
         <Badge size="xs" variant="secondary">{verses.length}</Badge>
       </div>
 
-      <div
-        ref={parentRef}
-        className={cn('flex-1 overflow-y-auto no-scrollbar relative', isDragging && 'select-none is-dragging')}
-      >
-        {verses.length > 0 ? (
-          <div
-            style={{
-              height: `${rowVirtualizer.getTotalSize()}px`,
-              width: '100%',
-              position: 'relative',
-            }}
-          >
-            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-              const verse = verses[virtualRow.index];
-              if (!verse) return null;
-
-              return (
-                <div
-                  key={verse.id || `${verse.bookId}-${verse.chapter}-${verse.verseNumber}`}
-                  data-index={virtualRow.index}
-                  ref={rowVirtualizer.measureElement}
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
-                >
-                  {editingId === verse.id ? (
-                    <VerseEditor
-                      verse={verse}
-                      onSave={handleSave}
-                      onCancel={() => setEditingId(null)}
-                    />
-                  ) : (
-                    <VerseItem
-                      verse={verse}
-                      isActive={activeVerse?.id === verse.id}
-                      isSelected={selectedVerses.some(v => v.id === verse.id)}
-                      onSelect={handleSelect}
-                      onMouseDown={handleMouseDown}
-                      onMouseEnter={handleMouseEnter}
-                      onContextMenu={handleContextMenu}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        ) : (
+      <VirtualList
+        listRef={listRef}
+        items={verses}
+        getItemKey={getItemKey}
+        estimateItemHeight={estimateSize}
+        gap={6}
+        overscan={8}
+        resetKey={`${currentTranslationId}:${currentBookId}:${currentChapter}`}
+        className={cn('px-2.5 py-2.5', isDragging && 'select-none is-dragging')}
+        renderItem={(verse) =>
+          editingId === verse.id ? (
+            <VerseEditor
+              verse={verse}
+              onSave={handleSave}
+              onCancel={() => setEditingId(null)}
+            />
+          ) : (
+            <VerseItem
+              verse={verse}
+              isActive={activeVerse?.id === verse.id}
+              isSelected={selectedVerses.some(v => v.id === verse.id)}
+              onSelect={handleSelect}
+              onMouseDown={handleMouseDown}
+              onMouseEnter={handleMouseEnter}
+              onContextMenu={handleContextMenu}
+            />
+          )
+        }
+        emptyState={
           <div className="py-16">
             <EmptyState
               icon={List}
@@ -276,10 +262,10 @@ const VerseList: React.FC = () => {
               border="none"
             />
           </div>
-        )}
-      </div>
+        }
+      />
 
-      <div className="shrink-0 p-3 border-t border-white/5 bg-stone-950/60 relative z-30">
+      <div className="shrink-0 p-3 border-t border-white/5 bg-[#141210] relative z-30">
         {secondTranslationId ? (
           <NavigationSelectorCard
             ref={triggerRef}

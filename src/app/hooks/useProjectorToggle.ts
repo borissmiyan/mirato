@@ -61,23 +61,63 @@ export function useProjectorToggle({
 
             if (targetSlideId) {
                 if (!presStore.previewSlideId) {
-                    presStore.setPreviewSlide(targetSlideId);
-                }
-                presStore.setLiveSlide(targetSlideId);
-
-                let slide = pres?.slides?.find(s => s.id === targetSlideId);
-                if (!slide) {
-                    for (const p of Object.values(presStore.nestedPresentationsCache)) {
-                        const s = p.slides?.find((sl) => sl.id === targetSlideId);
-                        if (s) { slide = s; break; }
+                    await presStore.setPreviewSlide(targetSlideId);
+                } else {
+                    // If currently sitting on a master-presentation/nested container tile, auto-enter its first slide
+                    const currentContainer = pres?.slides?.find(s => s.id === targetSlideId);
+                    const isNestedContainer = currentContainer && (
+                        currentContainer.type === 'nested' ||
+                        (currentContainer.type === 'normal' && Boolean((currentContainer as { masterPresentationId?: string }).masterPresentationId))
+                    );
+                    if (isNestedContainer) {
+                        await presStore.setPreviewSlide(targetSlideId, pres?.id || presStore.activePresentationId || undefined);
                     }
                 }
+
+                const freshStore = usePresentationStore.getState();
+                targetSlideId = freshStore.previewSlideId || targetSlideId;
+                pres = freshStore.selectedPresentation || freshStore.activePresentation;
+
+                let slide = pres?.slides?.find(s => s.id === targetSlideId);
+                let resolvedPresId = slide ? pres?.id : undefined;
+                if (!slide) {
+                    slide = freshStore.activePresentation?.slides?.find(s => s.id === targetSlideId);
+                    if (slide) resolvedPresId = freshStore.activePresentation?.id;
+                }
+                if (!slide && freshStore.navigationParentSlideId) {
+                    const parentCached = freshStore.nestedPresentationsCache[freshStore.navigationParentSlideId];
+                    const s = parentCached?.slides?.find((sl) => sl.id === targetSlideId);
+                    if (s && parentCached) {
+                        slide = s;
+                        resolvedPresId = parentCached.id;
+                    }
+                }
+                if (!slide) {
+                    for (const p of Object.values(freshStore.nestedPresentationsCache)) {
+                        const s = p.slides?.find((sl) => sl.id === targetSlideId);
+                        if (s) {
+                            slide = s;
+                            resolvedPresId = p.id;
+                            break;
+                        }
+                    }
+                }
+                const targetParentSlideId = resolvedPresId !== freshStore.activePresentationId
+                    ? freshStore.navigationParentSlideId
+                    : null;
+                freshStore.setLiveSlide(
+                    targetSlideId,
+                    resolvedPresId,
+                    freshStore.activePresentationId || undefined,
+                    targetParentSlideId,
+                    freshStore.navigationParentPresentationId
+                );
                 if (slide) {
                     LiveSyncService.showSlide(
                         slide,
-                        pres?.id,
-                        presStore.activePresentationId || undefined,
-                        presStore.liveNavigationParentSlideId || null
+                        resolvedPresId,
+                        freshStore.activePresentationId || undefined,
+                        targetParentSlideId
                     );
                 }
             }

@@ -1,8 +1,7 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useContext } from 'react';
 import { IVideoSettings } from '@/core/types';
-import { LiveSyncService } from '@/core/services/liveSyncService';
 import { usePresentationStore } from '../store/presentationStore';
-import { useVideoVolumeSync } from './video/useVideoVolumeSync';
+import { useVideoVolumeSync, SlideExitingContext } from './video/useVideoVolumeSync';
 import { useVideoStateSync, IVideoPlaybackState } from './video/useVideoStateSync';
 
 export type { IVideoPlaybackState };
@@ -23,6 +22,7 @@ export interface UseVideoPlaybackOptions {
   isLive: boolean;
   isPreloading?: boolean;
   slideId: string;
+  videoUrl?: string | null;
   controlOnly?: boolean;
   isRemote?: boolean;
   isMuted?: boolean;
@@ -30,7 +30,8 @@ export interface UseVideoPlaybackOptions {
 
 /**
  * Custom hook to manage video playback state across preview and projector.
- * Handles trim boundaries, delay strategy, and projector synchronization.
+ * Preview playback is strictly local and never dispatches commands to the projector.
+ * Handles trim boundaries, delay strategy, and projector auto-play.
  */
 export const useVideoPlayback = ({
   settings,
@@ -38,6 +39,7 @@ export const useVideoPlayback = ({
   isLive,
   isPreloading,
   slideId,
+  videoUrl,
   controlOnly = false,
   isRemote = false,
   isMuted = false,
@@ -48,6 +50,7 @@ export const useVideoPlayback = ({
 } => {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const delayTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const isExiting = useContext(SlideExitingContext);
 
   const liveSlideId = usePresentationStore(s => s.liveSlideId);
   const isEffectivelyLive = isLive || (Boolean(liveSlideId) && liveSlideId === slideId);
@@ -68,7 +71,8 @@ export const useVideoPlayback = ({
     isPreview,
     isEffectivelyLive,
     isLive,
-    slideId
+    slideId,
+    videoUrl,
   });
 
   useVideoStateSync({
@@ -81,9 +85,9 @@ export const useVideoPlayback = ({
     setState
   });
 
-  // Auto-play strategy when live
+  // Auto-play strategy when live on projector (never auto-play while exiting/fading out)
   useEffect(() => {
-    if (controlOnly || isRemote) return;
+    if (controlOnly || isRemote || isPreview || isExiting) return;
     const video = videoRef.current;
     if (!video || !isLive || isPreloading) return;
 
@@ -94,10 +98,6 @@ export const useVideoPlayback = ({
       }
 
       video.play().catch(() => {});
-
-      if (isPreview) {
-        LiveSyncService.sendVideoCommand(slideId, 'play', video.currentTime);
-      }
     };
 
     const initialTrimStart = settings.trimStart || 0;
@@ -122,25 +122,19 @@ export const useVideoPlayback = ({
       if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
       video.removeEventListener('canplay', startPlayback);
     };
-  }, [isLive, isPreview, isRemote, settings.strategy, settings.delaySeconds, settings.trimStart, slideId, settings.mediaId, isPreloading, controlOnly]);
+  }, [isLive, isPreview, isRemote, isExiting, settings.strategy, settings.delaySeconds, settings.trimStart, slideId, settings.mediaId, videoUrl, isPreloading, controlOnly]);
 
   const play = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     video.play().catch(() => {});
-    if (isPreview && isEffectivelyLive) {
-      LiveSyncService.sendVideoCommand(slideId, 'play', video.currentTime);
-    }
-  }, [isPreview, isEffectivelyLive, slideId]);
+  }, []);
 
   const pause = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     video.pause();
-    if (isPreview && isEffectivelyLive) {
-      LiveSyncService.sendVideoCommand(slideId, 'pause', video.currentTime);
-    }
-  }, [isPreview, isEffectivelyLive, slideId]);
+  }, []);
 
   const togglePlayPause = useCallback(() => {
     const video = videoRef.current;
@@ -157,37 +151,25 @@ export const useVideoPlayback = ({
       Math.min(time, settings.trimEnd || video.duration)
     );
     video.currentTime = clampedTime;
-    if (isPreview && isEffectivelyLive) {
-      LiveSyncService.sendVideoCommand(slideId, 'seek', clampedTime);
-    }
-  }, [settings.trimStart, settings.trimEnd, isPreview, isEffectivelyLive, slideId]);
+  }, [settings.trimStart, settings.trimEnd]);
 
   const setSpeed = useCallback((speed: number) => {
     const video = videoRef.current;
     if (!video) return;
     video.playbackRate = speed;
-    if (isPreview && isEffectivelyLive) {
-      LiveSyncService.sendVideoCommand(slideId, 'speed', speed);
-    }
-  }, [isPreview, isEffectivelyLive, slideId]);
+  }, []);
 
   const setVolume = useCallback((volume: number) => {
     const video = videoRef.current;
     if (!video) return;
     video.volume = volume;
-    if (isPreview && isEffectivelyLive) {
-      LiveSyncService.sendVideoCommand(slideId, 'volume', volume);
-    }
-  }, [isPreview, isEffectivelyLive, slideId]);
+  }, []);
 
   const setMuted = useCallback((muted: boolean) => {
     const video = videoRef.current;
     if (!video) return;
     video.muted = muted;
-    if (isPreview && isEffectivelyLive) {
-      LiveSyncService.sendVideoCommand(slideId, 'mute', muted);
-    }
-  }, [isPreview, isEffectivelyLive, slideId]);
+  }, []);
 
   return {
     videoRef,

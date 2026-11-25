@@ -1,6 +1,7 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useLayoutEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, Plus, X, Layers, HardDrive } from 'lucide-react';
+import { Download, Plus, X, HardDrive, MousePointerClick } from 'lucide-react';
+import { CustomServiceIcon, CustomSlideStackIcon } from '@/shared/ui/SlideIcons';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
@@ -10,11 +11,14 @@ import { db } from '@/core/db';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { IPresentationFile } from '@/core/types';
 import { Button } from '@/shared/ui/Button';
-import { NavigationSelectorCard } from '@/shared/ui';
+import { NavigationSelectorCard, VirtualList, VirtualListHandle } from '@/shared/ui';
 import { PresentationListItem } from './PresentationListItem';
 import { PresentationContextMenu } from './PresentationContextMenu';
+import { PresentationExportMenu } from './PresentationExportMenu';
 import { PresentationSearchHeader } from './PresentationSearchHeader';
 import { usePresentationManagement } from '../../hooks/usePresentationManagement';
+
+const naturalCollator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 interface PresentationSelectorProps {
     className?: string;
@@ -51,12 +55,18 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
     const [isOpen, setIsOpen] = useState(false);
     const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
     const triggerRef = useRef<HTMLButtonElement>(null);
+    const listScrollRef = useRef<VirtualListHandle>(null);
     const [search, setSearch] = useState('');
     const [addingNew, setAddingNew] = useState(false);
     const [newName, setNewName] = useState('');
     const [renamingId, setRenamingId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
     const [contextMenu, setContextMenu] = useState<{
+        x: number;
+        y: number;
+        presentation: IPresentationFile;
+    } | null>(null);
+    const [exportMenu, setExportMenu] = useState<{
         x: number;
         y: number;
         presentation: IPresentationFile;
@@ -69,12 +79,19 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
     const [editingTagsId, setEditingTagsId] = useState<string | null>(null);
     const [tagSearchInput, setTagSearchInput] = useState('');
 
-    // Load presentations from DB for the active service only when dropdown is open to save RAM
+    // Keep lightweight presentation summaries preloaded for the active service (~40 KB for 385 items)
+    // so opening the dropdown is instant with zero loading flash or layout shift.
     const livePresentations = useLiveQuery(async () => {
-        if (!isOpen || !activeService?.presentationIds?.length) return [];
+        if (!activeService?.presentationIds?.length) return [];
         const all = await db.presentationFiles.bulkGet(activeService.presentationIds);
-        return all.filter(Boolean) as IPresentationFile[];
-    }, [isOpen, activeService?.presentationIds]);
+        return all
+            .filter((p): p is IPresentationFile => Boolean(p))
+            .map(p => ({
+                ...p,
+                // Strip heavy slide payloads from dropdown list state while preserving .length
+                slides: { length: p.slides?.length ?? 0 } as unknown as IPresentationFile['slides'],
+            }));
+    }, [activeService?.presentationIds]);
     const presentations = useMemo(() => livePresentations || [], [livePresentations]);
 
     const allExistingTags = useMemo(() => {
@@ -121,7 +138,7 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
             }
 
             if (sortBy === 'alphabetical') {
-                return a.name.localeCompare(b.name);
+                return naturalCollator.compare(a.name, b.name);
             }
             if (sortBy === 'createdAt') {
                 const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -136,6 +153,27 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
 
         return list;
     }, [presentations, search, filterStarredOnly, filterType, selectedTag, sortBy]);
+
+    const hasScrolledOnOpenRef = useRef(false);
+
+    const getItemKey = useCallback((pres: IPresentationFile) => pres.id, []);
+    const estimatePresSize = useCallback(() => 56, []);
+
+    // Scroll synchronously before first paint to the active presentation each time the dropdown opens
+    useLayoutEffect(() => {
+        if (!isOpen) {
+            hasScrolledOnOpenRef.current = false;
+            return;
+        }
+        if (hasScrolledOnOpenRef.current || !activePresentationId || filteredPresentations.length === 0) {
+            return;
+        }
+        const activeIndex = filteredPresentations.findIndex(p => p.id === activePresentationId);
+        if (activeIndex === -1) return;
+
+        hasScrolledOnOpenRef.current = true;
+        listScrollRef.current?.scrollToIndex(activeIndex, 'center');
+    }, [isOpen, activePresentationId, filteredPresentations]);
 
     const {
         handleCreatePresentation: createPres,
@@ -171,22 +209,16 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
         setIsOpen(!isOpen);
     };
 
-    // Position above trigger button
+    // Position above trigger button with rock-solid width (never jitters while opening or filtering)
     const dropdownPosition = useMemo(() => {
-        if (!triggerRect) return { bottom: '4.5rem', left: '1rem', width: '380px' };
+        if (!triggerRect) return { bottom: '4.5rem', left: '1rem', width: '500px' };
         const spacing = 8;
         const windowHeight = window.innerHeight;
         const windowWidth = window.innerWidth;
         const menuHeight = 520;
         const bottom = windowHeight - triggerRect.top + spacing;
 
-        // Dynamic width based on longest presentation name, badges, and action buttons
-        // Overhead: thumbnail (48px) + padding (32px) + action buttons (124px) + active dot (14px) + buffer (12px) = 230px
-        const maxNameLen = filteredPresentations.reduce((max, p) => Math.max(max, p.name?.length || 0), 0);
-        const contentWidth = Math.round(230 + maxNameLen * 11);
-        const minWidth = Math.max(triggerRect.width, 480);
-        const maxWidth = Math.min(Math.max(triggerRect.width * 2, 540), windowWidth - 32);
-        const width = Math.min(Math.max(contentWidth, minWidth), maxWidth);
+        const width = Math.min(Math.max(triggerRect.width * 1.8, 520), windowWidth - 32);
 
         let left = Math.max(16, triggerRect.left);
         if (left + width > windowWidth - 16) {
@@ -197,7 +229,7 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
             return { top: triggerRect.bottom + spacing, left, width };
         }
         return { bottom, left, width };
-    }, [triggerRect, filteredPresentations]);
+    }, [triggerRect]);
 
     const typeOptions = [
         { value: 'all', label: t('type_all', 'All Types') },
@@ -224,10 +256,14 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
                 title={activePresentation ? activePresentation.name : t('select_presentation', 'Select Presentation')}
                 subtitle={
                     activePresentation
-                        ? `${activePresentation.slides.length} ${t('slides', 'slides')}`
+                        ? (() => {
+                            const count = activePresentation.slides.length;
+                            const label = t('slides_count', { count, defaultValue: `${count} slides` });
+                            return label === 'slides_count' ? `${count} slides` : label;
+                        })()
                         : t('no_presentation_active', 'None Active')
                 }
-                badge={<Layers className="w-4 h-4" />}
+                badge={<CustomSlideStackIcon className="w-4 h-4" />}
                 badgeVariant={activePresentation ? 'accent' : 'muted'}
                 trailing={
                     activePresentation?.fileHandle ? (
@@ -250,7 +286,7 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
                     />
 
                     <div
-                        className="absolute bg-stone-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl flex flex-col max-h-[520px] overflow-hidden animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
+ className="absolute bg-stone-900 border border-white/10 rounded-xl shadow-2xl flex flex-col h-[520px] max-h-[calc(100vh-100px)] overflow-hidden animate-in fade-in zoom-in-95 duration-150 pointer-events-auto"
                         style={dropdownPosition}
                     >
                         {/* Header */}
@@ -304,66 +340,82 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
                             t={t as never}
                         />
 
-                        {/* Presentations List */}
+                        {/* Presentations List (Unified VirtualList) */}
                         {activeService ? (
-                            <div className="flex-1 overflow-y-auto p-2 space-y-1 min-h-0">
-                                {filteredPresentations.length > 0 ? (
-                                    filteredPresentations.map((pres) => (
-                                        <PresentationListItem
-                                            key={pres.id}
-                                            pres={pres}
-                                            isActive={activePresentationId === pres.id}
-                                            isRenaming={renamingId === pres.id}
-                                            renameValue={renameValue}
-                                            setRenameValue={setRenameValue}
-                                            onStartRename={() => { setRenamingId(pres.id); setRenameValue(pres.name); }}
-                                            onCancelRename={() => setRenamingId(null)}
-                                            onSaveRename={() => handleRenamePresentation(pres.id)}
-                                            isEditingTags={editingTagsId === pres.id}
-                                            setEditingTagsId={setEditingTagsId}
-                                            tagSearchInput={tagSearchInput}
-                                            setTagSearchInput={setTagSearchInput}
-                                            allExistingTags={allExistingTags}
-                                            onAddTag={(tag) => handleAddTag(pres.id, tag)}
-                                            onRemoveTag={(tag) => handleRemoveTag(pres.id, tag)}
-                                            onToggleStar={() => handleToggleStar(pres.id)}
-                                            onExport={() => handleExportPresentation(pres.id)}
-                                            onDelete={() => {
-                                                openModal(ModalType.CONFIRM, {
-                                                    title: t('confirm_delete', 'Confirm Delete'),
-                                                    message: t('confirm_delete_presentation', 'Delete this presentation?'),
-                                                    variant: 'danger',
-                                                    onSelection: (confirmed: boolean) => {
-                                                        if (confirmed) {
-                                                            removePresentation(pres.id);
-                                                        }
+                            <VirtualList
+                                listRef={listScrollRef}
+                                items={filteredPresentations}
+                                getItemKey={getItemKey}
+                                estimateItemHeight={estimatePresSize}
+                                gap={4}
+                                overscan={8}
+                                className="p-2"
+                                renderItem={(pres) => (
+                                    <PresentationListItem
+                                        pres={pres}
+                                        isActive={activePresentationId === pres.id}
+                                        isRenaming={renamingId === pres.id}
+                                        renameValue={renameValue}
+                                        setRenameValue={setRenameValue}
+                                        onStartRename={() => { setRenamingId(pres.id); setRenameValue(pres.name); }}
+                                        onCancelRename={() => setRenamingId(null)}
+                                        onSaveRename={() => handleRenamePresentation(pres.id)}
+                                        isEditingTags={editingTagsId === pres.id}
+                                        setEditingTagsId={setEditingTagsId}
+                                        tagSearchInput={tagSearchInput}
+                                        setTagSearchInput={setTagSearchInput}
+                                        allExistingTags={allExistingTags}
+                                        onAddTag={(tag) => handleAddTag(pres.id, tag)}
+                                        onRemoveTag={(tag) => handleRemoveTag(pres.id, tag)}
+                                        onToggleStar={() => handleToggleStar(pres.id)}
+                                        onExport={() => handleExportPresentation(pres.id)}
+                                        onExportContextMenu={(e) => {
+                                            setContextMenu(null);
+                                            setExportMenu({ x: e.clientX, y: e.clientY, presentation: pres });
+                                        }}
+                                        onDelete={() => {
+                                            openModal(ModalType.CONFIRM, {
+                                                title: t('confirm_delete', 'Confirm Delete'),
+                                                message: t('confirm_delete_presentation', 'Delete this presentation?'),
+                                                variant: 'danger',
+                                                onSelection: (confirmed: boolean) => {
+                                                    if (confirmed) {
+                                                        removePresentation(pres.id);
                                                     }
-                                                });
-                                            }}
-                                            onSelect={() => {
-                                                setActivePresentation(pres.id);
-                                                setIsOpen(false);
-                                            }}
-                                            onContextMenu={(e) => {
-                                                e.preventDefault();
-                                                e.stopPropagation();
-                                                setContextMenu({ x: e.clientX, y: e.clientY, presentation: pres });
-                                            }}
-                                        />
-                                    ))
-                                ) : (
-                                    <div className="py-8 flex flex-col items-center justify-center gap-2 opacity-30">
-                                        <Layers className="w-8 h-8 text-stone-500" />
-                                        <p className="text-[10px] font-bold uppercase tracking-widest">
+                                                }
+                                            });
+                                        }}
+                                        onSelect={() => {
+                                            setActivePresentation(pres.id);
+                                            setIsOpen(false);
+                                        }}
+                                        onContextMenu={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setContextMenu({ x: e.clientX, y: e.clientY, presentation: pres });
+                                        }}
+                                    />
+                                )}
+                                emptyState={
+                                    <div className="py-8 flex flex-col items-center justify-center gap-2.5">
+                                        <CustomSlideStackIcon className="w-8 h-8 text-stone-500/60" />
+                                        <p className="text-xs font-medium text-stone-500 tracking-tight">
                                             {search ? t('no_results', 'No results') : t('no_presentations', 'No presentations')}
                                         </p>
                                     </div>
-                                )}
-                            </div>
+                                }
+                            />
                         ) : (
-                            <div className="flex-1 py-12 flex flex-col items-center justify-center gap-3 opacity-30">
-                                <Layers className="w-8 h-8" />
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">
+                            <div className="flex-1 py-12 flex flex-col items-center justify-center gap-3">
+                                <div className="relative flex items-center justify-center">
+                                    <CustomServiceIcon className="w-10 h-10 text-stone-400/60" />
+                                    <MousePointerClick
+                                        className="absolute -right-2.5 -bottom-2 w-7 h-7 text-accent drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)] pointer-events-none"
+                                        fill="#181614"
+                                        strokeWidth={1.6}
+                                    />
+                                </div>
+                                <p className="text-xs font-medium text-stone-400 tracking-tight">
                                     {t('select_service_first', 'Select Service First')}
                                 </p>
                             </div>
@@ -379,7 +431,7 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
                                     leftIcon={<Download className="w-4 h-4" />}
                                     onClick={handleImportPresentation}
                                 >
-                                    {t('import_presentation', 'Import (.ektp / .pptx)')}
+                                    {t('import_presentation', 'Import (.mrtp / .pptx)')}
                                 </Button>
                             </div>
                         )}
@@ -395,6 +447,16 @@ const PresentationSelector: React.FC<PresentationSelectorProps> = ({ className }
                                 setRenamingId={setRenamingId}
                                 setRenameValue={setRenameValue}
                                 handleExportPresentation={handleExportPresentation}
+                            />
+                        )}
+
+                        {exportMenu && (
+                            <PresentationExportMenu
+                                x={exportMenu.x}
+                                y={exportMenu.y}
+                                presentationId={exportMenu.presentation.id}
+                                onExportMrtp={handleExportPresentation}
+                                onClose={() => setExportMenu(null)}
                             />
                         )}
                     </div>

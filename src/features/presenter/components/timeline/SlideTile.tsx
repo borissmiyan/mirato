@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, ChevronDown as ChevronDownIcon, RotateCcw, Music } from 'lucide-react';
+import { ChevronRight, ChevronDown as ChevronDownIcon, RotateCcw } from 'lucide-react';
+import { CustomHymnStackIcon } from '@/shared/ui';
 import { cn } from '@/core/utils/cn';
 import { ISlide, ICanvasSlide, INestedSlide, IBlock, ITemplate, IPresentationFile, IVideoSlide } from '@/core/types';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
@@ -11,6 +12,9 @@ import { db } from '@/core/db';
 import { useIntersection } from '@/core/hooks/useIntersection';
 import { extractPosterFrame } from '@/core/utils/videoUtils';
 import { mediaCache } from '@/core/utils/mediaCache';
+import { BUILT_IN_HYMN_THEMES } from '@/features/hymns/services/hymnThemeConstants';
+import { materializeHymnPresentation, resolveHymnThemeFromList } from '@/features/hymns/services/hymnThemeMaterializer';
+import { getNestedPresentationFromMap } from './hooks/useExpandedPresentationsMap';
 import type { DraggableSyntheticListeners, DraggableAttributes } from '@dnd-kit/core';
 
 export interface SlideTileProps {
@@ -71,7 +75,12 @@ export const SlideTile: React.FC<SlideTileProps> = ({
     const masterPresId = slide.type === 'normal' ? (slide as ICanvasSlide).masterPresentationId : (slide.type === 'nested' ? (slide as INestedSlide).presentationId : undefined);
     const syncNestedPresentation = usePresentationStore(s => s.syncNestedPresentation);
     const setCachedNestedPresentation = usePresentationStore(s => s.setCachedNestedPresentation);
-    const cachedPres = usePresentationStore(s => masterPresId ? s.nestedPresentationsCache[masterPresId] : null);
+    const liveNavigationParentSlideId = usePresentationStore(s => s.liveNavigationParentSlideId);
+    const cachedPres = usePresentationStore(s => s.nestedPresentationsCache[slide.id] || (masterPresId ? s.nestedPresentationsCache[masterPresId] : null));
+    const slideHymnThemeId = slide.type === 'normal'
+        ? (slide as ICanvasSlide).content?.variables?.hymnThemeId
+        : undefined;
+    const mappedPres = getNestedPresentationFromMap(presentationsMap, slide.id, masterPresId);
 
     const containerRef = React.useRef<HTMLDivElement>(null);
     const isNestedActive = isMaster && navigationParentSlideId === slide.id;
@@ -83,26 +92,41 @@ export const SlideTile: React.FC<SlideTileProps> = ({
     });
     const isVisible = !!intersection?.isIntersecting;
 
-    // Only fetch if it's a master slide, we're not inside it (which would be handled by the parent), 
-    // and it's visible in the viewport.
-    const shouldFetch = isMaster && masterPresId && isVisible;
+    // Only fetch if it's a master slide, not already in presentationsMap, and visible in viewport.
+    const shouldFetch = isMaster && masterPresId && isVisible && !mappedPres;
 
-    // Isolated lazy fetch for this specific master thumbnail
+    // Isolated lazy fetch for this specific master thumbnail (materializes library hymns per slide.id)
     const liveNestedPres = useLiveQuery(
         async () => {
             if (!shouldFetch || cachedPres) return null;
             const pres = await db.presentationFiles.get(masterPresId!);
-            if (pres) {
-                // Background update the store cache for other tiles of the same presentation
-                setCachedNestedPresentation(masterPresId!, pres);
+            if (!pres) return null;
+
+            if (pres.hymnalId || pres.metadata?.isHymnLibraryItem) {
+                const dbThemes = typeof db.hymnThemes?.toArray === 'function' ? await db.hymnThemes.toArray() : [];
+                const themes = dbThemes.length > 0 ? dbThemes : BUILT_IN_HYMN_THEMES;
+                const themeId = typeof slideHymnThemeId === 'string' ? slideHymnThemeId : (pres.metadata?.themeId as string | undefined);
+                const materialized = materializeHymnPresentation(pres, resolveHymnThemeFromList(themeId, themes));
+                setCachedNestedPresentation(slide.id, materialized);
+                return materialized;
             }
+
+            setCachedNestedPresentation(masterPresId!, pres);
             return pres;
         },
-        [shouldFetch, masterPresId, cachedPres]
+        [shouldFetch, masterPresId, cachedPres, slide.id, slideHymnThemeId]
     );
 
     // Resolve final presentation (Priority: 1. Props Map (for expanded), 2. Local Query, 3. Cache)
-    const nestedPres = (masterPresId ? presentationsMap.get(masterPresId) : null) || liveNestedPres || cachedPres;
+    const nestedPres = mappedPres || liveNestedPres || cachedPres;
+    const isHymnMaster = isMaster && Boolean(
+        nestedPres?.hymnalId || nestedPres?.metadata?.isHymn || nestedPres?.metadata?.hymnOrder
+    );
+    const masterHymnalId = isHymnMaster ? (nestedPres?.hymnalId || (nestedPres?.metadata?.hymnalId as string | undefined)) : undefined;
+    const masterHymnal = useLiveQuery(
+        () => (masterHymnalId ? db.hymnals.get(masterHymnalId) : undefined),
+        [masterHymnalId]
+    );
 
     // Use current nested slide for preview if this master presentation is "active", 
     // or fallback to the first slide if we just want a representative thumbnail.
@@ -119,9 +143,11 @@ export const SlideTile: React.FC<SlideTileProps> = ({
     const isPreview = previewSlideId === slide.id && selectedPresentationId === activePresentationId;
     const isEffectivelyPreviewed = isPreview || isNestedActive;
     
-    // The tile is live if it is the live slide itself, OR if it's the master container of the live nested presentation
-    const isLive = liveSlideId === slide.id || 
-                   (isMaster && usePresentationStore.getState().liveNavigationParentSlideId === slide.id);
+    // The tile is live if a live slide is active AND it is the live slide itself or its master container
+    const isLive = Boolean(liveSlideId) && (
+        liveSlideId === slide.id ||
+        (isMaster && liveNavigationParentSlideId === slide.id)
+    );
 
     const isVideo = displaySlide.type === 'video';
     const videoSettings = isVideo ? (displaySlide as IVideoSlide).videoSettings : undefined;
@@ -205,7 +231,7 @@ export const SlideTile: React.FC<SlideTileProps> = ({
                 }
             }}
             className={cn(
-                "group relative shrink-0 w-32 aspect-video rounded-xl border-2 cursor-grab active:cursor-grabbing overflow-hidden leading-none transition-all duration-300 touch-none bg-stone-900",
+                "group relative shrink-0 w-32 aspect-video rounded-[10px] border-2 cursor-grab active:cursor-grabbing overflow-hidden leading-none transition-all duration-300 touch-none bg-stone-900",
                 isNew && !isMultiDragHidden && "animate-timeline-slide-in z-20",
                 isSelected && isEffectivelyPreviewed && isMultiSelect && "ring-2 ring-accent ring-offset-2 ring-offset-stone-900 border-accent",
                 isSelected && (!isEffectivelyPreviewed || !isMultiSelect) && "ring-2 ring-accent border-transparent",
@@ -268,41 +294,97 @@ export const SlideTile: React.FC<SlideTileProps> = ({
                 )}
             </div>
             <div className="absolute inset-x-0 top-0 h-8 bg-linear-to-b from-black/60 to-transparent z-10 pointer-events-none" />
-            <div className="absolute z-20"><SmartBadge slide={slide} /></div>
-            {isMaster && (
-                <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); onToggleExpansion(slide.id); }}
-                    className="absolute top-1 right-1 p-1 bg-black/50 hover:bg-orange-500/30 text-white/60 hover:text-orange-400 rounded-xl transition-all border border-white/10 z-20 cursor-pointer apple-press"
-                    aria-label={slide.isExpanded ? "Collapse" : "Expand"}
-                >
-                    {slide.isExpanded ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                </button>
-            )}
-            <div 
-                className="absolute top-1 left-1 px-1.5 py-0.5 rounded-xl bg-black/40 backdrop-blur-md border border-white/5 text-[8px] font-black text-stone-400 z-50 pointer-events-none"
-            >
-                {slide.order + 1}
-            </div>
-            
-            {/* Nested Progress Badge */}
-            {isNestedActive && nestedPres && (
-                <div className="absolute top-1 left-7 px-1.5 py-0.5 rounded-xl bg-accent border border-accent/50 text-[8px] font-black text-white z-30 shadow-lg animate-in fade-in slide-in-from-left-2 duration-300">
-                    {nestedPres.slides.findIndex(s => s.id === previewSlideId) + 1} / {nestedPres.slides.length}
-                </div>
-            )}
+            <div className="absolute inset-0 z-20 pointer-events-none"><SmartBadge slide={slide} /></div>
 
-            {isLive && <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-xl bg-red-500/30 backdrop-blur-md border border-red-500/30 text-[7px] font-black text-red-300 uppercase tracking-wider animate-pulse z-20">LIVE</div>}
-            {isMaster && (
-                (nestedPres?.hymnalId || nestedPres?.metadata?.isHymn || nestedPres?.metadata?.hymnOrder) ? (
-                    <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-[6px] font-black text-amber-400 uppercase tracking-tighter z-20 flex items-center gap-1">
-                        <Music className="w-2.5 h-2.5" />
-                        <span>{t('hymn', 'Гимн')}</span>
+            {/* Unified top overlay row: zero overlap between slide number, LIVE/progress status, and collapse button */}
+            <div className="absolute top-1 left-1 right-1 z-40 flex items-center justify-between gap-1 pointer-events-none">
+                <div className="flex items-center gap-1 min-w-0">
+                    <div className="px-1.5 py-0.5 rounded-[5px] bg-stone-950 border border-white/10 text-[8px] font-black text-stone-400 tabular-nums shrink-0 leading-none">
+                        {slide.order + 1}
                     </div>
-                ) : (
-                    <div className="absolute bottom-1 left-1 px-1 py-0.5 rounded bg-orange-500/20 border border-orange-500/20 text-[6px] font-black text-orange-400 uppercase tracking-tighter z-20">{t('nested', 'Nested')}</div>
-                )
-            )}
+
+                    {isNestedActive && nestedPres ? (
+                        isLive ? (
+                            <div className="px-1.5 py-0.5 rounded-[5px] bg-red-950 border border-red-500/45 text-[7px] font-black text-red-200 tabular-nums flex items-center gap-1 shrink-0 leading-none">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
+                                <span>{Math.max(1, nestedPres.slides.findIndex(s => s.id === previewSlideId) + 1)}/{nestedPres.slides.length}</span>
+                            </div>
+                        ) : (
+                            <div className="px-1.5 py-0.5 rounded-[5px] bg-accent text-[7px] font-black text-stone-950 tabular-nums shrink-0 leading-none">
+                                {Math.max(1, nestedPres.slides.findIndex(s => s.id === previewSlideId) + 1)}/{nestedPres.slides.length}
+                            </div>
+                        )
+                    ) : (
+                        isLive && isMaster && (
+                            <div className="px-1.5 py-0.5 rounded-[5px] bg-red-950 border border-red-500/45 text-[7px] font-black text-red-300 uppercase tracking-wider flex items-center gap-1 shrink-0 leading-none">
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
+                                <span>LIVE</span>
+                            </div>
+                        )
+                    )}
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                    {isLive && !isMaster && (
+                        <div className="px-1.5 py-0.5 rounded-[5px] bg-red-950 border border-red-500/45 text-[7px] font-black text-red-300 uppercase tracking-wider leading-none">
+                            LIVE
+                        </div>
+                    )}
+                    {isMaster && (
+                        <button
+                            type="button"
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onDoubleClick={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onToggleExpansion(slide.id);
+                            }}
+                            className="pointer-events-auto relative z-50 w-5 h-5 flex items-center justify-center bg-stone-950/90 hover:bg-amber-500/25 text-stone-300 hover:text-amber-300 rounded-[5px] transition-colors border border-white/15 cursor-pointer apple-press"
+                            aria-label={slide.isExpanded ? "Collapse" : "Expand"}
+                        >
+                            {slide.isExpanded ? <ChevronDownIcon className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                        </button>
+                    )}
+                </div>
+            </div>
+            {isMaster && (() => {
+                if (isHymnMaster) {
+                    const orderNum = nestedPres?.metadata?.hymnOrder;
+                    const parsedNum = orderNum !== undefined && orderNum !== null
+                        ? String(orderNum)
+                        : nestedPres?.name?.match(/^\s*#?(\d+)/)?.[1];
+                    const hymnalName = masterHymnal?.name;
+                    const hymnBadgeLabel = parsedNum && hymnalName
+                        ? `#${parsedNum} — ${hymnalName}`
+                        : parsedNum
+                            ? `#${parsedNum}`
+                            : (hymnalName || nestedPres?.name || t('hymn', 'Гимн'));
+
+                    return (
+                        <div
+                            title={hymnBadgeLabel}
+                            className="absolute bottom-1 left-1 right-1 px-1.5 py-0.5 rounded-[5px] bg-[#2a1d08] border border-amber-500/40 text-[7px] font-bold text-amber-300 tracking-tight z-20 flex items-center gap-1 min-w-0 pointer-events-none"
+                        >
+                            <CustomHymnStackIcon className="w-2.5 h-2.5 shrink-0 text-amber-400" />
+                            <span className="truncate leading-tight">{hymnBadgeLabel}</span>
+                        </div>
+                    );
+                }
+
+                const nestedLabel = nestedPres?.name
+                    || (slide.type === 'normal' ? String((slide as ICanvasSlide).content?.variables?.title || '') : '')
+                    || t('nested', 'Nested');
+
+                return (
+                    <div
+                        title={nestedLabel}
+                        className="absolute bottom-1 left-1 right-1 px-1.5 py-0.5 rounded-[5px] bg-[#2b1709] border border-orange-500/40 text-[7px] font-bold text-orange-300 tracking-tight z-20 flex items-center min-w-0 pointer-events-none"
+                    >
+                        <span className="truncate leading-tight">{nestedLabel}</span>
+                    </div>
+                );
+            })()}
             
             {/* Sync Badge */}
             {(() => {
@@ -325,7 +407,7 @@ export const SlideTile: React.FC<SlideTileProps> = ({
                             e.stopPropagation();
                             syncNestedPresentation(slide.id);
                         }}
-                        className="absolute bottom-1 right-1 px-2 py-0.5 rounded bg-blue-500 hover:bg-blue-400 border border-blue-400/50 text-[7px] font-black text-white uppercase tracking-wider z-30 shadow-lg shadow-blue-500/20 animate-in fade-in zoom-in-50 duration-300 flex items-center gap-1 cursor-pointer apple-press"
+                        className="absolute bottom-1 right-1 px-2 py-0.5 rounded-[5px] bg-blue-500 hover:bg-blue-400 border border-blue-400/50 text-[7px] font-black text-white uppercase tracking-wider z-30 shadow-lg shadow-blue-500/20 animate-in fade-in zoom-in-50 duration-300 flex items-center gap-1 cursor-pointer apple-press"
                         title={t('sync_library_update', 'Sync Library Update')}
                     >
                         <RotateCcw className="w-2.5 h-2.5" />

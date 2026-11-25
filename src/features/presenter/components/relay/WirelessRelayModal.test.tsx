@@ -30,7 +30,7 @@ describe('WirelessRelayModal', () => {
             <WirelessRelayModal isOpen={true} onClose={vi.fn()} />
         );
 
-        expect(screen.getByText(/Беспроводной экран Deck.CE/i)).toBeInTheDocument();
+        expect(screen.getByText(/Беспроводной экран Mirato/i)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Принять трансляцию/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Транслировать экран/i })).toBeInTheDocument();
     });

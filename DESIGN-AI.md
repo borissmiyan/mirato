@@ -12,7 +12,8 @@ GLOBAL TYPOGRAPHY:        Inter / Roboto / System sans  ← Strict font hierarch
 INTERACTIVE TOUCH HEIGHT: h-12 (48px) to h-15 (60px)    ← Large, tactile touch targets.
 CARD RADIUS:              rounded-2xl (16px)            ← Unified card borders across the UI.
 INPUT RADIUS:             rounded-xl (12px)             ← Consistent input corners.
-MODAL / SHEET PATTERN:    Bottom sheet / Modal          ← Smooth transitions, background overlay blur.
+MODAL / SHEET PATTERN:    Solid modal card              ← Blurred backdrop ONLY behind modals; UI surfaces are 100% opaque (NO glassmorphism).
+SURFACE SYSTEM:           Solid opaque stone palette    ← bg-stone-950 / bg-stone-900 / bg-[#141210] / bg-[#211e1c]. ZERO backdrop-blur or translucent UI panels.
 ICON SYSTEM:              Vector icons (Lucide React)   ← ZERO raw emojis in JSX or buttons.
 COLOR SYSTEM:             Design tokens / Tailwind      ← No raw ad-hoc hex values.
 MAX FILE LENGTH:          500 lines max                 ← Split into hooks/subcomponents if exceeded.

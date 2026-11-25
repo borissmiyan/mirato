@@ -144,6 +144,9 @@ export function useAudioSync(isProjector: boolean = false) {
                 case 'seek': 
                     if (typeof value === 'number') audioService.seekTrack(targetId, value);
                     break;
+                case 'speed':
+                    if (typeof value === 'number') audioService.setTrackSpeed(targetId, value);
+                    break;
             }
         });
         return () => unsub();

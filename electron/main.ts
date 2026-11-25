@@ -11,6 +11,7 @@ import {
     setupWindowIpc
 } from './windows/windowManager';
 import { registerHymnHandlers } from './ipc/hymnHandlers';
+import { registerHymnalAudioPackHandlers } from './ipc/hymnalAudioPackHandlers';
 import { registerScreenCaptureHandlers } from './ipc/screenCaptureHandlers';
 import { registerFontHandlers } from './ipc/fontHandlers';
 import { registerFileSystemHandlers } from './ipc/fileSystemHandlers';
@@ -277,6 +278,7 @@ app.whenReady().then(() => {
     setupWindowIpc();
     registerFileSystemHandlers(getMainWindow);
     registerHymnHandlers(getMainWindow);
+    registerHymnalAudioPackHandlers(getMainWindow);
     registerScreenCaptureHandlers(getMainWindow);
     registerFontHandlers();
     registerMediaHandlers();

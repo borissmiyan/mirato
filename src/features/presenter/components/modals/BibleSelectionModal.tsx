@@ -1,32 +1,37 @@
-import React, { useMemo, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useMemo, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { BookOpen, Plus } from 'lucide-react';
 import { db } from '@/core/db';
 import { useModalStore, ModalType, ModalState } from '@/core/store/modalStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { usePresenterStore } from '@/features/presenter/store/presenterStore';
 import { getBookName } from '@/core/data/bookData';
 import { Verse, ISlide, ICanvasSlide } from '@/core/types';
-import { Layers } from 'lucide-react';
-import { formatMultiVerseReference, formatVerseRange } from '@/features/bible-browser/utils/bibleUtils';
-import { SegmentedControl, Button } from '@/shared/ui';
+import { formatMultiVerseReference } from '@/features/bible-browser/utils/bibleUtils';
+import {
+    Badge,
+    Button,
+    CustomSlideIcon,
+    CustomSlideStackIcon,
+    PickerModalShell,
+    SearchInput,
+    SegmentedControl,
+} from '@/shared/ui';
 
 // Hooks
 import { useBibleSelection } from '../../hooks/useBibleSelection';
+import { useNavigationSearch } from '@/features/bible-browser/hooks/useNavigationSearch';
+import { SearchResult } from '@/features/search/services/globalSearchService';
 
 // Sub-components
-import { BibleSelectionHeader } from './BibleSelectionHeader';
-import { BibleSelectionSidebar } from './BibleSelectionSidebar';
-import { BibleSelectionChapters } from './BibleSelectionChapters';
-import { BibleSelectionVerseList } from './BibleSelectionVerseList';
-import { BibleSelectionPreview } from './BibleSelectionPreview';
+import { BibleSelectionNavigator } from './BibleSelectionNavigator';
+import {
+    BibleSelectionPreview,
+    BibleSelectionCarouselTray,
+} from './BibleSelectionPreview';
 
-/**
- * Bible selection modal for presentation mode.
- * Features: live slide preview, multi-verse, multi-translation, carousel preview.
- */
 interface BibleSelectionModalContentProps {
     modalData: ModalState;
 }
@@ -38,6 +43,8 @@ const BibleSelectionModalContent: React.FC<BibleSelectionModalContentProps> = ({
 
     const slideId = modalData?.props?.slideId as string | undefined;
     const modalPresentationId = modalData?.props?.presentationId as string | undefined;
+
+    const [hasNestedPopoverOpen, setHasNestedPopoverOpen] = useState(false);
 
     // ─── Store ───
     const {
@@ -79,7 +86,6 @@ const BibleSelectionModalContent: React.FC<BibleSelectionModalContentProps> = ({
     // ─── Bible Selection Hook ───
     const bible = useBibleSelection(presentation, slideId);
 
-    // ─── Verse click handler ───
     const {
         lastClickedVerseNumber,
         setSelectedVerseNumbers,
@@ -95,6 +101,74 @@ const BibleSelectionModalContent: React.FC<BibleSelectionModalContentProps> = ({
         insertMode,
     } = bible;
 
+    // Full Bible search (references like "Ин 3:16" + full-text keyword search, identical to NavigationPanel)
+    const {
+        searchQuery,
+        setSearchQuery,
+        searchResults,
+        isSearching,
+        parseResult,
+    } = useNavigationSearch(lang, selectedTranslationId);
+
+    // Filter books by reference/book query (mirrors NavigationPanel logic)
+    const filteredBooks = useMemo(() => {
+        if (!searchQuery.trim() || parseResult.type === 'keyword') return bible.sortedBooks;
+        const primaryItem = parseResult.items[0];
+        const bookSearchPart = primaryItem?.bookId?.toLowerCase()
+            || parseResult.originalQuery.split(/\d/)[0].trim().toLowerCase();
+
+        return bible.sortedBooks.filter((book) => {
+            const name = getBookName(book.bookId, lang).toLowerCase();
+            return name.includes(bookSearchPart) || book.bookId.toLowerCase().includes(bookSearchPart);
+        });
+    }, [bible.sortedBooks, searchQuery, parseResult, lang]);
+
+    const currentBook = useMemo(
+        () => bible.sortedBooks.find(b => b.bookId === selectedBookId) ?? null,
+        [bible.sortedBooks, selectedBookId]
+    );
+
+    const handleBookSelect = useCallback((bookId: string) => {
+        bible.setSelectedBookId(bookId);
+        const primaryItem = parseResult.items[0];
+        if (primaryItem?.type === 'reference' && primaryItem.bookId === bookId && primaryItem.chapter) {
+            bible.setSelectedChapter(primaryItem.chapter);
+            if (primaryItem.verse) {
+                bible.setSelectedVerseNumbers([primaryItem.verse]);
+            } else {
+                bible.setSelectedVerseNumbers([]);
+            }
+            return;
+        }
+        bible.setSelectedChapter(1);
+        bible.setSelectedVerseNumbers([]);
+    }, [bible, parseResult]);
+
+    const handleSearchResultClick = useCallback((res: SearchResult) => {
+        bible.setSelectedBookId(res.verse.bookId);
+        bible.setSelectedChapter(res.verse.chapter);
+        bible.setSelectedVerseNumbers([res.verse.verseNumber]);
+        setSearchQuery('');
+    }, [bible, setSearchQuery]);
+
+    const handleChapterSelect = useCallback((chapter: number) => {
+        bible.setSelectedChapter(chapter);
+        bible.setSelectedVerseNumbers([]);
+    }, [bible]);
+
+    const handleSelectPrimaryTranslation = useCallback((trId: string) => {
+        bible.setSelectedTranslationId(trId);
+        bible.setSelectedBookId('');
+        bible.setSelectedChapter(1);
+        bible.setSelectedVerseNumbers([]);
+    }, [bible]);
+
+    const handleSelectSecondTranslation = useCallback((trId: string | null) => {
+        bible.setSecondTranslationId(trId);
+        bible.setShowSecondTranslation(Boolean(trId));
+    }, [bible]);
+
+    // ─── Verse click handler ───
     const handleVerseClick = useCallback((v: Verse, e: React.MouseEvent) => {
         const isShift = e.shiftKey;
         const isCmdCtrl = e.metaKey || e.ctrlKey;
@@ -228,6 +302,17 @@ const BibleSelectionModalContent: React.FC<BibleSelectionModalContentProps> = ({
         updatePresentationSlides, closeModal
     ]);
 
+    const handleClose = useCallback(() => {
+        closeModal(ModalType.BIBLE_SELECTION);
+    }, [closeModal]);
+
+    const handleModalKeyDown = useCallback((e: KeyboardEvent) => {
+        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && selectedVerses.length > 0) {
+            e.preventDefault();
+            handleApply();
+        }
+    }, [handleApply, selectedVerses.length]);
+
     // ─── Reference text ───
     const referenceText = useMemo(() => {
         if (bible.selectedVerses.length === 0) return '';
@@ -235,117 +320,129 @@ const BibleSelectionModalContent: React.FC<BibleSelectionModalContentProps> = ({
         return formatMultiVerseReference(bible.selectedVerses, bookName, lang);
     }, [bible.selectedVerses, bible.selectedBookId, lang]);
 
-    return createPortal(
-        <div className="fixed inset-0 z-10001 flex items-center justify-center apple-backdrop bg-stone-950/75 backdrop-blur-xl p-6">
-            <div className="bg-stone-900 border border-white/10 ring-1 ring-white/5 rounded-2xl w-full max-w-6xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl apple-modal">
+    const showCarousel = bible.insertMode === 'multiple' && bible.selectedVerses.length > 1;
+    const totalSlidesCount = showCarousel ? bible.selectedVerses.length : (bible.selectedVerses.length > 0 ? 1 : 0);
+    const clampedCarouselIndex = Math.min(bible.carouselIndex, Math.max(0, bible.selectedVerses.length - 1));
+    const secondTranslationName = secondTranslationId
+        ? bible.translations.find(tr => tr.id === secondTranslationId)?.name
+        : null;
 
-                <BibleSelectionHeader
-                    slideId={slideId}
-                    onClose={() => closeModal(ModalType.BIBLE_SELECTION)}
+    return (
+        <PickerModalShell
+            isOpen={true}
+            onClose={handleClose}
+            onKeyDown={handleModalKeyDown}
+            disableEscapeClose={hasNestedPopoverOpen}
+            sidebarWidthClassName="w-[500px]"
+            sidebarIcon={<BookOpen className="w-4 h-4" />}
+            sidebarTitle={slideId ? t('edit_verse', 'Редактировать стих') : t('add_bible_verse', 'Вставить стих')}
+            sidebarHeaderExtra={
+                <SearchInput
+                    size="xs"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onClear={() => setSearchQuery('')}
+                    placeholder={t('search.placeholder', 'Поиск книги, главы или текста...')}
                 />
-
-                <div className="flex-1 flex overflow-hidden min-h-0">
-                    {/* Left Panel — Selection */}
-                    <div className="w-[420px] shrink-0 flex flex-col border-r border-white/5 overflow-hidden">
-                        <div className="flex-1 flex overflow-hidden p-4 gap-3">
-                            <BibleSelectionSidebar
-                                translations={bible.translations}
-                                sortedBooks={bible.sortedBooks}
-                                selectedTranslationId={bible.selectedTranslationId}
-                                selectedBookId={bible.selectedBookId}
-                                setSelectedTranslationId={bible.setSelectedTranslationId}
-                                setSelectedBookId={bible.setSelectedBookId}
-                                setSelectedChapter={bible.setSelectedChapter}
-                                setSelectedVerseNumbers={bible.setSelectedVerseNumbers}
-                                lang={lang}
-                            />
-
-                            <div className="flex-1 flex flex-col gap-3 min-w-0">
-                                <BibleSelectionChapters
-                                    chaptersCount={bible.chaptersCount}
-                                    selectedChapter={bible.selectedChapter}
-                                    setSelectedChapter={bible.setSelectedChapter}
-                                    setSelectedVerseNumbers={bible.setSelectedVerseNumbers}
-                                />
-
-                                <BibleSelectionVerseList
-                                    versesInChapter={bible.versesInChapter}
-                                    selectedVerseNumbers={bible.selectedVerseNumbers}
-                                    handleVerseClick={handleVerseClick}
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Right Panel — Preview */}
-                    <BibleSelectionPreview
-                        selectedVerses={bible.selectedVerses}
-                        secondTranslationId={bible.secondTranslationId}
-                        secondTranslationVerse={bible.secondTranslationVerse}
-                        secondTranslationVerses={bible.secondTranslationVerses}
-                        showSecondTranslation={bible.showSecondTranslation}
-                        setShowSecondTranslation={bible.setShowSecondTranslation}
-                        setSecondTranslationId={bible.setSecondTranslationId}
-                        translations={bible.translations}
-                        selectedTranslationId={bible.selectedTranslationId}
-                        insertMode={bible.insertMode}
-                        carouselIndex={bible.carouselIndex}
-                        setCarouselIndex={bible.setCarouselIndex}
-                        settings={settings}
-                        referenceText={referenceText}
-                    />
-                </div>
-
-                {/* ── Footer ── */}
-                <div className="px-6 py-4 border-t border-white/5 bg-stone-950/50 backdrop-blur-xl flex items-center justify-between shrink-0">
-                    <div className="flex flex-col min-w-0">
-                        <span className="text-[10px] font-black text-stone-600 uppercase tracking-widest mb-0.5">
-                            {t('selection', 'Selection')}
+            }
+            sidebarBody={
+                <BibleSelectionNavigator
+                    filteredBooks={filteredBooks}
+                    currentBook={currentBook}
+                    selectedBookId={selectedBookId}
+                    selectedChapter={selectedChapter}
+                    bookSearchQuery={searchQuery}
+                    lang={lang}
+                    versesInChapter={bible.versesInChapter}
+                    selectedVerseNumbers={bible.selectedVerseNumbers}
+                    selectedTranslationId={selectedTranslationId}
+                    secondTranslationId={secondTranslationId}
+                    showSearchOverlay={parseResult.type === 'keyword' && parseResult.originalQuery.length >= 2}
+                    isSearching={isSearching}
+                    searchResults={searchResults}
+                    onSearchResultClick={handleSearchResultClick}
+                    onBookSelect={handleBookSelect}
+                    onChapterSelect={handleChapterSelect}
+                    onVerseClick={handleVerseClick}
+                    onSelectPrimaryTranslation={handleSelectPrimaryTranslation}
+                    onSelectSecondTranslation={handleSelectSecondTranslation}
+                    onPopoverOpenChange={setHasNestedPopoverOpen}
+                />
+            }
+            contentTitle={referenceText || t('select_verse_preview', 'Выберите стихи для просмотра')}
+            contentBadge={
+                totalSlidesCount > 0 ? (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                        <span
+                            title={t('slides_count', { count: totalSlidesCount, defaultValue: `${totalSlidesCount} слайдов` })}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 bg-white/[0.06] border border-white/10 rounded-md text-[10px] font-semibold text-stone-400 shrink-0 tabular-nums"
+                        >
+                            <CustomSlideStackIcon className="w-3 h-3 opacity-75 shrink-0" />
+                            <span>{totalSlidesCount}</span>
                         </span>
-                        <p className="text-xs font-bold text-amber-500 truncate">
-                            {bible.selectedBookId ? getBookName(bible.selectedBookId, lang) : ''} {bible.selectedChapter}:{formatVerseRange(bible.selectedVerseNumbers)}
-                        </p>
+                        {secondTranslationName && (
+                            <Badge variant="secondary" size="xs">
+                                + {secondTranslationName}
+                            </Badge>
+                        )}
                     </div>
-
-                    {!slideId && (
-                        <div className="hidden sm:flex shrink-0 mx-4">
-                            <SegmentedControl<'single' | 'multiple'>
-                                value={bible.insertMode}
-                                onChange={(val) => bible.setInsertMode(val)}
-                                options={[
-                                    { value: 'single', label: t('single_slide', 'Single Slide'), icon: <Layers className="w-3.5 h-3.5" /> },
-                                    { value: 'multiple', label: t('multiple_slides', 'Multiple Slides'), icon: <Layers className="w-3.5 h-3.5" /> },
-                                ]}
-                                size="xs"
-                            />
-                        </div>
+                ) : undefined
+            }
+            preview={
+                <BibleSelectionPreview
+                    selectedVerses={bible.selectedVerses}
+                    secondTranslationId={bible.secondTranslationId}
+                    secondTranslationVerse={bible.secondTranslationVerse}
+                    secondTranslationVerses={bible.secondTranslationVerses}
+                    insertMode={bible.insertMode}
+                    carouselIndex={clampedCarouselIndex}
+                    settings={settings}
+                />
+            }
+            tray={
+                showCarousel ? (
+                    <BibleSelectionCarouselTray
+                        selectedVerses={bible.selectedVerses}
+                        selectedChapter={bible.selectedChapter}
+                        clampedCarouselIndex={clampedCarouselIndex}
+                        setCarouselIndex={bible.setCarouselIndex}
+                    />
+                ) : undefined
+            }
+            footerLeft={
+                !slideId ? (
+                    <SegmentedControl<'single' | 'multiple'>
+                        value={bible.insertMode}
+                        onChange={(val) => bible.setInsertMode(val)}
+                        options={[
+                            { value: 'single', label: t('single_slide', 'Один слайд'), icon: <CustomSlideIcon className="w-3.5 h-3.5" /> },
+                            { value: 'multiple', label: t('multiple_slides', 'Несколько слайдов'), icon: <CustomSlideStackIcon className="w-3.5 h-3.5" /> },
+                        ]}
+                        size="xs"
+                    />
+                ) : (
+                    <span className="text-xs text-stone-400 truncate">
+                        {referenceText || t('select_verse_preview', 'Выберите стихи для просмотра')}
+                    </span>
+                )
+            }
+            footerRight={
+                <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleApply}
+                    disabled={bible.selectedVerses.length === 0}
+                    leftIcon={<Plus className="w-4 h-4" />}
+                    className="px-5 font-bold tracking-wide shrink-0"
+                >
+                    {slideId ? t('update_slide', 'Обновить слайд') : (
+                        bible.insertMode === 'multiple' && bible.selectedVerses.length > 1
+                            ? t('insert_slides_count', 'Добавить {{count}} слайдов', { count: bible.selectedVerses.length })
+                            : t('add_to_timeline', 'Добавить на таймлайн')
                     )}
-
-                    <div className="flex gap-2.5 shrink-0">
-                        <Button
-                            variant="secondary"
-                            size="xs"
-                            onClick={() => closeModal(ModalType.BIBLE_SELECTION)}
-                        >
-                            {t('cancel', 'Cancel')}
-                        </Button>
-                        <Button
-                            variant="primary"
-                            size="xs"
-                            onClick={handleApply}
-                            disabled={bible.selectedVerses.length === 0}
-                        >
-                            {slideId ? t('update_slide', 'Update Slide') : (
-                                bible.insertMode === 'multiple' && bible.selectedVerses.length > 1
-                                    ? t('insert_slides_count', 'Insert {{count}} Slides', { count: bible.selectedVerses.length })
-                                    : t('insert_slide', 'Insert Slide')
-                            )}
-                        </Button>
-                    </div>
-                </div>
-            </div>
-        </div>,
-        document.body
+                </Button>
+            }
+        />
     );
 };
 

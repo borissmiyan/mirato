@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { ISlide, ICanvasSlide, INestedSlide, IPresentationFile } from '@/core/types';
+import { getNestedPresentationFromMap } from './useExpandedPresentationsMap';
 
 interface UseTimelineLayoutProps {
     slides: ISlide[];
@@ -21,7 +22,7 @@ const TILE_WIDTH = 128;
 const TILE_GAP = 12; // gap-3
 const NESTED_TILE_WIDTH = 96;
 const NESTED_TILE_GAP = 10;
-const NESTED_SIDE_PADDING = 20;
+const NESTED_SIDE_PADDING = 21; // px-2 (8) + border (1) + w-1 (4) + gap-2 (8)
 const EDIT_BUTTON_WIDTH = 40;
 
 /**
@@ -55,7 +56,7 @@ export const useTimelineLayout = ({
                 : (slide.type === 'nested' ? (slide as INestedSlide).presentationId : undefined);
             
             if (slide.isExpanded && masterPresId) {
-                const nested = presentationsMap.get(masterPresId);
+                const nested = getNestedPresentationFromMap(presentationsMap, slide.id, masterPresId);
                 let nestedTrackX = nextTopLevelX;
 
                 if (nested) {

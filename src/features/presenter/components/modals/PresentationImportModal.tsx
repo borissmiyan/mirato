@@ -7,7 +7,8 @@ import { db } from '@/core/db';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { ISlide, ICanvasSlide } from '@/core/types';
-import { X, Check, Layers, Plus, Music, Monitor } from 'lucide-react';
+import { X, Check, Plus, Music, Monitor } from 'lucide-react';
+import { CustomSlideStackIcon } from '@/shared/ui/SlideIcons';
 import { cn } from '@/core/utils/cn';
 import SlideContentRenderer from '../slide-editor/SlideContentRenderer';
 import { useContainFit } from '@/core/hooks/useContainFit';
@@ -30,7 +31,7 @@ const ModalAudioScope: React.FC<ModalAudioScopeProps> = ({ scope, startIdx, endI
 
     return (
         <div
-            className="absolute top-0 h-10 bg-purple-500/20 border border-purple-500/30 rounded-xl flex items-center px-3 overflow-hidden backdrop-blur-sm shadow-lg shadow-purple-500/5 animate-in fade-in zoom-in-95 duration-300"
+ className="absolute top-0 h-10 bg-purple-500/20 border border-purple-500/30 rounded-xl flex items-center px-3 overflow-hidden shadow-lg shadow-purple-500/5 animate-in fade-in zoom-in-95 duration-300"
             style={{ left, width, marginTop: '8px' }}
         >
             <Music className="w-3.5 h-3.5 text-purple-400 mr-2 shrink-0" />
@@ -165,10 +166,10 @@ const PresentationImportModal: React.FC = () => {
         <div className="fixed inset-0 z-10001 flex items-center justify-center apple-backdrop bg-stone-950/75 backdrop-blur-xl p-6">
             <div className="bg-stone-900 border border-white/10 ring-1 ring-white/5 rounded-2xl w-full max-w-6xl h-[90vh] flex flex-col overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)] apple-modal">
                 {/* Header */}
-                <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-stone-900/50 backdrop-blur-md z-10">
+                <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-stone-900 z-10">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center border border-accent/20 shadow-lg shadow-accent/5 shrink-0">
-                            <Layers className="w-6 h-6 text-accent" />
+                            <CustomSlideStackIcon className="w-6 h-6 text-accent" />
                         </div>
                         <div>
                             <h2 className="text-xl font-bold text-white tracking-tight line-clamp-1">
@@ -234,7 +235,7 @@ const PresentationImportModal: React.FC = () => {
                                     scale={fitWidth / 1920}
                                 />
 
-                                <div className="absolute bottom-6 left-6 bg-black/60 backdrop-blur-2xl border border-white/10 rounded-2xl px-5 py-3 animate-in fade-in slide-in-from-bottom-4 duration-500 shadow-2xl">
+                                <div className="absolute bottom-6 left-6 bg-stone-950 border border-white/10 rounded-2xl px-5 py-3 animate-in fade-in slide-in-from-bottom-4 duration-500 shadow-2xl">
                                     <p className="text-xs font-bold text-white uppercase tracking-wider mb-1">
                                         {(currentPreviewSlide.type === 'normal' ? (currentPreviewSlide as ICanvasSlide).content?.variables?.title : undefined) || t('no_title', 'Untitled Slide')}
                                     </p>
@@ -258,7 +259,7 @@ const PresentationImportModal: React.FC = () => {
 
                     {/* Bottom: Horizontal Timeline Area */}
                     <div className="h-[240px] shrink-0 bg-stone-950 border-t border-white/10 flex flex-col relative shadow-[0_-20px_50px_rgba(0,0,0,0.4)] z-10">
-                        <div className="px-6 py-2.5 border-b border-white/5 flex items-center justify-between bg-stone-900/40 backdrop-blur-md">
+                        <div className="px-6 py-2.5 border-b border-white/5 flex items-center justify-between bg-stone-900">
                             <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">
                                     {t('timeline', 'Timeline')}
@@ -272,7 +273,7 @@ const PresentationImportModal: React.FC = () => {
 
                         <div className="flex-1 relative flex">
                             {/* Track Names */}
-                            <div className="w-16 shrink-0 border-r border-white/5 bg-stone-900/40 flex flex-col z-20 backdrop-blur-md">
+                            <div className="w-16 shrink-0 border-r border-white/5 bg-stone-900 flex flex-col z-20">
                                 <div className="h-[104px] flex flex-col items-center justify-center gap-1 opacity-50">
                                     <Monitor className="w-4 h-4 text-stone-400" />
                                     <span className="text-[7px] font-bold uppercase tracking-widest text-stone-400">{t('slides', 'Slides')}</span>
@@ -341,7 +342,7 @@ const PresentationImportModal: React.FC = () => {
                                                             </button>
                                                         </div>
 
-                                                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-xl bg-black/50 backdrop-blur-md border border-white/10 text-[8px] font-bold text-stone-300 z-10 tracking-widest">
+                                                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-xl bg-stone-950 border border-white/10 text-[8px] font-bold text-stone-300 z-10 tracking-widest">
                                                             {(slide.order || index) + 1}
                                                         </div>
 

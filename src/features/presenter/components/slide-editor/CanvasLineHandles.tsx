@@ -10,7 +10,7 @@ interface CanvasLineHandlesProps {
 }
 
 /**
- * 2-Point Vector Line Controller for Deck.CE.
+ * 2-Point Vector Line Controller for Mirato.
  * Provides Start and End circular handles for vector lines.
  * Supports angle rotation, length resizing, and Shift-key 45° snapping.
  */

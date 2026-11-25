@@ -24,7 +24,7 @@ export const ReceiverStatusBadge: React.FC<ReceiverStatusBadgeProps> = React.mem
     return (
         <div
             className={cn(
-                "fixed top-4 right-4 z-50 flex items-center gap-3 px-3.5 py-2 rounded-2xl shadow-2xl border backdrop-blur-xl transition-all duration-300 animate-in fade-in slide-in-from-top-2",
+"fixed top-4 right-4 z-50 flex items-center gap-3 px-3.5 py-2 rounded-2xl shadow-2xl border transition-all duration-300 animate-in fade-in slide-in-from-top-2",
                 isConnected
                     ? "bg-emerald-950/80 border-emerald-500/30 text-emerald-200"
                     : "bg-stone-900/90 border-accent/30 text-stone-200",

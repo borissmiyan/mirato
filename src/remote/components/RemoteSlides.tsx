@@ -58,7 +58,7 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
     return (
         <div className="flex-1 flex flex-col justify-between gap-4 mb-3 animate-in fade-in slide-in-from-right-4 duration-300 min-h-0 overflow-y-auto pr-1 scroll-smooth">
             {/* 1. Main Preview (Large) */}
-            <div className="bg-stone-900/40 border border-white/5 rounded-4xl p-0 flex flex-col justify-center text-center shadow-2xl relative overflow-hidden backdrop-blur-2xl w-full aspect-video items-center shrink-0 min-w-0">
+            <div className="bg-stone-900 border border-white/5 rounded-4xl p-0 flex flex-col justify-center text-center shadow-2xl relative overflow-hidden w-full aspect-video items-center shrink-0 min-w-0">
                 <div className="absolute inset-0 w-full h-full bg-black">
                     {slideState.slideData ? (
                         <>
@@ -78,7 +78,7 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
 
                             {/* Top-left Title for video slides */}
                             {isVideoSlide(slideState.slideData) && (
-                                <div className="absolute top-4 left-4 z-20 px-3 py-1.5 bg-black/40 backdrop-blur-md rounded-xl border border-white/10 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-500 max-w-[240px]">
+                                <div className="absolute top-4 left-4 z-20 px-3 py-1.5 bg-stone-950 rounded-xl border border-white/10 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-500 max-w-[240px]">
                                     <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/90 block truncate">
                                         {slideState.slideTitle || t('remote.video_slide')}
                                     </span>
@@ -124,7 +124,7 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
                     <button 
                         type="button"
                         onClick={onMediaToggle} 
-                        className="col-span-1 bg-stone-900/60 py-4 rounded-4xl border border-white/5 active:bg-stone-800 flex flex-col items-center justify-center gap-1.5 apple-press transition-all backdrop-blur-md"
+ className="col-span-1 bg-stone-900 py-4 rounded-4xl border border-white/5 active:bg-stone-800 flex flex-col items-center justify-center gap-1.5 apple-press transition-all"
                     >
                         {slideState.playing ? (
                             <Pause size={20} className="text-accent" fill="currentColor" />
@@ -146,7 +146,7 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
                     <button 
                         type="button"
                         onClick={onMediaStop} 
-                        className="col-span-1 bg-stone-900/60 py-4 rounded-4xl border border-white/5 active:bg-stone-800 flex flex-col items-center justify-center gap-1.5 apple-press transition-all backdrop-blur-md text-stone-500 hover:text-red-500"
+ className="col-span-1 bg-stone-900 py-4 rounded-4xl border border-white/5 active:bg-stone-800 flex flex-col items-center justify-center gap-1.5 apple-press transition-all text-stone-500 hover:text-red-500"
                     >
                         <RotateCcw size={20} />
                         <span className="text-[9px] font-black text-stone-600 uppercase tracking-widest">{t('remote.reset')}</span>
@@ -158,7 +158,7 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
                     <button
                         type="button"
                         onClick={onShowTimeline}
-                        className="bg-stone-900/60 py-3 rounded-4xl border border-white/5 font-bold text-stone-400 active:bg-stone-800 apple-press transition-all backdrop-blur-md"
+ className="bg-stone-900 py-3 rounded-4xl border border-white/5 font-bold text-stone-400 active:bg-stone-800 apple-press transition-all"
                     >
                         {t('remote.all_slides', 'All Slides')}
                     </button>
@@ -166,7 +166,7 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
                         <button
                             type="button"
                             onClick={() => onCommand('PREV')}
-                            className="bg-stone-800/60 text-stone-300 rounded-4xl border border-white/5 font-bold active:bg-stone-700 apple-press transition-all flex flex-col items-center justify-center py-5 backdrop-blur-lg"
+ className="bg-stone-800 text-stone-300 rounded-4xl border border-white/5 font-bold active:bg-stone-700 apple-press transition-all flex flex-col items-center justify-center py-5"
                             aria-label={t('remote.previous_slide')}
                         >
                             <ChevronLeft size={42} />
@@ -175,7 +175,7 @@ export const RemoteSlides: React.FC<RemoteSlidesProps> = ({
                         <button
                             type="button"
                             onClick={() => onCommand('NEXT')}
-                            className="bg-stone-800/60 text-stone-300 rounded-4xl border border-white/5 font-bold active:bg-stone-700 apple-press transition-all flex flex-col items-center justify-center py-5 backdrop-blur-lg"
+ className="bg-stone-800 text-stone-300 rounded-4xl border border-white/5 font-bold active:bg-stone-700 apple-press transition-all flex flex-col items-center justify-center py-5"
                             aria-label={t('remote.next_slide')}
                         >
                             <ChevronRight size={42} />

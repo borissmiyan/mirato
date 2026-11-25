@@ -6,9 +6,9 @@ import {
     MousePointer2,
     MonitorOff,
     Type,
-    Presentation,
     Layers
 } from 'lucide-react';
+import { CustomSlideStackIcon } from '@/shared/ui';
 import { cn } from '@/core/utils/cn';
 
 interface ShortcutItemProps {
@@ -132,7 +132,7 @@ const ShortcutsSettings: React.FC = () => {
             {/* Navigation & Playback */}
             <CategoryHeader title={t('shortcuts_navigation', 'Navigation & Playback')} icon={MousePointer2} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                <ShortcutItem label={t('next_slide', 'Next Slide')} keys={['→', '/', '↓', '/', 'Space']} />
+                <ShortcutItem label={t('next_slide', 'Next Slide')} keys={['→', '/', '↓']} />
                 <ShortcutItem label={t('prev_slide', 'Previous Slide')} keys={['←', '/', '↑']} />
                 <ShortcutItem label={t('go_live', 'Go Live / Project')} keys={['Enter']} description={t('context_aware', 'Context Aware')} />
                 <ShortcutItem label={t('toggle_live_media', 'Play / Pause Live Media')} keys={['Space']} description={t('outside_canvas', 'Outside Canvas')} />
@@ -151,7 +151,7 @@ const ShortcutsSettings: React.FC = () => {
             </div>
 
             {/* Slide Management */}
-            <CategoryHeader title={t('shortcuts_management', 'Slide Management')} icon={Presentation} />
+            <CategoryHeader title={t('shortcuts_management', 'Slide Management')} icon={CustomSlideStackIcon} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 <ShortcutItem label={t('save', 'Save')} keys={[mod, 'S']} />
                 <ShortcutItem label={t('undo', 'Undo')} keys={[mod, 'Z']} />

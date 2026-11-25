@@ -381,7 +381,7 @@ const QuickSearchModal: React.FC<QuickSearchModalProps> = ({ isOpen, onClose }) 
                 </div>
 
                 {/* Footer Controls */}
-                <div className="p-3 bg-stone-950/80 border-t border-white/5 flex items-center justify-between backdrop-blur-sm">
+                <div className="p-3 bg-stone-950 border-t border-white/5 flex items-center justify-between">
                     <div className="flex gap-2">
                         <Kbd size="xs" className="flex items-center gap-1.5 px-2.5 py-1">
                             ESC <span className="text-stone-600 font-normal">to</span> {t('search.close', 'Close')}

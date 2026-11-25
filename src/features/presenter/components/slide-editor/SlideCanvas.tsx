@@ -1,4 +1,6 @@
 import React, { useCallback, useRef, useEffect, useState, useMemo } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '@/core/db';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
     slideEditorDragActiveAtom,
@@ -274,7 +276,14 @@ const SlideCanvas: React.FC<SlideCanvasProps> = ({ slideId, canvasItems }) => {
         }
     };
 
-    const isHymn = usePresentationStore(s => (s.selectedPresentation || s.activePresentation)?.metadata?.isHymnLibraryItem === true);
+    const canvasPres = usePresentationStore(s => s.selectedPresentation || s.activePresentation);
+    const hasHymnalId = Boolean(canvasPres?.hymnalId || canvasPres?.metadata?.isHymnLibraryItem);
+    const canvasHymnal = useLiveQuery(
+        () => (canvasPres?.hymnalId ? db.hymnals.get(canvasPres.hymnalId) : undefined),
+        [canvasPres?.hymnalId]
+    );
+    // Built-in bundled hymns are strictly read-only; custom hymnals remain editable
+    const isHymn = hasHymnalId && canvasHymnal?.isBuiltIn !== false;
     const getItemStyle = getCanvasItemStyle;
 
     return (
@@ -286,17 +295,31 @@ const SlideCanvas: React.FC<SlideCanvasProps> = ({ slideId, canvasItems }) => {
                 isHymn ? "pointer-events-none" : ((canvasTool === 'pan' || isSpaceHeld) ? (panDownRef.current ? "cursor-grabbing" : "cursor-grab") : (isDrawingTool ? "cursor-crosshair" : (canvasTool === 'text' ? "cursor-text" : "cursor-default"))),
                 isShiftDropActive && "ring-2 ring-accent ring-inset shadow-[inset_0_0_24px_rgba(var(--accent-rgb,147,51,234),0.3)] bg-accent/5 transition-all duration-150"
             )}
-            onPointerDown={onCanvasPointerDown}
-            onPointerMove={onCanvasPointerMove}
-            onPointerUp={onCanvasPointerUp}
-            onClick={handleCanvasClick}
+            onPointerDown={(e) => {
+                if (isHymn) return;
+                const active = document.activeElement;
+                if (active instanceof HTMLElement && active.closest('[data-slide-design-panel="true"]')) {
+                    active.blur();
+                }
+                onCanvasPointerDown(e);
+            }}
+            onPointerMove={isHymn ? undefined : onCanvasPointerMove}
+            onPointerUp={isHymn ? undefined : onCanvasPointerUp}
+            onClick={isHymn ? undefined : handleCanvasClick}
             onContextMenu={(e) => {
+                if (isHymn) return;
                 if (e.target === containerRef.current) {
                     e.preventDefault();
                     setContextMenuPos({ x: e.clientX, y: e.clientY });
                 }
             }}
-            onMouseEnter={() => setSlidePreviewHovered(true)}
+            onMouseEnter={() => {
+                const active = document.activeElement;
+                if (active instanceof HTMLElement && active.closest('[data-slide-design-panel="true"]')) {
+                    active.blur();
+                }
+                setSlidePreviewHovered(true);
+            }}
             onMouseLeave={() => setSlidePreviewHovered(false)}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -305,7 +328,7 @@ const SlideCanvas: React.FC<SlideCanvasProps> = ({ slideId, canvasItems }) => {
             {showGrid && <CanvasGrid />}
             {isShiftDropActive && (
                 <div className="absolute inset-x-0 bottom-4 flex justify-center pointer-events-none z-50 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-900/90 border border-accent/50 shadow-2xl backdrop-blur-md text-white text-[11px] font-semibold">
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-900 border border-accent/50 shadow-2xl text-white text-[11px] font-semibold">
                         <span className="w-2 h-2 rounded-full bg-accent animate-ping" />
                         {t('drop_as_background', 'Установить как фон слайда')}
                     </div>
@@ -348,18 +371,20 @@ const SlideCanvas: React.FC<SlideCanvasProps> = ({ slideId, canvasItems }) => {
                             key={item.id}
                             id={`item-${item.id}`}
                             className={cn(
-                                "absolute overflow-visible pointer-events-auto",
-                                (item.locked || canvasTool === 'pan') && "pointer-events-none opacity-60",
-                                isEditing && "z-50"
+                                "absolute overflow-visible",
+                                isHymn ? "pointer-events-none select-none" : "pointer-events-auto",
+                                !isHymn && (item.locked || canvasTool === 'pan') && "pointer-events-none opacity-60",
+                                !isHymn && isEditing && "z-50"
                             )}
                             style={{
-                                ...getItemStyle(item, isAutoWidth, isAutoHeight, isEditing ? 1000 : item.zIndex),
-                                cursor: item.locked ? 'default' : (isEditing ? 'text' : (canvasTool === 'text' && item.type === 'text' ? 'text' : 'default')),
+                                ...getItemStyle(item, isAutoWidth, isAutoHeight, (!isHymn && isEditing) ? 1000 : item.zIndex),
+                                cursor: (isHymn || item.locked) ? 'default' : (isEditing ? 'text' : (canvasTool === 'text' && item.type === 'text' ? 'text' : 'default')),
                             }}
-                            onPointerEnter={() => !dragActive && setHoveredItemId(item.id)}
-                            onPointerLeave={() => setHoveredItemId(prev => prev === item.id ? null : prev)}
-                            onMouseDown={(e) => handleMouseDown(e, item, 'move')}
+                            onPointerEnter={() => !isHymn && !dragActive && setHoveredItemId(item.id)}
+                            onPointerLeave={() => !isHymn && setHoveredItemId(prev => prev === item.id ? null : prev)}
+                            onMouseDown={(e) => { if (!isHymn) handleMouseDown(e, item, 'move'); }}
                             onContextMenu={(e) => {
+                                if (isHymn) return;
                                 e.preventDefault();
                                 e.stopPropagation();
                                 if (!selectedIds.includes(item.id)) {
@@ -367,18 +392,20 @@ const SlideCanvas: React.FC<SlideCanvasProps> = ({ slideId, canvasItems }) => {
                                 }
                                 setContextMenuPos({ x: e.clientX, y: e.clientY });
                             }}
-                            onDoubleClick={(e) => handleDoubleClick(e, item)}
+                            onDoubleClick={(e) => { if (!isHymn) handleDoubleClick(e, item); }}
                             onDragStart={(e) => e.preventDefault()}
                         >
-                            <CanvasSelectionFrame
-                                isSelected={isSelected}
-                                isEditing={isEditing}
-                                isHovered={!actions.isAltHeld && hoveredItemId === item.id}
-                                borderRadius={item.borderRadius}
-                                canvasScale={canvasScale}
-                                itemScale={item.scale || 1}
-                                isMultiSelected={selectedIds.length > 1 && isSelected}
-                            />
+                            {!isHymn && (
+                                <CanvasSelectionFrame
+                                    isSelected={isSelected}
+                                    isEditing={isEditing}
+                                    isHovered={!actions.isAltHeld && hoveredItemId === item.id}
+                                    borderRadius={item.borderRadius}
+                                    canvasScale={canvasScale}
+                                    itemScale={item.scale || 1}
+                                    isMultiSelected={selectedIds.length > 1 && isSelected}
+                                />
+                            )}
 
                             {/* Текст в потоке DOM (для auto-width/auto-height) или инлайн-редактор */}
                             {(item.type === 'text' || isEditing) && (

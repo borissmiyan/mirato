@@ -130,7 +130,7 @@ export const TimelineDroppableZone: React.FC<TimelineDroppableZoneProps> = ({
         >
             {(isOver || isNativeOver) && (
                 <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="bg-accent/20 backdrop-blur-md px-4 py-2 rounded-full border border-accent/30 text-accent font-bold text-xs animate-in zoom-in-95 duration-200">
+                    <div className="bg-accent/20 px-4 py-2 rounded-full border border-accent/30 text-accent font-bold text-xs animate-in zoom-in-95 duration-200">
                         Drop to Add to Timeline
                     </div>
                 </div>

@@ -1,6 +1,13 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Presentation as PresentationIcon } from 'lucide-react';
+import { MousePointerClick } from 'lucide-react';
+import {
+  CustomServiceIcon,
+  CustomSlideIcon,
+  CustomSlideStackIcon,
+  CustomHymnStackIcon,
+  CustomScriptureStackIcon,
+} from '@/shared/ui';
 import { cn } from '@/core/utils/cn';
 import { Verse, ISlide, ICanvasSlide, IVideoSlide, PresenterSettings, IBlock, ITemplate, IStyleLayer, ICanvasItem } from '@/core/types';
 import { SlideType } from '@/core/types/presentation';
@@ -30,7 +37,9 @@ interface SlideContentOrchestratorProps {
   activeVerse: Verse | null;
   parallelVerse: Verse | null;
   selectedSlide: ISlide | null;
+  hasActiveService?: boolean;
   hasActivePresentation?: boolean;
+  hasSlides?: boolean;
   showRef: boolean;
   previewFontSize: number;
   settings: PresenterSettings;
@@ -59,7 +68,9 @@ export const SlideContentOrchestrator: React.FC<SlideContentOrchestratorProps> =
   activeVerse,
   parallelVerse,
   selectedSlide,
+  hasActiveService = false,
   hasActivePresentation,
+  hasSlides = false,
   showRef,
   previewFontSize,
   settings,
@@ -78,6 +89,24 @@ export const SlideContentOrchestrator: React.FC<SlideContentOrchestratorProps> =
 }) => {
   const { t } = useTranslation();
 
+  const renderPreviewEmptyState = (label: string, icon: React.ReactNode) => (
+    <div className="h-full w-full flex flex-col items-center justify-center gap-7 bg-stone-950/85 select-none">
+      <div className="w-36 h-36 rounded-[36px] bg-stone-900/70 border border-white/[0.07] flex items-center justify-center shadow-inner">
+        <div className="relative flex items-center justify-center">
+          {icon}
+          <MousePointerClick
+            className="absolute -right-4 -bottom-3 w-12 h-12 text-accent drop-shadow-[0_3px_10px_rgba(0,0,0,0.9)] pointer-events-none"
+            fill="#141210"
+            strokeWidth={1.6}
+          />
+        </div>
+      </div>
+      <p className="text-[34px] font-medium text-stone-400 tracking-tight text-center px-16">
+        {label}
+      </p>
+    </div>
+  );
+
   const renderScriptureContent = () => {
     if (isMultiVerseMode && multiVerses && multiVerses.length >= 2) {
       return (
@@ -93,10 +122,9 @@ export const SlideContentOrchestrator: React.FC<SlideContentOrchestratorProps> =
 
     if (!activeVerse) {
       if (!isProjector) {
-        return (
-          <div className="h-full flex flex-col items-center justify-center text-stone-700 italic gap-4">
-            <p className="text-sm">{t('no_verse_selected', 'Select a verse to present')}</p>
-          </div>
+        return renderPreviewEmptyState(
+          t('no_verse_selected', 'Select a verse to present'),
+          <CustomScriptureStackIcon className="w-16 h-16 text-stone-400/75" />
         );
       }
       return null;
@@ -127,15 +155,34 @@ export const SlideContentOrchestrator: React.FC<SlideContentOrchestratorProps> =
   const renderPresentationContent = () => {
     if (!selectedSlide) {
       if (!isProjector) {
-        return (
-          <div className="h-full flex flex-col items-center justify-center text-stone-700 italic gap-4">
-            <PresentationIcon className="w-12 h-12 opacity-10" strokeWidth={1} />
-            <p className="text-sm">
-              {!hasActivePresentation 
-                ? t('select_presentation_hint', 'Select a presentation to begin') 
-                : t('select_slide_hint', 'Select a slide to preview')}
-            </p>
-          </div>
+        const iconClass = 'w-16 h-16 text-stone-400/75';
+        if (appMode === 'hymns') {
+          return renderPreviewEmptyState(
+            t('select_hymn_to_preview', 'Select a hymn to preview'),
+            <CustomHymnStackIcon className={iconClass} />
+          );
+        }
+        if (!hasActiveService) {
+          return renderPreviewEmptyState(
+            t('select_service_hint', 'Select a service'),
+            <CustomServiceIcon className={iconClass} />
+          );
+        }
+        if (!hasActivePresentation) {
+          return renderPreviewEmptyState(
+            t('select_presentation_hint', 'Select a presentation'),
+            <CustomSlideStackIcon className={iconClass} />
+          );
+        }
+        if (!hasSlides) {
+          return renderPreviewEmptyState(
+            t('create_slide_hint', 'Create a slide'),
+            <CustomSlideIcon className={iconClass} />
+          );
+        }
+        return renderPreviewEmptyState(
+          t('select_slide_hint', 'Select a slide to preview'),
+          <CustomSlideIcon className={iconClass} />
         );
       }
       return null;

@@ -22,7 +22,7 @@ export const ModalAudioScope: React.FC<ModalAudioScopeProps> = ({
 
     return (
         <div
-            className="absolute top-0 h-10 bg-purple-500/20 border border-purple-500/30 rounded-xl flex items-center px-3 overflow-hidden backdrop-blur-sm shadow-lg shadow-purple-500/5 animate-in fade-in zoom-in-95 duration-300"
+ className="absolute top-0 h-10 bg-purple-500/20 border border-purple-500/30 rounded-xl flex items-center px-3 overflow-hidden shadow-lg shadow-purple-500/5 animate-in fade-in zoom-in-95 duration-300"
             style={{ left, width, marginTop: '8px' }}
         >
             <Music className="w-3.5 h-3.5 text-purple-400 mr-2 shrink-0" />

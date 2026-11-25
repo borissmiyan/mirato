@@ -120,27 +120,17 @@ export const presentationService = {
 
   /**
    * Toggles playback (play/pause) of the active live media (video, audio, or timer).
-   * Returns true if a live media command was dispatched, false otherwise.
+   * In 'auto' mode, prioritizes an active live video/timer slide over background audio.
+   * Supports explicit targeting ('video' | 'audio' | 'all') and optional forceAction ('play' | 'pause').
    */
-  toggleLiveMedia(): boolean {
+  toggleLiveMedia(
+    target: 'auto' | 'video' | 'audio' | 'all' = 'auto',
+    forceAction?: 'play' | 'pause'
+  ): boolean {
     const { liveSlideId, activePresentation, selectedPresentation, nestedPresentationsCache } = usePresentationStore.getState();
 
-    // 1. Audio track active in AudioService
-    const activeAudioScopeId = audioService.targetScopeId;
-    if (activeAudioScopeId) {
-      const progress = audioService.getTrackProgress(activeAudioScopeId);
-      if (progress?.isPlaying) {
-        audioService.pauseTrack(activeAudioScopeId);
-        LiveSyncService.sendAudioCommand(activeAudioScopeId, 'pause');
-      } else {
-        audioService.playTrack(activeAudioScopeId);
-        LiveSyncService.sendAudioCommand(activeAudioScopeId, 'play');
-      }
-      return true;
-    }
-
-    // 2. Live slide exists
-    if (liveSlideId) {
+    const resolveLiveSlide = (): ISlide | undefined => {
+      if (!liveSlideId) return undefined;
       let liveSlide: ISlide | undefined = activePresentation?.slides.find((s) => s.id === liveSlideId);
       if (!liveSlide) {
         liveSlide = selectedPresentation?.slides.find((s) => s.id === liveSlideId);
@@ -151,49 +141,62 @@ export const presentationService = {
           if (s) { liveSlide = s; break; }
         }
       }
+      return liveSlide;
+    };
 
-      // A. Timer slide
+    const toggleAudioTrack = (): boolean => {
+      const scopeId = audioService.targetScopeId || (Array.from(audioService.activeTracks.keys())[0] as string | undefined);
+      if (!scopeId) return false;
+      const progress = audioService.getTrackProgress(scopeId);
+      const shouldPause = forceAction ? forceAction === 'pause' : Boolean(progress?.isPlaying);
+      if (shouldPause) {
+        audioService.pauseTrack(scopeId);
+        LiveSyncService.sendAudioCommand(scopeId, 'pause');
+      } else {
+        audioService.playTrack(scopeId);
+        LiveSyncService.sendAudioCommand(scopeId, 'play');
+      }
+      return true;
+    };
+
+    const toggleVideoOrTimer = (): boolean => {
+      if (!liveSlideId) return false;
+      const liveSlide = resolveLiveSlide();
+
       if (liveSlide?.type === 'timer' || (liveSlide && 'timerSettings' in liveSlide && Boolean((liveSlide as ICanvasSlide).timerSettings))) {
-        LiveSyncService.sendTimerCommand(liveSlideId, 'toggle');
+        const timerAction = forceAction === 'play' ? 'resume' : (forceAction || 'toggle');
+        LiveSyncService.sendTimerCommand(liveSlideId, timerAction);
         return true;
       }
 
-      // B. Video slide (or slide not yet resolved)
       if (liveSlide?.type === 'video' || (!liveSlide && liveSlideId)) {
-        LiveSyncService.sendVideoCommand(liveSlideId, 'toggle');
+        LiveSyncService.sendVideoCommand(liveSlideId, forceAction || 'toggle');
         return true;
       }
 
-      // C. Active tracks in AudioService
-      const firstActiveScopeId = Array.from(audioService.activeTracks.keys())[0] as string | undefined;
-      if (firstActiveScopeId) {
-        const progress = audioService.getTrackProgress(firstActiveScopeId);
-        if (progress?.isPlaying) {
-          audioService.pauseTrack(firstActiveScopeId);
-          LiveSyncService.sendAudioCommand(firstActiveScopeId, 'pause');
-        } else {
-          audioService.playTrack(firstActiveScopeId);
-          LiveSyncService.sendAudioCommand(firstActiveScopeId, 'play');
-        }
-        return true;
-      }
+      return false;
+    };
+
+    if (target === 'video') {
+      return toggleVideoOrTimer();
     }
 
-    // 3. Fallback: Any track in AudioService
-    const fallbackScopeId = Array.from(audioService.activeTracks.keys())[0] as string | undefined;
-    if (fallbackScopeId) {
-      const progress = audioService.getTrackProgress(fallbackScopeId);
-      if (progress?.isPlaying) {
-        audioService.pauseTrack(fallbackScopeId);
-        LiveSyncService.sendAudioCommand(fallbackScopeId, 'pause');
-      } else {
-        audioService.playTrack(fallbackScopeId);
-        LiveSyncService.sendAudioCommand(fallbackScopeId, 'play');
-      }
+    if (target === 'audio') {
+      return toggleAudioTrack();
+    }
+
+    if (target === 'all') {
+      const videoHandled = toggleVideoOrTimer();
+      const audioHandled = toggleAudioTrack();
+      return videoHandled || audioHandled;
+    }
+
+    // 'auto' mode: prioritize live video/timer slide on screen over background audio
+    if (toggleVideoOrTimer()) {
       return true;
     }
 
-    return false;
+    return toggleAudioTrack();
   }
 };
 

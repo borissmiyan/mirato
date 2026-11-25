@@ -9,6 +9,8 @@ import {
     showCanvasQuickActionsAtom,
 } from '@/core/store/uiAtoms';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
+import { isBuiltInHymnPresentation } from '@/features/hymns/services/hymnReadOnlyGuard';
+import { confirmSlideDeletionIfNeeded } from '@/features/presenter/utils/slideDeletionGuard';
 import { createCanvasItem } from '@/features/presenter/components/slide-properties/helpers';
 import { ShapeType, ICanvasSlide } from '@/core/types';
 import { tidyUpItems } from '@/core/utils/tidyUpUtils';
@@ -52,23 +54,30 @@ export async function executePresentationHotkeys(
     e: HotkeyEvent,
     isMod: boolean,
     isPreviewHovered: boolean,
-    selectedCanvasItemIds: string[]
+    selectedCanvasItemIds: string[],
+    isTimelineHovered = false
 ): Promise<boolean> {
     const store = getDefaultStore();
     const area = store.get(latestInteractionAreaAtom);
+    const isCanvasTarget = !isTimelineHovered && (area === 'canvas' || isPreviewHovered);
 
     const {
-        previewSlideId, selectedPresentationId, duplicateSlide, duplicateSlides,
+        previewSlideId, liveSlideId, selectedPresentationId, duplicateSlide, duplicateSlides,
         duplicateCanvasItems, duplicateAudioScope, moveSlide, moveSlides,
         removeSlide, removeSlides, removeCanvasItem, selectedSlideIds,
         selectedAudioScopeId, removeAudioScope, addCanvasItem
     } = usePresentationStore.getState();
 
+    // Built-in bundled hymns are strictly read-only — block all editing/deletion/reordering hotkeys
+    if (selectedPresentationId && await isBuiltInHymnPresentation(selectedPresentationId)) {
+        return false;
+    }
+
     // ── DUPLICATE (⌘D) ───────────────────────────────────────────
     if (isMod && !e.shiftKey && !e.altKey && (e.code === 'KeyD' || e.key.toLowerCase() === 'd')) {
         e.preventDefault?.();
 
-        if ((area === 'canvas' || isPreviewHovered) && previewSlideId && selectedCanvasItemIds.length > 0) {
+        if (isCanvasTarget && previewSlideId && selectedCanvasItemIds.length > 0) {
             const lastOffset = store.get(lastDuplicateOffsetAtom);
             const offset = lastOffset || { dx: 2, dy: 2 };
             const newIds = await duplicateCanvasItems(previewSlideId, selectedCanvasItemIds, offset);
@@ -79,7 +88,7 @@ export async function executePresentationHotkeys(
             const newId = await duplicateAudioScope(selectedAudioScopeId);
             if (newId) usePresentationStore.getState().selectAudioScope(newId);
             return true;
-        } else if (area === 'timeline' && selectedPresentationId) {
+        } else if ((isTimelineHovered || area === 'timeline') && selectedPresentationId) {
             if (selectedSlideIds.length > 0) {
                 await duplicateSlides(selectedPresentationId, selectedSlideIds);
             } else if (previewSlideId) {
@@ -303,7 +312,7 @@ export async function executePresentationHotkeys(
     // ── LAYER ORDERING (⌘[, ⌘], ⌥⌘[, ⌥⌘]) OR SLIDE NAVIGATION ────
     if (isMod && (e.key === '[' || e.code === 'BracketLeft' || e.key === ']' || e.code === 'BracketRight')) {
         const isLeft = e.key === '[' || e.code === 'BracketLeft';
-        if ((area === 'canvas' || isPreviewHovered) && previewSlideId && selectedCanvasItemIds.length > 0) {
+        if (isCanvasTarget && previewSlideId && selectedCanvasItemIds.length > 0) {
             e.preventDefault?.();
             const action = isLeft
                 ? (e.altKey || e.shiftKey ? 'back' : 'backward')
@@ -324,7 +333,7 @@ export async function executePresentationHotkeys(
 
     // ── DELETE (Del/Backspace) ───────────────────────────────────
     if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (area === 'canvas' && previewSlideId && selectedCanvasItemIds.length > 0) {
+        if (isCanvasTarget && previewSlideId && selectedCanvasItemIds.length > 0) {
             e.preventDefault?.();
             for (const id of selectedCanvasItemIds) {
                 await removeCanvasItem(previewSlideId, id);
@@ -335,24 +344,28 @@ export async function executePresentationHotkeys(
             e.preventDefault?.();
             await removeAudioScope(selectedAudioScopeId);
             return true;
-        } else if (area === 'timeline' && selectedPresentationId) {
+        } else if ((isTimelineHovered || area === 'timeline') && selectedPresentationId) {
             e.preventDefault?.();
             if (selectedSlideIds.length > 0) {
-                await removeSlides(selectedPresentationId, selectedSlideIds);
+                confirmSlideDeletionIfNeeded(selectedSlideIds, liveSlideId, () =>
+                    removeSlides(selectedPresentationId, selectedSlideIds)
+                );
             } else if (previewSlideId) {
-                await removeSlide(selectedPresentationId, previewSlideId);
+                confirmSlideDeletionIfNeeded([previewSlideId], liveSlideId, () =>
+                    removeSlide(selectedPresentationId, previewSlideId)
+                );
             }
             return true;
         }
     }
 
     // ── TOOL SWITCHING (V, H) ────────────────────────────────────
-    if (!isMod) {
-        if (e.key.toLowerCase() === 'v') {
+    if (!isMod && !e.shiftKey && !e.altKey) {
+        if (e.code === 'KeyV' || e.key.toLowerCase() === 'v') {
             e.preventDefault?.();
             store.set(canvasToolAtom, 'select');
             return true;
-        } else if (e.key.toLowerCase() === 'h') {
+        } else if (isPreviewHovered && (e.code === 'KeyH' || e.key.toLowerCase() === 'h')) {
             e.preventDefault?.();
             store.set(canvasToolAtom, 'pan');
             return true;

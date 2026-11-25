@@ -22,7 +22,7 @@ const SettingsSidebar: React.FC<SettingsSidebarProps> = ({ activeTab, setActiveT
     ];
 
     return (
-        <div className="w-72 bg-stone-950/40 backdrop-blur-xl border-r border-white/5 flex flex-col p-6 gap-6 relative overflow-hidden select-none">
+        <div className="w-72 bg-stone-950 border-r border-white/5 flex flex-col p-6 gap-6 relative overflow-hidden select-none">
             {/* Glossy Overlay */}
             <div className="absolute inset-0 bg-linear-to-b from-white/5 to-transparent pointer-events-none" />
 

@@ -1,6 +1,10 @@
 const hymns = {
     title: 'Hymns',
+    hymnals: 'Hymnals',
     search_placeholder: 'Search hymns...',
+    search_hymnals_placeholder: 'Search hymnals and languages...',
+    create_custom: 'How to create a custom hymnal',
+    import_custom: 'Add hymnal',
     select_hymnal: 'Select Hymnal',
     select_hymnal_prompt: 'Select a hymnal to browse',
     no_results: 'No results found',

@@ -76,23 +76,60 @@ export function useAppInitialization(themeAccent: string) {
                     setPreviewSlide(previewSlideId, selectedPresentationId);
                 }
 
-                // Phase 5: Hymn Library Sync
-                // Initialize built-in default theme (idempotent)
+                // Phase 5: Hymn Theme Init (fast) — full hymnal filesystem sync runs in background
+                // so importing 5,000+ bundled hymns never blocks the splash screen.
                 await hymnThemeService.initializeDefaultTheme();
-                // Sync hymnal manifests + covers from filesystem (no-op if no library dir set)
-                const { orphanScopeIds } = await hymnLibraryService.syncFileSystemHymnals();
-                
-                if (orphanScopeIds.length > 0) {
-                    toast.warning(i18n.t('hymns.sync.orphan_scopes_warning', {
-                        count: orphanScopeIds.length,
-                    }), {
-                        duration: 8000,
-                        description: i18n.t('hymns.sync.orphan_scopes_description'),
-                        action: {
-                            label: i18n.t('hymns.sync.view_orphans_btn'),
-                            onClick: () => useModalStore.getState().openModal(ModalType.ORPHAN_AUDIO_SCOPES),
+
+                // Dev-only: auto-import full 385-hymn .mrt service on Electron localhost
+                if (import.meta.env.DEV && import.meta.env.MODE !== 'test') {
+                    const fullServiceName = 'Гимны Надежды (1–385)';
+                    const pilotServiceName = 'Гимны Надежды (пилот 67–74)';
+                    const seedVersion = 'full-385-v2';
+                    const installedVersion = localStorage.getItem('dev-full-hymns-ver');
+                    const existingFull = await db.serviceFiles
+                        .filter(s => s.name === fullServiceName)
+                        .first();
+
+                    if (!existingFull || installedVersion !== seedVersion) {
+                        try {
+                            const oldPilot = await db.serviceFiles
+                                .filter(s => s.name === pilotServiceName)
+                                .first();
+                            if (oldPilot) {
+                                await db.audioScopes.where('presentationId').anyOf(oldPilot.presentationIds).delete();
+                                await db.presentationFiles.where('id').anyOf(oldPilot.presentationIds).delete();
+                                await db.serviceFiles.delete(oldPilot.id);
+                            }
+                            if (existingFull) {
+                                await db.audioScopes.where('presentationId').anyOf(existingFull.presentationIds).delete();
+                                await db.presentationFiles.where('id').anyOf(existingFull.presentationIds).delete();
+                                await db.serviceFiles.delete(existingFull.id);
+                            }
+
+                            const res = await fetch(`/__dev-hymns-full.mrt?v=${seedVersion}`);
+                            if (res.ok) {
+                                const blob = await res.blob();
+                                const { EktService } = await import('@/features/presenter/services/ektService');
+                                const pending = await EktService.prepareImport(blob, (info) => {
+                                    if (info.total > 0) {
+                                        const frac = info.current / info.total;
+                                        const pct = info.phase === 'media'
+                                            ? Math.round(70 + frac * 15)
+                                            : Math.round(85 + frac * 12);
+                                        setProgress(Math.min(98, pct));
+                                    }
+                                });
+                                const importedId = await EktService.commitImport(
+                                    pending,
+                                    pending.conflict ? 'replace' : 'create_new'
+                                );
+                                localStorage.setItem('dev-full-hymns-ver', seedVersion);
+                                await usePresentationStore.getState().setActiveService(importedId);
+                            }
+                        } catch (seedErr) {
+                            console.warn('[DevFullHymns] Failed to auto-import 1-385 .mrt service:', seedErr);
                         }
-                    });
+                    }
                 }
 
                 // Phase 6: Maintenance (Log Rotation - 30 days & Auto Disaster Recovery Backup)
@@ -101,12 +138,32 @@ export function useAppInitialization(themeAccent: string) {
                     AutoBackupService.runScheduledBackup().catch(e => console.warn('[AutoBackup] Check failed:', e));
                 });
 
-                // Final Step: Complete
+                // Final Step: Complete — enter app immediately, sync hymnals reactively in background
                 setPhase('ready');
                 setProgress(100);
-                
-                // Allow the "Ready" state to be seen slightly
-                setTimeout(() => setLoaded(true), 600);
+                setTimeout(() => setLoaded(true), 300);
+
+                // Background Hymn Library Sync (non-blocking; Dexie useLiveQuery updates UI as hymnals load)
+                hymnLibraryService.syncFileSystemHymnals()
+                    .then(({ orphanScopeIds }) => {
+                        // Pre-warm lightweight in-memory hymn index (~2-3 MB) so opening HymnPickerModal is instant
+                        import('@/features/hymns/services/hymnIndexCache')
+                            .then(({ ensureHymnIndexLoaded }) => ensureHymnIndexLoaded())
+                            .catch(() => {});
+                        if (orphanScopeIds.length > 0) {
+                            toast.warning(i18n.t('hymns.sync.orphan_scopes_warning', {
+                                count: orphanScopeIds.length,
+                            }), {
+                                duration: 8000,
+                                description: i18n.t('hymns.sync.orphan_scopes_description'),
+                                action: {
+                                    label: i18n.t('hymns.sync.view_orphans_btn'),
+                                    onClick: () => useModalStore.getState().openModal(ModalType.ORPHAN_AUDIO_SCOPES),
+                                },
+                            });
+                        }
+                    })
+                    .catch(e => console.warn('[HymnSync] Background hymnal sync failed:', e));
                 
             } catch (err) {
                 console.error('Application initialization failed:', err);

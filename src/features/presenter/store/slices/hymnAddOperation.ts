@@ -1,6 +1,8 @@
 import { db } from '@/core/db';
 import { IHymnTheme, SOURCE_THEME_ID } from '@/core/types/hymn';
-import type { ISlide, ICanvasSlide, IAudioScope } from '@/core/types';
+import type { ISlide, ICanvasSlide, IHymnSlide, IAudioScope } from '@/core/types';
+import { getOrderedHymnSlides } from '@/features/hymns/services/hymnMigrationUtils';
+import { buildHymnalAudioFileId } from '@/features/hymns/services/hymnalAudioCatalog';
 import { toast } from '@/core/utils/toast';
 import i18n from '@/core/i18n';
 import { PresentationState } from '../types';
@@ -8,15 +10,32 @@ import { PresentationState } from '../types';
 type GetFn = () => PresentationState;
 type SetFn = (partial: Partial<PresentationState> | ((state: PresentationState) => Partial<PresentationState>)) => void;
 
+export interface AddHymnOptions {
+    includeAudio?: boolean;
+    audioStrategy?: 'auto' | 'manual' | 'delay';
+    /** Audio track variant ('minus' = instrumental, 'plus' = with vocals). */
+    audioVariant?: 'minus' | 'plus';
+    /**
+     * - 'nested-hymn': inserts a single master-presentation slide pointing directly to the hymnal library presentation
+     *   with the selected themeId (zero duplicate presentations in service library, identical UX to nested presentations).
+     * - 'reference': inserts flat read-only IHymnSlide refs.
+     * - 'snapshot' (legacy default): creates a cloned presentation snapshot.
+     */
+    mode?: 'nested-hymn' | 'reference' | 'snapshot';
+}
+
 /**
- * Adds a hymn presentation as a nested snapshot into the active presentation.
+ * Adds a hymn into the active presentation timeline.
+ * - mode: 'reference' -> read-only IHymnSlide reference slides (respecting includeAudio, detach/copy on demand to edit).
+ * - mode: 'snapshot' (default for legacy callers) -> nested snapshot presentation slide.
  */
 export async function performAddHymnToActivePresentation(
     get: GetFn,
-    set: SetFn,
+    _set: SetFn,
     hymnPresentationId: string,
     themeId: string = 'default',
-    index?: number
+    index?: number,
+    options?: AddHymnOptions
 ): Promise<void> {
     const { activePresentationId, activePresentation, activeServiceId, selectedSlideIds } = get();
     if (!activePresentationId || !activePresentation) {
@@ -29,7 +48,90 @@ export async function performAddHymnToActivePresentation(
 
     await get().takeSnapshot(activePresentationId);
 
+    const includeAudio = options?.includeAudio ?? true;
+    const currentSlides = activePresentation.slides || [];
+    let targetIndex = index;
+    if (targetIndex === undefined && selectedSlideIds.length > 0) {
+        const lastSelectedIndex = currentSlides.findIndex(s => s.id === selectedSlideIds[selectedSlideIds.length - 1]);
+        if (lastSelectedIndex !== -1) {
+            targetIndex = lastSelectedIndex + 1;
+        }
+    }
+    if (targetIndex === undefined || targetIndex < 0 || targetIndex > currentSlides.length) {
+        targetIndex = currentSlides.length;
+    }
+
     try {
+        // Nested library hymn mode: 1-to-1 nested presentation UI, sourced directly from hymnal library with chosen theme
+        if (options?.mode === 'nested-hymn') {
+            const newSlide: ISlide & { masterPresentationId?: string; linkedPresentationId?: string; isExpanded?: boolean; lastSyncedAt?: string } = {
+                id: crypto.randomUUID(),
+                type: 'normal',
+                order: 0,
+                blockId: 'master-presentation',
+                templateId: 'default',
+                content: {
+                    variables: {
+                        title: hymnPres.name,
+                        hymnThemeId: themeId || 'default',
+                        hymnIncludeAudio: includeAudio ? 1 : 0,
+                        hymnAudioStrategy: options?.audioStrategy ?? 'auto',
+                        hymnAudioVariant: options?.audioVariant ?? 'minus',
+                    }
+                },
+                masterPresentationId: hymnPresentationId,
+                linkedPresentationId: hymnPresentationId,
+                lastSyncedAt: hymnPres.updatedAt ? new Date(hymnPres.updatedAt).toISOString() : new Date().toISOString(),
+                isExpanded: true,
+            };
+
+            const updatedSlides = [
+                ...currentSlides.slice(0, targetIndex),
+                newSlide,
+                ...currentSlides.slice(targetIndex),
+            ].map((slide, idx) => ({ ...slide, order: idx }));
+
+            await get().updatePresentationSlides(activePresentationId, updatedSlides);
+            get().setSelectedSlideIds([newSlide.id]);
+            await get().setPreviewSlide(newSlide.id, activePresentationId);
+            return;
+        }
+
+        // Read-only reference mode (flat IHymnSlide refs)
+        if (options?.mode === 'reference') {
+            const orderedSlides = getOrderedHymnSlides(hymnPres);
+            if (orderedSlides.length === 0) return;
+
+            const referenceSlides: IHymnSlide[] = orderedSlides.map((sourceSlide, idx) => ({
+                id: crypto.randomUUID(),
+                type: 'hymn',
+                order: idx,
+                blockId: 'default',
+                templateId: '',
+                hymnPresentationId,
+                sourceSlideId: sourceSlide.id,
+                themeId: themeId || 'default',
+                includeAudio,
+                audioStrategy: options?.audioStrategy ?? 'auto',
+                audioVariant: options?.audioVariant ?? 'minus',
+                duration: 0,
+                transition: { type: 'none', duration: 0.5 },
+            }));
+
+            const updatedSlides = [
+                ...currentSlides.slice(0, targetIndex),
+                ...referenceSlides,
+                ...currentSlides.slice(targetIndex),
+            ].map((slide, idx) => ({ ...slide, order: idx }));
+
+            await get().updatePresentationSlides(activePresentationId, updatedSlides);
+            const firstNewId = referenceSlides[0].id;
+            get().setSelectedSlideIds([firstNewId]);
+            get().setPreviewSlide(firstNewId, activePresentationId);
+            return;
+        }
+
+        // Legacy snapshot mode
         const { materializeTheme } = await import('@/features/hymns/services/hymnThemeMaterializer');
         const { DEFAULT_HYMN_THEME } = await import('@/features/hymns/services/hymnThemeConstants');
 
@@ -40,8 +142,9 @@ export async function performAddHymnToActivePresentation(
                 : (await db.hymnThemes.filter(t => !!t.isDefault).first()) || DEFAULT_HYMN_THEME;
         }
 
+        const orderedSourceSlides = getOrderedHymnSlides(hymnPres);
         const slideIdMap = new Map<string, string>();
-        const processedSlides = (hymnPres.slides || []).map((s, i) => {
+        const processedSlides = orderedSourceSlides.map((s, i) => {
             const newId = crypto.randomUUID();
             slideIdMap.set(s.id, newId);
             if (theme && s.type === 'normal') {
@@ -73,7 +176,27 @@ export async function performAddHymnToActivePresentation(
         });
         await get().updatePresentationSlides(snapshotPresId, processedSlides);
 
-        await copyHymnAudioScopes(hymnPres, hymnPresentationId, snapshotPresId, slideIdMap, processedSlides);
+        if (includeAudio) {
+            const copiedCount = await copyHymnAudioScopes(hymnPres, hymnPresentationId, snapshotPresId, slideIdMap, processedSlides);
+            // If no explicit DB audio scopes existed, attach the downloaded hymnal audio pack track
+            if (copiedCount === 0 && hymnPres.hymnalId && typeof hymnPres.metadata?.hymnOrder === 'number' && processedSlides.length > 0) {
+                const variant = options?.audioVariant === 'plus' ? 'plus' : 'minus';
+                const packScope: IAudioScope = {
+                    id: crypto.randomUUID(),
+                    presentationId: snapshotPresId,
+                    fileId: buildHymnalAudioFileId(hymnPres.hymnalId, hymnPres.metadata.hymnOrder, variant),
+                    fileName: `${hymnPres.name} (${variant === 'plus' ? '+' : '-'}).ogg`,
+                    startSlideId: processedSlides[0].id,
+                    endSlideId: processedSlides[processedSlides.length - 1].id,
+                    volume: 1,
+                    loop: false,
+                    strategy: options?.audioStrategy ?? 'auto',
+                    audioVariant: variant,
+                };
+                await db.audioScopes.put(packScope);
+                await db.presentationFiles.update(snapshotPresId, { audioScopes: [packScope] });
+            }
+        }
 
         const newSlide: ISlide & { masterPresentationId?: string; linkedPresentationId?: string; isExpanded?: boolean; lastSyncedAt?: string } = {
             id: crypto.randomUUID(),
@@ -87,18 +210,6 @@ export async function performAddHymnToActivePresentation(
             lastSyncedAt: hymnPres.updatedAt ? new Date(hymnPres.updatedAt).toISOString() : new Date().toISOString(),
             isExpanded: true
         };
-
-        const currentSlides = activePresentation.slides || [];
-        let targetIndex = index;
-        if (targetIndex === undefined && selectedSlideIds.length > 0) {
-            const lastSelectedIndex = currentSlides.findIndex(s => s.id === selectedSlideIds[selectedSlideIds.length - 1]);
-            if (lastSelectedIndex !== -1) {
-                targetIndex = lastSelectedIndex + 1;
-            }
-        }
-        if (targetIndex === undefined || targetIndex < 0 || targetIndex > currentSlides.length) {
-            targetIndex = currentSlides.length;
-        }
 
         const updatedSlides = [
             ...currentSlides.slice(0, targetIndex),
@@ -120,7 +231,7 @@ async function copyHymnAudioScopes(
     snapshotPresId: string,
     slideIdMap: Map<string, string>,
     processedSlides: ISlide[]
-): Promise<void> {
+): Promise<number> {
     const sourceDbScopes = await db.audioScopes.where('presentationId').equals(hymnPresId).toArray();
     const sourceScopes = [...sourceDbScopes, ...(hymnPres.audioScopes || [])];
 
@@ -162,5 +273,5 @@ async function copyHymnAudioScopes(
     if (createdScopes.length > 0) {
         await db.presentationFiles.update(snapshotPresId, { audioScopes: createdScopes });
     }
+    return createdScopes.length;
 }
-

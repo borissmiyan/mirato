@@ -40,7 +40,7 @@ export const VersePreviews: React.FC<VersePreviewsProps> = ({
                 <div className="absolute bottom-6 left-6 z-40">
                     <button
                         onClick={handleSelectPrev}
-                        className="bg-stone-900/90 border border-white/10 px-4 py-3 rounded-xl backdrop-blur-xl shadow-2xl hover:border-accent/50 transition-all text-left group animate-in slide-in-from-bottom-4 duration-500 flex flex-col gap-1 @md:w-72 @md:h-32 @md:p-4 @md:rounded-2xl"
+ className="bg-stone-900 border border-white/10 px-4 py-3 rounded-xl shadow-2xl hover:border-accent/50 transition-all text-left group animate-in slide-in-from-bottom-4 duration-500 flex flex-col gap-1 @md:w-72 @md:h-32 @md:p-4 @md:rounded-2xl"
                     >
                         <div className="flex items-center justify-between w-full">
                             <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest leading-none whitespace-nowrap">
@@ -62,7 +62,7 @@ export const VersePreviews: React.FC<VersePreviewsProps> = ({
                 <div className="absolute bottom-6 right-6 z-40">
                     <button
                         onClick={handleSelectNext}
-                        className="bg-stone-900/90 border border-white/10 px-4 py-3 rounded-xl backdrop-blur-xl shadow-2xl hover:border-amber-500/50 transition-all text-left group animate-in slide-in-from-bottom-4 duration-500 flex flex-col gap-1 @md:w-72 @md:h-32 @md:p-4 @md:rounded-2xl"
+ className="bg-stone-900 border border-white/10 px-4 py-3 rounded-xl shadow-2xl hover:border-amber-500/50 transition-all text-left group animate-in slide-in-from-bottom-4 duration-500 flex flex-col gap-1 @md:w-72 @md:h-32 @md:p-4 @md:rounded-2xl"
                     >
                         <div className="flex items-center justify-between w-full">
                             <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest leading-none whitespace-nowrap">

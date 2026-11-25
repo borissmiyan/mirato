@@ -6,6 +6,7 @@ import { IMediaItem, IMediaBin, MediaType, MediaColorTag } from '@/core/types';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { useShallow } from 'zustand/react/shallow';
 import { getLocalResourceUrl } from '@/core/hooks/useMediaUrl';
+import { mediaCache } from '@/core/utils/mediaCache';
 
 // Hooks
 import { useMediaPoolData, MediaSortOrder } from '../../hooks/useMediaPoolData';
@@ -25,7 +26,7 @@ import { MediaPoolGridView, MediaPoolListView, MediaPoolTreeView, MediaViewMode 
  * Orchestrates media browsing, importing, organization, and playback.
  * Supports Grid, List, and Tree List view modes with Apple HIG design standards.
  */
-export const MediaPoolPanel: React.FC = () => {
+export const MediaPoolPanel: React.FC = React.memo(() => {
     const { t } = useTranslation();
     const { openModal } = useModalStore(useShallow(s => ({ openModal: s.openModal })));
     
@@ -219,7 +220,7 @@ export const MediaPoolPanel: React.FC = () => {
     }, [selectedIds, visibleItems]);
 
     // Audio preview toggle (videos are strictly previewed in Quick Look)
-    const togglePlayback = useCallback((e: React.MouseEvent, item: IMediaItem) => {
+    const togglePlayback = useCallback(async (e: React.MouseEvent, item: IMediaItem) => {
         e.stopPropagation();
         if (item.type !== 'audio') return;
 
@@ -232,7 +233,12 @@ export const MediaPoolPanel: React.FC = () => {
             }
 
             setPlayingItemId(item.id);
-            const url = getLocalResourceUrl(item.path);
+            const isDiskPath = Boolean(
+                item.path && (item.path.startsWith('/') || item.path.includes(':\\') || item.path.startsWith('local-resource:'))
+            );
+            const url = isDiskPath
+                ? getLocalResourceUrl(item.path)
+                : await mediaCache.getBackgroundUrl(item.id);
             if (url && scrubAudioRef.current) {
                 if (scrubAudioRef.current.src !== url) {
                     scrubAudioRef.current.src = url;
@@ -458,4 +464,6 @@ export const MediaPoolPanel: React.FC = () => {
             />
         </div>
     );
-};
+});
+
+MediaPoolPanel.displayName = 'MediaPoolPanel';

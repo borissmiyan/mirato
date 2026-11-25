@@ -37,7 +37,7 @@ const TimerAudioClip: React.FC<TimerAudioClipProps> = ({ slide, x, width }) => {
             style={{ left: x, width }}
         >
             <div className={cn(
-                "relative w-full h-full rounded-xl bg-orange-500/10 border-2 border-orange-500/20 flex flex-col justify-end p-2 overflow-hidden backdrop-blur-sm transition-all hover:bg-orange-500/15 hover:border-orange-500/30"
+"relative w-full h-full rounded-xl bg-orange-500/10 border-2 border-orange-500/20 flex flex-col justify-end p-2 overflow-hidden transition-all hover:bg-orange-500/15 hover:border-orange-500/30"
             )}>
                 {/* Badge with count */}
                 <div className="absolute top-1 right-1 px-1.5 py-0.5 rounded-xl bg-orange-500/20 border border-orange-500/20 text-[8px] font-black text-orange-400 uppercase tracking-widest flex items-center gap-1 z-20">

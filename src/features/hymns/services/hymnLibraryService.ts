@@ -6,8 +6,12 @@ import { materializeTheme } from './hymnThemeMaterializer';
 import { CanvasService } from '@/features/presenter/services/CanvasService';
 import { buildSlidePositionMap, getOrderedHymnSlides } from './hymnMigrationUtils';
 import { hymnCustomManagement, OrphanedSlidesResult } from './hymnCustomManagement';
+import { importHymnsInBatches, HymnImportTask } from './hymnBatchImporter';
+import { invalidateHymnIndexCache } from './hymnIndexCache';
 
 export type { OrphanedSlidesResult };
+
+let activeSyncPromise: Promise<{ orphanScopeIds: string[] }> | null = null;
 
 /**
  * Service for managing hymnals, synchronizing with the file system,
@@ -128,39 +132,41 @@ export const hymnLibraryService = {
                     await db.presentationFiles.update(pres.id, { slides: updatedSlides as ISlide[] });
                 }
 
-                // --- Step 3: Migrate IAudioScope entries ---
+                // --- Step 3: Softly migrate or replace IAudioScope entries without conflict modals ---
                 const scopesToMigrate = await db.audioScopes
                     .where('presentationId')
                     .equals(oldPresentationId)
                     .toArray();
 
-                for (const scope of scopesToMigrate) {
-                    const newStartSlideId = slidePositionMap.get(scope.startSlideId);
-                    const newEndSlideId = slidePositionMap.get(scope.endSlideId);
+                const newDbScopesCount = await db.audioScopes
+                    .where('presentationId')
+                    .equals(newPresentationId)
+                    .count();
+                const newHasOwnScopes = newDbScopesCount > 0 || (newPresentation.audioScopes?.length ?? 0) > 0;
+                const newOrderedSlides = getOrderedHymnSlides(newPresentation);
+                const fallbackStartId = newOrderedSlides[0]?.id;
+                const fallbackEndId = newOrderedSlides[newOrderedSlides.length - 1]?.id;
 
-                    if (newStartSlideId === undefined || newEndSlideId === undefined) {
-                        // One or both boundaries are out-of-range in the new version.
-                        // We do NOT auto-migrate with a wide fallback — that would silently
-                        // extend the audio range in a way the operator never intended.
-                        // The scope remains bound to oldPresentationId (tightly inactive for
-                        // the new presentationId), which is the safest failure mode.
-                        // Phase 4.2 will surface this in the UI.
-                        console.warn(
-                            `[HymnMigration] AudioScope "${scope.id}" has unmappable boundaries ` +
-                            `(startSlideId: ${scope.startSlideId} → ${newStartSlideId}, ` +
-                            `endSlideId: ${scope.endSlideId} → ${newEndSlideId}). ` +
-                            `Leaving scope as-is. Requires manual review.`,
-                        );
-                        await db.audioScopes.update(scope.id, { needsManualReview: true });
-                        newlyOrphanedScopeIds.push(scope.id);
+                for (const scope of scopesToMigrate) {
+                    // If the updated .mrtp already carries its own fresh audioScopes, silently drop the legacy scope
+                    if (newHasOwnScopes) {
+                        await db.audioScopes.delete(scope.id);
                         continue;
                     }
 
-                    await db.audioScopes.update(scope.id, {
-                        presentationId: newPresentationId,
-                        startSlideId: newStartSlideId,
-                        endSlideId: newEndSlideId,
-                    });
+                    const newStartSlideId = slidePositionMap.get(scope.startSlideId) ?? fallbackStartId;
+                    const newEndSlideId = slidePositionMap.get(scope.endSlideId) ?? fallbackEndId;
+
+                    if (newStartSlideId && newEndSlideId) {
+                        await db.audioScopes.update(scope.id, {
+                            presentationId: newPresentationId,
+                            startSlideId: newStartSlideId,
+                            endSlideId: newEndSlideId,
+                            needsManualReview: false,
+                        });
+                    } else {
+                        await db.audioScopes.delete(scope.id);
+                    }
                 }
 
                 // --- Step 4: Clean up old presentation if no longer referenced ---
@@ -200,6 +206,14 @@ export const hymnLibraryService = {
      * When a stableHymnId is renamed (via previousStableIds), runs full link migration.
      */
     async syncFileSystemHymnals(): Promise<{ orphanScopeIds: string[] }> {
+        if (activeSyncPromise) return activeSyncPromise;
+        activeSyncPromise = this._performSyncFileSystemHymnals().finally(() => {
+            activeSyncPromise = null;
+        });
+        return activeSyncPromise;
+    },
+
+    async _performSyncFileSystemHymnals(): Promise<{ orphanScopeIds: string[] }> {
         const electron = window.electron;
         const hymnsApi = electron?.ipcRenderer?.hymns;
         if (!hymnsApi) return { orphanScopeIds: [] }; // Not in Electron context
@@ -235,9 +249,6 @@ export const hymnLibraryService = {
 
         const newlyOrphanedScopeIds: string[] = [];
 
-        // Lazy-import EktpService to avoid circular dep at module load time
-        const { EktpService } = await import('@/features/presenter/services/ektpService');
-
         // Pre-upsert deduplication: Group directories by manifest ID before writing to Dexie.
         // Guarantees isBundled = true entries take precedence over seeded userData duplicates.
         const hymnalMap = new Map<string, { dir: typeof hymnalDirs[number]; manifest: IHymnalManifest; coverImageUrl: string | null }>();
@@ -247,8 +258,23 @@ export const hymnLibraryService = {
 
             const coverImageUrl: string | null = await hymnsApi.readCover(dir.path);
             const existing = hymnalMap.get(manifest.id);
-            if (!existing || (!existing.dir.isBundled && dir.isBundled)) {
+            const existingVer = existing?.manifest.manifestVersion ?? 0;
+            const incomingVer = manifest.manifestVersion ?? 0;
+            const isFresher =
+                !existing ||
+                (!existing.dir.isBundled && dir.isBundled) ||
+                incomingVer > existingVer ||
+                (incomingVer === existingVer && manifest.hymns.length > existing.manifest.hymns.length);
+            if (isFresher) {
                 hymnalMap.set(manifest.id, { dir, manifest, coverImageUrl });
+            }
+        }
+
+        // Remove stale built-in hymnal records in Dexie that no longer exist on disk (prevents duplicate entries)
+        const existingDbHymnals = await db.hymnals.toArray();
+        for (const dbH of existingDbHymnals) {
+            if (dbH.isBuiltIn && !hymnalMap.has(dbH.id)) {
+                await db.hymnals.delete(dbH.id);
             }
         }
 
@@ -265,6 +291,7 @@ export const hymnLibraryService = {
                 itemCount: manifest.hymns.length,
                 coverImageUrl: coverImageUrl ?? undefined,
                 isBuiltIn: dir.isBundled ?? false,
+                isDisabled: existingHymnal?.isDisabled,
                 customDirName: dir.isBundled ? undefined : dir.path.split(/[\\/]/).pop(),
                 defaultThemeId: manifest.defaultThemeId,
                 thematicIndex: manifest.thematicIndex,
@@ -287,9 +314,12 @@ export const hymnLibraryService = {
             const syncedVersion: number = hymnal.syncedManifestVersion ?? -1;
 
             // needsContentSync is a per-hymnal flag for version bump detection.
-            // Per-hymn needsReimport (below) is gated further by mtime changes.
+            // Bundled hymnals with manifestVersion > 0 rely solely on versionBumped (no mtime churn).
             const versionBumped = incomingManifestVersion > syncedVersion;
-            const mtimeChanged = newMtimeHash !== undefined && newMtimeHash !== hymnal.syncedMtimeHash;
+            const mtimeChanged =
+                !(dir.isBundled && incomingManifestVersion > 0) &&
+                newMtimeHash !== undefined &&
+                newMtimeHash !== hymnal.syncedMtimeHash;
             const hymnalNeedsCheck = versionBumped || mtimeChanged;
 
             // Pre-load the stableIdMap entries for this hymnal
@@ -299,99 +329,91 @@ export const hymnLibraryService = {
                 .toArray();
             const stableIdMapByStableId = new Map(existingMaps.map((m) => [m.stableId, m]));
 
-            // Import each hymn's .ektp file into presentationFiles.
+            // Fast O(1) skip for unchanged hymnals already fully synced into Dexie
+            if (!hymnalNeedsCheck && existingMaps.length >= manifest.hymns.length) {
+                const existingPresCount = await db.presentationFiles
+                    .where('hymnalId')
+                    .equals(hymnal.id)
+                    .count();
+                if (existingPresCount >= manifest.hymns.length) {
+                    continue;
+                }
+            }
+
+            // Pre-load existing presentation IDs for this hymnal in one query (avoids 5,000+ sequential gets)
+            const existingPresIds = new Set(
+                await db.presentationFiles.where('hymnalId').equals(hymnal.id).primaryKeys()
+            );
+
+            // Collect only hymns that actually need importing/updating
+            const importTasks: HymnImportTask[] = [];
             for (const h of manifest.hymns) {
                 const filename: string = h.file;
                 if (!filename) continue;
 
                 const hymnNumber: number = h.hymnNumber || h.number || 0;
-                const hymnTitle: string = h.title || filename.replace('.ektp', '');
-                const stableId: string = h.stableHymnId || h.id || filename.replace('.ektp', '');
+                const hymnTitle: string = h.title || filename.replace(/\.(mrtp|ektp)$/i, '');
+                const stableId: string = h.stableHymnId || h.id || filename.replace(/\.(mrtp|ektp)$/i, '');
                 const previousStableIds: string[] = h.previousStableIds ?? [];
 
-                // Check if this stableId was previously known under a different name.
-                // If so, we need to find the old presentationId so we can migrate refs.
                 let oldPresentationId: string | undefined;
                 for (const oldStableId of previousStableIds) {
                     const oldEntry = stableIdMapByStableId.get(oldStableId);
                     if (oldEntry?.presentationId) {
                         oldPresentationId = oldEntry.presentationId;
-                        break; // Use the first match found
+                        break;
                     }
                 }
 
                 const existingEntry = stableIdMapByStableId.get(stableId);
-
-                // Determine if we need to unpack this specific hymn's .ektp.
-                // We must unpack if:
-                //   a) No existing map entry exists (first import)
-                //   b) The stableId was renamed (previousStableIds matched) — we need new presentationId
-                //   c) The hymnal's version or mtime changed (content may have been updated)
-                const existingPresentation = existingEntry?.presentationId
-                    ? await db.presentationFiles.get(existingEntry.presentationId)
-                    : undefined;
+                const hasExistingPresentation = Boolean(
+                    existingEntry?.presentationId && existingPresIds.has(existingEntry.presentationId)
+                );
 
                 const needsReimport =
                     oldPresentationId != null || // ID was renamed
-                    !existingPresentation ||       // No DB record yet
-                    hymnalNeedsCheck;              // Version/mtime bump — content may have changed
+                    !hasExistingPresentation ||  // No DB record yet
+                    hymnalNeedsCheck;            // Version/mtime bump — content may have changed
 
                 if (!needsReimport) continue;
 
-                // Read raw binary from disk via IPC
-                const buffer = await hymnsApi.readEktp(dir.path, filename);
-                if (!buffer) continue;
-
-                // Convert Node.js Buffer → Uint8Array → Blob
-                const uint8 = new Uint8Array(buffer);
-                const blob = new Blob([uint8], { type: 'application/octet-stream' });
-
-                let newPresentationId: string;
-                try {
-                    // EktpService.unpack handles deduplication by ektpHash automatically.
-                    // If content is unchanged, it returns the SAME presentationId → migration is a no-op.
-                    newPresentationId = await EktpService.unpack(blob, 0, new Set());
-                } catch (e) {
-                    console.error(`Failed to import hymn ektp "${filename}":`, e);
-                    continue;
-                }
-
-                // If oldPresentationId is set from previousStableIds, we need to remove
-                // that old entry from the map atomically inside migrateHymnReferences.
-                // We handle that by deleting it here before the migration transaction starts.
-                // Note: this delete is outside the transaction deliberately — if migration
-                // fails, the old stableId record is gone, but oldPresentationId is still in DB.
-                // The syncedManifestVersion will NOT be updated (see below), so the next launch
-                // will detect that migration is still needed via hymnalNeedsCheck.
-                if (oldPresentationId != null) {
-                    for (const oldStableId of previousStableIds) {
-                        await db.hymnStableIdMap.delete(oldStableId);
-                    }
-                }
-
-                // Run reference migration if the presentation actually changed (different ID after unpack)
-                const effectiveOldId = oldPresentationId ?? existingEntry?.presentationId;
-                if (effectiveOldId && effectiveOldId !== newPresentationId) {
-                    const orphaned = await this.migrateHymnReferences(effectiveOldId, newPresentationId);
-                    newlyOrphanedScopeIds.push(...orphaned);
-                }
-
-                // Mark as hymn library item and link to this hymnal
-                const hymnName = `${hymnNumber} — ${hymnTitle}`;
-                await db.presentationFiles.update(newPresentationId, {
-                    name: hymnName,
-                    hymnalId: hymnal.id,
-                    isMaster: false,
-                    tags: [`hymnStableId:${stableId}`],
-                    metadata: {
-                        isHymnLibraryItem: true,
-                        hymnTitle,
-                        hymnOrder: hymnNumber,
-                    },
+                importTasks.push({
+                    entry: h,
+                    filename,
+                    hymnNumber,
+                    hymnTitle,
+                    stableId,
+                    previousStableIds,
+                    oldPresentationId,
+                    existingPresentationId: existingEntry?.presentationId,
                 });
+            }
 
-                // Upsert stableIdMap for the new stableId → newPresentationId
-                await db.hymnStableIdMap.put({ stableId, hymnalId: hymnal.id, presentationId: newPresentationId });
+            if (importTasks.length > 0) {
+                const batchOrphans = await importHymnsInBatches(importTasks, {
+                    hymnal,
+                    dirPath: dir.path,
+                    migrateReferences: (oldId, newId) => this.migrateHymnReferences(oldId, newId),
+                });
+                newlyOrphanedScopeIds.push(...batchOrphans);
+                invalidateHymnIndexCache();
+            }
+
+            // Prune any duplicate/orphaned presentationFiles for this hymnal not referenced by hymnStableIdMap
+            const validMaps = await db.hymnStableIdMap.where('hymnalId').equals(hymnal.id).toArray();
+            const validPresIds = new Set(validMaps.map(m => m.presentationId));
+            const allHymnalPres = await db.presentationFiles.where('hymnalId').equals(hymnal.id).toArray();
+            for (const p of allHymnalPres) {
+                if (!validPresIds.has(p.id)) {
+                    await db.audioScopes.where('presentationId').equals(p.id).delete().catch(() => {});
+                    await db.presentationFiles.delete(p.id).catch(() => {});
+                }
+            }
+
+            // Silently clean up any leftover needsManualReview scopes from older versions
+            const staleReviewScopes = await db.audioScopes.filter(s => s.needsManualReview === true).toArray();
+            for (const s of staleReviewScopes) {
+                await db.audioScopes.delete(s.id).catch(() => {});
             }
 
             // Update the commit-flag fields AFTER all hymns in this hymnal are processed.
@@ -428,6 +450,8 @@ export const hymnLibraryService = {
         skipAudioConfirmation = false,
         precomputedOrphans?: OrphanedSlidesResult,
     ): Promise<boolean> {
-        return hymnCustomManagement.removeCustomHymnal(hymnal, skipAudioConfirmation, precomputedOrphans);
+        const removed = await hymnCustomManagement.removeCustomHymnal(hymnal, skipAudioConfirmation, precomputedOrphans);
+        if (removed) invalidateHymnIndexCache();
+        return removed;
     }
 };

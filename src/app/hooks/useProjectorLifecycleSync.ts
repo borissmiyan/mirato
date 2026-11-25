@@ -52,63 +52,99 @@ export function useProjectorLifecycleSync({
 
     useEffect(() => {
         if (!IpcService.isElectron()) return;
-        const unsub = IpcService.on('projector-ready', (p?: { ratio: number }) => {
+        const unsub = IpcService.on('projector-ready', (p?: { ratio: number; isResize?: boolean }) => {
             if (p?.ratio) usePresenterStore.getState().updateDisplay({ aspectRatio: p.ratio });
+            // Window resize on projector only updates aspect ratio; never re-send slides or restart video
+            if (p?.isResize) return;
             IpcService.send('projector-command', 'update-theme', themeAccent);
             LiveSyncService.syncSettings(usePresenterStore.getState().settings);
             setProjectorOpen(true);
 
-            setTimeout(() => {
-                LiveSyncService.showAppMode(appMode === 'hymns' ? 'hymns' : (appMode === 'scripture' ? 'scripture' : 'presentation'));
-                LiveSyncService.setOverride(activeOverride, activeOverride === 'logo' ? activeLogo : null);
+            // Send initial state immediately (0ms delay) so the slide renders on the very first frame
+            LiveSyncService.showAppMode(appMode === 'hymns' ? 'hymns' : (appMode === 'scripture' ? 'scripture' : 'presentation'));
+            LiveSyncService.setOverride(activeOverride, activeOverride === 'logo' ? activeLogo : null);
 
-                if (appMode === 'scripture') {
-                    const bibleState = useBibleStore.getState();
-                    if (bibleState.isMultiVerseMode && bibleState.selectedVerses.length >= 2) {
-                        LiveSyncService.showMultiVerses(bibleState.selectedVerses, bibleState.secondTranslationId);
-                    } else if (bibleState.activeVerse) {
-                        LiveSyncService.showVerse(bibleState.activeVerse, bibleState.secondTranslationId);
-                    }
-                } else {
-                    const presStore = usePresentationStore.getState();
-                    let targetSlideId = presStore.liveSlideId || presStore.previewSlideId;
-                    let pres = presStore.selectedPresentation || presStore.activePresentation;
+            if (appMode === 'scripture') {
+                const bibleState = useBibleStore.getState();
+                if (bibleState.isMultiVerseMode && bibleState.selectedVerses.length >= 2) {
+                    LiveSyncService.showMultiVerses(bibleState.selectedVerses, bibleState.secondTranslationId);
+                } else if (bibleState.activeVerse) {
+                    LiveSyncService.showVerse(bibleState.activeVerse, bibleState.secondTranslationId);
+                }
+            } else {
+                const presStore = usePresentationStore.getState();
+                let targetSlideId = presStore.liveSlideId || presStore.previewSlideId;
 
-                    if (!targetSlideId && presStore.activePresentationId) {
-                        db.presentationFiles.get(presStore.activePresentationId).then(dbPres => {
-                            if (dbPres?.slides?.length) {
-                                targetSlideId = dbPres.slides[0].id;
-                                pres = dbPres;
-                                LiveSyncService.showSlide(
-                                    dbPres.slides[0],
-                                    pres?.id,
-                                    presStore.activePresentationId || undefined,
-                                    presStore.liveNavigationParentSlideId || null
-                                );
-                            }
-                        });
-                        return;
-                    }
-
-                    if (targetSlideId) {
-                        let slide = pres?.slides?.find(s => s.id === targetSlideId);
-                        if (!slide) {
-                            for (const p of Object.values(presStore.nestedPresentationsCache)) {
-                                const s = p.slides?.find((sl) => sl.id === targetSlideId);
-                                if (s) { slide = s; break; }
-                            }
-                        }
-                        if (slide) {
+                if (!targetSlideId && presStore.activePresentationId) {
+                    db.presentationFiles.get(presStore.activePresentationId).then(dbPres => {
+                        if (dbPres?.slides?.length) {
                             LiveSyncService.showSlide(
-                                slide,
-                                pres?.id,
+                                dbPres.slides[0],
+                                dbPres.id,
                                 presStore.activePresentationId || undefined,
                                 presStore.liveNavigationParentSlideId || null
                             );
                         }
+                    });
+                    return;
+                }
+
+                if (targetSlideId) {
+                    let slide = presStore.selectedPresentation?.slides?.find(s => s.id === targetSlideId);
+                    let resolvedPresId = slide ? presStore.selectedPresentation?.id : undefined;
+
+                    if (!slide) {
+                        slide = presStore.activePresentation?.slides?.find(s => s.id === targetSlideId);
+                        if (slide) resolvedPresId = presStore.activePresentation?.id;
+                    }
+                    if (!slide && presStore.liveNavigationParentSlideId) {
+                        const parentCached = presStore.nestedPresentationsCache[presStore.liveNavigationParentSlideId];
+                        const s = parentCached?.slides?.find((sl) => sl.id === targetSlideId);
+                        if (s && parentCached) {
+                            slide = s;
+                            resolvedPresId = parentCached.id;
+                        }
+                    }
+                    if (!slide) {
+                        for (const p of Object.values(presStore.nestedPresentationsCache)) {
+                            const s = p.slides?.find((sl) => sl.id === targetSlideId);
+                            if (s) {
+                                slide = s;
+                                resolvedPresId = p.id;
+                                break;
+                            }
+                        }
+                    }
+                    if (slide) {
+                        // Never project a master-presentation / nested container shell; unwrap to its first child slide
+                        let resolvedParentId = presStore.liveNavigationParentSlideId || null;
+                        const isContainerShell = slide.blockId === 'master-presentation'
+                            || slide.type === 'nested'
+                            || (slide.type === 'normal' && Boolean((slide as { masterPresentationId?: string }).masterPresentationId));
+                        if (isContainerShell) {
+                            const containerId = slide.id;
+                            const masterPresId = slide.type === 'normal'
+                                ? (slide as { masterPresentationId?: string }).masterPresentationId
+                                : (slide.type === 'nested' ? (slide as { presentationId?: string }).presentationId : undefined);
+                            const cachedNested = presStore.nestedPresentationsCache[containerId]
+                                || (masterPresId ? presStore.nestedPresentationsCache[masterPresId] : undefined);
+                            if (cachedNested?.slides?.length) {
+                                slide = cachedNested.slides[0];
+                                resolvedPresId = cachedNested.id;
+                                resolvedParentId = containerId;
+                            } else {
+                                return;
+                            }
+                        }
+                        LiveSyncService.showSlide(
+                            slide,
+                            resolvedPresId,
+                            presStore.activePresentationId || undefined,
+                            resolvedParentId
+                        );
                     }
                 }
-            }, 100);
+            }
         });
 
         const unsubClosed = IpcService.on('projector-closed', () => {

@@ -60,12 +60,21 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
   const [localPlaying, setLocalPlaying] = useState(false);
   const [localCurrentTime, setLocalCurrentTime] = useState(0);
   const [localDuration, setLocalDuration] = useState(0);
+  const [localPreviewMuted, setLocalPreviewMuted] = useState<boolean>(Boolean(settings.muted));
+  const [localPreviewVolume, setLocalPreviewVolume] = useState<number>(settings.volume ?? 1);
+
+  useEffect(() => {
+    setLocalPreviewMuted(Boolean(settings.muted));
+    setLocalPreviewVolume(settings.volume ?? 1);
+  }, [settings.muted, settings.volume, slideId]);
 
   // Projector-side overrides: when the toolbar sends volume/mute/speed
   // commands via IPC, we store them here so the hook's fade calculation
   // uses the actual commanded values instead of the stale prop settings.
   const [projectorOverrides, setProjectorOverrides] = useState<Partial<typeof settings>>({});
-  const effectiveSettings = isPreview ? settings : { ...settings, ...projectorOverrides };
+  const effectiveSettings = isPreview
+    ? { ...settings, muted: localPreviewMuted, volume: localPreviewVolume }
+    : { ...settings, ...projectorOverrides };
 
   const { videoRef, state, actions } = useVideoPlayback({
     settings: effectiveSettings,
@@ -73,6 +82,7 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
     isLive,
     isPreloading,
     slideId,
+    videoUrl,
     isRemote,
     isMuted,
   });
@@ -433,11 +443,16 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
                 <div className="flex items-center gap-4">
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); actions.setVolume(settings.muted ? settings.volume : 0); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const nextMuted = !localPreviewMuted;
+                      setLocalPreviewMuted(nextMuted);
+                      actions.setMuted(nextMuted);
+                    }}
                     className="w-16 h-16 flex items-center justify-center rounded-2xl text-stone-400 hover:text-stone-100 hover:bg-white/5 transition-all apple-press cursor-pointer"
-                    aria-label={settings.muted ? t('unmute', 'Unmute') : t('mute', 'Mute')}
+                    aria-label={localPreviewMuted ? t('unmute', 'Unmute') : t('mute', 'Mute')}
                   >
-                    {settings.muted || settings.volume === 0 ? <VolumeX className="w-8 h-8 text-red-400" /> : <Volume2 className="w-8 h-8" />}
+                    {localPreviewMuted || localPreviewVolume === 0 ? <VolumeX className="w-8 h-8 text-red-400" /> : <Volume2 className="w-8 h-8" />}
                   </button>
                   {/* audit-ignore: event propagation boundary */}
                   <div className="w-32" onClick={(e) => e.stopPropagation()}>
@@ -446,8 +461,15 @@ const VideoSlideRenderer: React.FC<VideoSlideRendererProps> = ({
                       min={0}
                       max={1}
                       step={0.01}
-                      value={settings.muted ? 0 : settings.volume}
-                      onChange={(val) => actions.setVolume(val)}
+                      value={localPreviewMuted ? 0 : localPreviewVolume}
+                      onChange={(val) => {
+                        setLocalPreviewVolume(val);
+                        if (val > 0 && localPreviewMuted) {
+                          setLocalPreviewMuted(false);
+                          actions.setMuted(false);
+                        }
+                        actions.setVolume(val);
+                      }}
                     />
                   </div>
                 </div>

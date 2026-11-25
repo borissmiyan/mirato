@@ -6,7 +6,9 @@ import { usePresentationStore } from '@/features/presenter/store/presentationSto
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { useShallow } from 'zustand/react/shallow';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Monitor, Music, Coins, Baby, Mic2, Megaphone, Plus, Presentation, LayoutTemplate, Layers, Layout, type LucideIcon, Trash2 } from 'lucide-react';
+import { BookOpen, Monitor, Music, Coins, Baby, Mic2, Megaphone, Plus, LayoutTemplate, Layers, Layout, Trash2 } from 'lucide-react';
+import { CustomSlideStackIcon } from '@/shared/ui/SlideIcons';
+import { ScrollArea } from '@/shared/ui';
 import { toast } from 'sonner';
 import { cn } from '@/core/utils/cn';
 import { themeAccentAtom, devModeAtom } from '@/core/store/uiAtoms';
@@ -32,8 +34,8 @@ import { LibraryContextMenu, LibraryContextMenuData } from './LibraryContextMenu
 import { LibraryHeader } from './LibraryHeader';
 import { useLibraryInteraction } from '../../hooks/useLibraryInteraction';
 
-const ICON_MAP: Record<string, LucideIcon> = {
-    Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus, Presentation, Layers, Layout
+const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
+    Monitor, Music, Coins, Baby, Mic2, Megaphone, BookOpen, Plus, Presentation: CustomSlideStackIcon, Layers, Layout
 };
 
 const EMPTY_PRESENTATIONS: IPresentationFile[] = [];
@@ -234,7 +236,7 @@ const PresentationLibrary: React.FC<IPresentationLibraryProps> = ({ className })
     const currentNav = templateNavPath[templateNavPath.length - 1];
 
     return (
-        <div className={cn("h-full flex flex-col bg-stone-900/80 backdrop-blur-xl border-r border-white/5 @container", className)}>
+        <div className={cn("h-full flex flex-col bg-stone-900 border-r border-white/5 @container", className)}>
             <LibraryHeader
                 graceLibSection={graceLibSection}
                 templateNavPath={templateNavPath}
@@ -247,12 +249,12 @@ const PresentationLibrary: React.FC<IPresentationLibraryProps> = ({ className })
                 handleImportClick={handleImportClick}
             />
 
-            <div className="flex-1 overflow-y-auto no-scrollbar p-3">
+            <ScrollArea className="p-3">
                 {!graceLibSection ? (
                     <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
                         <div className="w-full max-w-sm p-8 rounded-3xl bg-stone-950/20 border border-white/5 flex flex-col items-center gap-4 group transition-all hover:bg-stone-950/30">
                             <div className="w-16 h-16 rounded-2xl bg-stone-800/50 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
-                                <Layers className="w-8 h-8 text-stone-500 opacity-40 group-hover:text-accent group-hover:opacity-100 transition-all" />
+                                <CustomSlideStackIcon className="w-8 h-8 text-stone-500 opacity-40 group-hover:text-accent group-hover:opacity-100 transition-all" />
                             </div>
                             <div className="space-y-1">
                                 <h3 className="text-sm font-bold text-stone-300 uppercase tracking-widest">{t('empty_library', 'Empty Selection')}</h3>
@@ -325,7 +327,7 @@ const PresentationLibrary: React.FC<IPresentationLibraryProps> = ({ className })
                         )}
                     </>
                 )}
-            </div>
+            </ScrollArea>
 
             <div className="shrink-0 p-3 border-t border-white/5 bg-stone-950/60 relative z-30">
                 <PresentationSelector />

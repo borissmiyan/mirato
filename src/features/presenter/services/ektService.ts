@@ -5,6 +5,13 @@ import { EktpService } from './ektpService';
 import { sha256, collectMediaRefs, mimeToExt, extToMime, getMediaBlob } from './mediaPackingUtils';
 import { ThumbnailService } from './ThumbnailService';
 import { APP_VERSION, EKT_SCHEMA_VERSION } from '@/core/constants';
+import { isPresentationFilename, stripMiratoExtension, toMiratoFilename, yieldToMain } from '@/core/utils/fileExtensions';
+
+export interface EktProgressInfo {
+    phase: 'media' | 'presentations' | 'finalizing';
+    current: number;
+    total: number;
+}
 
 // ------------------------------------------------------------------ //
 // Types
@@ -48,7 +55,7 @@ export const EktService = {
     // EXPORT
     // ---------------------------------------------------------------- //
 
-    async pack(serviceId: string): Promise<Blob> {
+    async pack(serviceId: string, onProgress?: (info: EktProgressInfo) => void): Promise<Blob> {
         const service = await db.serviceFiles.get(serviceId);
         if (!service) throw new Error(`Service ${serviceId} not found`);
 
@@ -59,8 +66,12 @@ export const EktService = {
         // Единый хеш-сет — медиа не дублируется между презентациями
         const globalHashSet = new Set<string>();
         const manifest_media: EktMediaManifest = {};
+        const totalPres = service.presentationIds.length;
+        // For large services (100+ presentations), skip per-presentation canvas thumbnail baking to avoid RAM spikes
+        const skipPerPresThumbnails = totalPres >= 100;
 
-        // 1. Упаковать каждую презентацию через EktpService.pack()
+        // 1. Упаковать каждую презентацию через EktpService.pack() с регулярной отдачей event loop
+        let packedCount = 0;
         for (const presId of service.presentationIds) {
             const pres = await db.presentationFiles.get(presId);
             if (!pres) continue;
@@ -70,28 +81,43 @@ export const EktService = {
             Object.assign(manifest_media, manifest);
 
             const filename = presId === service.masterPresentationId
-                ? 'master.ektp'
-                : `${presId}.ektp`;
+                ? 'master.mrtp'
+                : `${presId}.mrtp`;
             presFolder.file(filename, ektpBlob, { compression: 'STORE' });
 
-            // Превью
-            const thumbBlob = await ThumbnailService.generate(presId);
-            if (thumbBlob) {
-                previewsFolder.file(`${presId}.png`, thumbBlob);
-                if (presId === service.masterPresentationId) {
-                    zip.file('preview.png', thumbBlob);
+            // Превью (для 100+ презентаций генерируем только master preview.png)
+            if (!skipPerPresThumbnails || presId === service.masterPresentationId) {
+                const thumbBlob = await ThumbnailService.generate(presId);
+                if (thumbBlob) {
+                    previewsFolder.file(`${presId}.png`, thumbBlob);
+                    if (presId === service.masterPresentationId) {
+                        zip.file('preview.png', thumbBlob);
+                    }
                 }
+            }
+
+            packedCount++;
+            onProgress?.({ phase: 'presentations', current: packedCount, total: totalPres });
+            if (packedCount % 5 === 0) {
+                await yieldToMain();
             }
         }
 
         // 2. Hoist all referenced media blobs to root media/ folder.
         // During EktpService.pack with globalHashSet, media is only bundled in the FIRST
-        // .ektp that references it. We hoist here so prepareImport can pre-load everything.
+        // .mrtp that references it. We hoist here so prepareImport can pre-load everything.
         const mediaFolder = zip.folder('media')!;
-        for (const [hash, meta] of Object.entries(manifest_media)) {
+        const mediaEntries = Object.entries(manifest_media);
+        let mediaCount = 0;
+        for (const [hash, meta] of mediaEntries) {
             const media = await getMediaBlob(hash);
             if (media) {
                 mediaFolder.file(meta.filename, media.blob, { compression: 'STORE' });
+            }
+            mediaCount++;
+            onProgress?.({ phase: 'media', current: mediaCount, total: mediaEntries.length });
+            if (mediaCount % 8 === 0) {
+                await yieldToMain();
             }
         }
 
@@ -137,7 +163,7 @@ export const EktService = {
     // IMPORT — Фаза 1: медиа + презентации, service ещё не создан
     // ---------------------------------------------------------------- //
 
-    async prepareImport(blob: Blob | File): Promise<EktImportPending> {
+    async prepareImport(blob: Blob | File, onProgress?: (info: EktProgressInfo) => void): Promise<EktImportPending> {
         let zip: JSZip;
         try {
             zip = await JSZip.loadAsync(blob);
@@ -160,16 +186,20 @@ export const EktService = {
         const mediaFiles = Object.keys(zip.files).filter(
             p => p.startsWith('media/') && !zip.files[p].dir
         );
+        let importedMedia = 0;
         for (const path of mediaFiles) {
             const hashExt  = path.split('/').pop()!;
             const hash     = hashExt.split('.')[0];
             const meta     = manifest_media[hash];
-            const data     = await zip.file(path)!.async('blob');
-            const mimeType = meta?.mimeType ?? extToMime(hashExt);
-
             const alreadyBg    = await db.backgrounds.get(hash);
             const alreadyPool  = await db.mediaPool.get(hash);
-            if (alreadyBg && alreadyPool) continue;
+            if (alreadyBg && alreadyPool) {
+                importedMedia++;
+                continue;
+            }
+
+            const data     = await zip.file(path)!.async('blob');
+            const mimeType = meta?.mimeType ?? extToMime(hashExt);
 
             const mediaName = meta?.originalName ?? hash;
             const mediaCategory = mimeType.startsWith('audio/') ? 'audio'
@@ -210,20 +240,34 @@ export const EktService = {
                     });
                 }
             }
+
+            importedMedia++;
+            onProgress?.({ phase: 'media', current: importedMedia, total: mediaFiles.length });
+            if (importedMedia % 8 === 0) {
+                await yieldToMain();
+            }
         }
 
         // Шаг 2: импортировать каждую презентацию через EktpService.unpack()
-        // Nested рекурсивно обрабатываются внутри, дедупликация по ektpHash
+        // Поддерживаются оба расширения (.mrtp и legacy .ektp).
+        // Сортируем так, чтобы master.* распаковывался ПОСЛЕДНИМ — тогда все дочерние презентации
+        // уже есть в кеше по ektpHash и не распаковываются повторно (критично для 100+ презентаций).
         const oldToNewPresId = new Map<string, string>();
 
-        const presFiles = Object.keys(zip.files).filter(
-            p => p.startsWith('presentations/') && p.endsWith('.ektp')
-        );
+        const presFiles = Object.keys(zip.files)
+            .filter(p => p.startsWith('presentations/') && isPresentationFilename(p))
+            .sort((a, b) => {
+                const aMaster = stripMiratoExtension(a.split('/').pop() || '') === 'master' ? 1 : 0;
+                const bMaster = stripMiratoExtension(b.split('/').pop() || '') === 'master' ? 1 : 0;
+                return aMaster - bMaster;
+            });
+
+        let importedPres = 0;
         for (const path of presFiles) {
             const ektpBlob = await zip.file(path)!.async('blob');
             const newPresId = await EktpService.unpack(ektpBlob);
 
-            const filename = path.split('/').pop()!.replace('.ektp', '');
+            const filename = stripMiratoExtension(path.split('/').pop() || '');
             const oldId = filename === 'master'
                 ? service.masterPresentationId
                 : filename;
@@ -239,6 +283,12 @@ export const EktService = {
                     reader.readAsDataURL(previewBlob);
                 });
                 await db.presentationFiles.update(newPresId, { thumbnailUrl });
+            }
+
+            importedPres++;
+            onProgress?.({ phase: 'presentations', current: importedPres, total: presFiles.length });
+            if (importedPres % 4 === 0) {
+                await yieldToMain();
             }
         }
 
@@ -317,12 +367,23 @@ export const EktService = {
             await db.serviceFiles.add(_newService);
         }
 
-        // Привязать все импортированные презентации к финальному service
-        for (const presId of newPresentationIds) {
-            await db.presentationFiles.update(presId, {
-                serviceId: finalServiceId,
-                isMaster: presId === newMasterPresId,
+        // Привязать все импортированные презентации к финальному service в единой транзакции (быстро для 100+ презентаций)
+        if (typeof db.transaction === 'function') {
+            await db.transaction('rw', db.presentationFiles, async () => {
+                for (const presId of newPresentationIds) {
+                    await db.presentationFiles.update(presId, {
+                        serviceId: finalServiceId,
+                        isMaster: presId === newMasterPresId,
+                    });
+                }
             });
+        } else {
+            for (const presId of newPresentationIds) {
+                await db.presentationFiles.update(presId, {
+                    serviceId: finalServiceId,
+                    isMaster: presId === newMasterPresId,
+                });
+            }
         }
 
         return finalServiceId;
@@ -332,7 +393,7 @@ export const EktService = {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = filename.endsWith('.ekt') ? filename : `${filename}.ekt`;
+        a.download = toMiratoFilename(filename, 'service');
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

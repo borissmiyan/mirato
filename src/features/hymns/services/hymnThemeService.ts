@@ -4,9 +4,9 @@ import { IStyleLayer } from '@/core/types/style';
 import { IHymnSlide, IPresentationFile, ISlide } from '@/core/types';
 import { remoteSyncService } from '@/core/services/remoteSyncService';
 import i18n from '@/core/i18n';
-import { DEFAULT_HYMN_THEME_ID, DEFAULT_HYMN_THEME } from './hymnThemeConstants';
+import { DEFAULT_HYMN_THEME_ID, DEFAULT_HYMN_THEME, BUILT_IN_HYMN_THEMES } from './hymnThemeConstants';
 
-export { DEFAULT_HYMN_THEME_ID, DEFAULT_HYMN_THEME, SOURCE_THEME_ID };
+export { DEFAULT_HYMN_THEME_ID, DEFAULT_HYMN_THEME, BUILT_IN_HYMN_THEMES, SOURCE_THEME_ID };
 
 export const hymnThemeService = {
     async initializeDefaultTheme() {
@@ -21,6 +21,17 @@ export const hymnThemeService = {
                 },
                 background: DEFAULT_HYMN_THEME.background
             });
+        }
+
+        // Idempotently seed/refresh built-in themes without touching user-created themes or DEFAULT_HYMN_THEME
+        for (const builtIn of BUILT_IN_HYMN_THEMES) {
+            if (builtIn.id === DEFAULT_HYMN_THEME_ID) continue;
+            const existing = await db.hymnThemes.get(builtIn.id);
+            if (!existing) {
+                await db.hymnThemes.add(builtIn);
+            } else if (existing.isBuiltIn && existing.updatedAt !== builtIn.updatedAt) {
+                await db.hymnThemes.put(builtIn);
+            }
         }
     },
 

@@ -32,7 +32,7 @@ export const TranslationLabelPicker: React.FC = () => {
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-both">
             {/* ─── Visibility Toggle ─── */}
-            <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
+            <div className="bg-[#1c1917] border border-white/5 rounded-3xl p-6 shadow-xl relative overflow-hidden group">
                 <div className="flex items-center justify-between relative z-10">
                     <div className="flex items-center gap-3">
                         <div className={cn(
@@ -61,7 +61,7 @@ export const TranslationLabelPicker: React.FC = () => {
                 !translationLabel.enabled && "opacity-40 pointer-events-none grayscale blur-[1px]"
             )}>
                 {/* Typography & Color */}
-                <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-3xl p-6 space-y-6 shadow-xl">
+                <div className="bg-[#1c1917] border border-white/5 rounded-3xl p-6 space-y-6 shadow-xl">
                     <div className="flex items-center gap-3 px-1">
                         <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
                             <Type className="w-4 h-4 text-stone-500" />
@@ -119,7 +119,7 @@ export const TranslationLabelPicker: React.FC = () => {
                 </div>
 
                 {/* Appearance Block */}
-                <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-3xl p-6 space-y-6 shadow-xl">
+                <div className="bg-[#1c1917] border border-white/5 rounded-3xl p-6 space-y-6 shadow-xl">
                     <div className="flex items-center gap-3 px-1">
                         <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/10">
                             <Palette className="w-4 h-4 text-stone-500" />

@@ -27,7 +27,7 @@ export const CanvasSafeZones: React.FC = React.memo(() => {
                     height: '95%',
                 }}
             >
-                <span className="absolute top-1 left-1.5 px-1 py-0.5 rounded text-[8px] font-sans tabular-nums font-bold tracking-wider uppercase bg-black/70 text-stone-400 border border-white/10 shadow-sm backdrop-blur-xs">
+                <span className="absolute top-1 left-1.5 px-1 py-0.5 rounded text-[8px] font-sans tabular-nums font-bold tracking-wider uppercase bg-stone-950 text-stone-400 border border-white/10 shadow-sm">
                     {t('safe_zone_action', 'Action Safe 95%')}
                 </span>
             </div>
@@ -42,7 +42,7 @@ export const CanvasSafeZones: React.FC = React.memo(() => {
                     height: '90%',
                 }}
             >
-                <span className="absolute bottom-1 right-1.5 px-1 py-0.5 rounded text-[8px] font-sans tabular-nums font-bold tracking-wider uppercase bg-black/80 text-accent border border-accent/40 shadow-sm backdrop-blur-xs">
+                <span className="absolute bottom-1 right-1.5 px-1 py-0.5 rounded text-[8px] font-sans tabular-nums font-bold tracking-wider uppercase bg-stone-950 text-accent border border-accent/40 shadow-sm">
                     {t('safe_zone_title', 'Title Safe 90%')}
                 </span>
             </div>

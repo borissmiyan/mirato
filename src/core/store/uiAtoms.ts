@@ -5,8 +5,8 @@ import { AppMode, ILogo, IHymnal, ICanvasStyleSnapshot, ICustomGuide } from '../
 export const fontPreviewFamilyAtom = atom(null as string | null) as PrimitiveAtom<string | null>;
 export const fontPreviewWeightAtom = atom(null as string | null) as PrimitiveAtom<string | null>;
 
-// App state
-export const appModeAtom = atom<AppMode>('scripture');
+// App state (persisted across restarts with synchronous init to prevent mode flicker)
+export const appModeAtom = atomWithStorage<AppMode>('app-mode', 'scripture', undefined, { getOnInit: true });
 export const hymnModalReturnStateAtom = atom<{
     isOpen: boolean;
     activeHymnalId: string | null;

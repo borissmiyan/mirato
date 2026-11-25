@@ -1,12 +1,14 @@
-import React, { useRef } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Music } from 'lucide-react';
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { cn } from '@/core/utils/cn';
-import DropdownSelector, { DropdownOption } from '@/shared/ui/DropdownSelector';
-import SearchInput from '@/shared/ui/SearchInput';
-import IconButton from '@/shared/ui/IconButton';
-import Badge from '@/shared/ui/Badge';
+import { IHymnal } from '@/core/types/hymn';
+import {
+    VirtualList,
+    CustomHymnalIcon,
+    CustomSlideStackIcon,
+    NavigationSelectorCard,
+} from '@/shared/ui';
+import HymnalPickerModal from '@/features/hymns/components/HymnalPicker';
 
 export interface HymnRowItem {
     id: string;
@@ -19,175 +21,193 @@ export interface HymnRowItem {
     verseCount: number;
 }
 
-export interface HymnPickerSidebarProps {
+export interface HymnPickerListProps {
     selectedHymnalId: string;
-    onSelectHymnalId: (val: string) => void;
-    hymnalOptions: DropdownOption[];
     searchQuery: string;
-    onSearchQueryChange: (val: string) => void;
     filteredHymns: HymnRowItem[];
     selectedHymnPresId: string | null;
     onSelectHymn: (presentationId: string) => void;
-    onClose: () => void;
 }
 
+export interface HymnPickerFooterProps {
+    hymnals: IHymnal[];
+    selectedHymnalId: string;
+    onSelectHymnalId: (val: string) => void;
+    onPickerOpenChange?: (isOpen: boolean) => void;
+}
+
+const formatHymnCount = (count: number, language?: string): string => {
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    const word = mod10 === 1 && mod100 !== 11
+        ? 'гимн'
+        : (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
+            ? 'гимна'
+            : 'гимнов';
+    return language ? `${count} ${word} • ${language.toUpperCase()}` : `${count.toLocaleString('ru-RU')} ${word}`;
+};
+
 /**
- * Sidebar component for filtering and selecting hymns within HymnPickerModal with virtual scrolling.
+ * Virtualized hymn list rendered inside PickerModalShell's sidebarBody.
  */
-export const HymnPickerSidebar: React.FC<HymnPickerSidebarProps> = ({
+export const HymnPickerList: React.FC<HymnPickerListProps> = ({
     selectedHymnalId,
-    onSelectHymnalId,
-    hymnalOptions,
     searchQuery,
-    onSearchQueryChange,
     filteredHymns,
     selectedHymnPresId,
     onSelectHymn,
-    onClose,
 }) => {
     const { t } = useTranslation();
-    const parentRef = useRef<HTMLDivElement>(null);
+    const isAllSelected = !selectedHymnalId || selectedHymnalId === 'ALL';
 
-    const rowVirtualizer = useVirtualizer({
-        count: filteredHymns.length,
-        getScrollElement: () => parentRef.current,
-        estimateSize: () => 64,
-        overscan: 5,
-    });
+    const getHymnKey = useCallback((h: HymnRowItem) => h.id, []);
+
+    const renderHymn = useCallback((h: HymnRowItem) => {
+        const isSelected = selectedHymnPresId === h.presentationId;
+        return (
+            <button
+                type="button"
+                onClick={() => onSelectHymn(h.presentationId)}
+                className={cn(
+                    "w-full h-[54px] flex items-center gap-2.5 text-left px-2.5 rounded-xl border transition-colors duration-150 group relative shrink-0 cursor-pointer",
+                    isSelected
+                        ? "bg-stone-800 border-stone-600 text-stone-100"
+                        : "bg-[#1f1c1a] border-stone-800/90 hover:bg-[#262320] hover:border-stone-700"
+                )}
+            >
+                <div
+                    className={cn(
+                        "min-w-[44px] h-7 px-2 rounded-lg flex items-center justify-center shrink-0 font-mono font-bold text-[11px] border tabular-nums transition-colors whitespace-nowrap",
+                        isSelected
+                            ? "bg-accent text-stone-950 border-accent"
+                            : "bg-stone-950 text-stone-300 border-stone-800 group-hover:text-white"
+                    )}
+                >
+                    {h.number}
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p
+                        className={cn(
+                            "text-[13px] font-semibold truncate leading-snug transition-colors",
+                            isSelected ? "text-stone-100" : "text-stone-300 group-hover:text-white"
+                        )}
+                    >
+                        {h.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-0.5 text-[10px] text-stone-500 min-w-0">
+                        {isAllSelected && h.hymnalName && (
+                            <span className="truncate max-w-[140px] text-stone-400/80 font-medium">
+                                {h.hymnalName}
+                            </span>
+                        )}
+                        {h.matchSnippet ? (
+                            <span className="text-accent/90 italic truncate">
+                                {h.matchSnippet}
+                            </span>
+                        ) : (
+                            <span className="inline-flex items-center gap-1 shrink-0 tabular-nums text-stone-400/75">
+                                <CustomSlideStackIcon className="w-3 h-3 opacity-70 shrink-0" />
+                                <span>{h.verseCount}</span>
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </button>
+        );
+    }, [selectedHymnPresId, isAllSelected, onSelectHymn]);
 
     return (
-        <div className="w-96 shrink-0 border-r border-white/5 bg-stone-900/50 flex flex-col z-20">
-            {/* Header with Hymnal Picker & Search */}
-            <div className="p-6 border-b border-white/5 flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <Music className="w-5 h-5 text-accent" />
-                        <h2 className="text-sm font-black text-white uppercase tracking-widest">
-                            {t('add_hymn_slide', 'Вставить гимн')}
-                        </h2>
-                    </div>
-                    <IconButton
-                        icon={<X className="w-4 h-4" />}
-                        onClick={onClose}
-                        variant="subtle"
-                        size="sm"
-                        label={t('close', 'Close')}
-                    />
+        <VirtualList
+            items={filteredHymns}
+            getItemKey={getHymnKey}
+            renderItem={renderHymn}
+            itemHeight={60}
+            gap={6}
+            overscan={14}
+            resetKey={`${selectedHymnalId}:${searchQuery}`}
+            className="px-3 py-2.5"
+            emptyState={
+                <div className="text-center py-16 flex flex-col items-center justify-center gap-3 text-stone-500">
+                    <CustomHymnalIcon className="w-8 h-8 opacity-20" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">
+                        {t('no_results', 'Ничего не найдено')}
+                    </span>
                 </div>
-
-                {/* Hymnal Selector */}
-                <DropdownSelector
-                    value={selectedHymnalId}
-                    options={hymnalOptions}
-                    onChange={onSelectHymnalId}
-                    placeholder={t('select_hymnal', 'Выберите сборник')}
-                />
-
-                {/* Search Input */}
-                <SearchInput
-                    value={searchQuery}
-                    onChange={(e) => onSearchQueryChange(e.target.value)}
-                    placeholder={t('search_hymns_placeholder', 'Поиск по номеру, названию или словам...')}
-                    autoFocus
-                />
-            </div>
-
-            {/* Hymns List */}
-            <div ref={parentRef} className="flex-1 overflow-y-auto p-3 custom-scrollbar">
-                {filteredHymns.length > 0 ? (
-                    <div
-                        style={{
-                            height: `${rowVirtualizer.getTotalSize()}px`,
-                            width: '100%',
-                            position: 'relative',
-                        }}
-                    >
-                        {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-                            const h = filteredHymns[virtualRow.index];
-                            if (!h) return null;
-                            const isSelected = selectedHymnPresId === h.presentationId;
-
-                            return (
-                                <div
-                                    key={h.id}
-                                    data-index={virtualRow.index}
-                                    ref={rowVirtualizer.measureElement}
-                                    style={{
-                                        position: 'absolute',
-                                        top: 0,
-                                        left: 0,
-                                        width: '100%',
-                                        transform: `translateY(${virtualRow.start}px)`,
-                                        paddingBottom: '6px',
-                                    }}
-                                >
-                                    <button
-                                        type="button"
-                                        onClick={() => onSelectHymn(h.presentationId)}
-                                        className={cn(
-                                            "w-full flex items-center gap-3 text-left p-3 rounded-xl border transition-all duration-200 group relative shrink-0 cursor-pointer apple-press",
-                                            isSelected
-                                                ? "bg-accent/15 border-accent/40 shadow-[0_0_20px_rgba(234,179,8,0.15)] ring-1 ring-accent/30"
-                                                : "bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/10"
-                                        )}
-                                    >
-                                        {/* Number Badge */}
-                                        <div
-                                            className={cn(
-                                                "w-[58px] h-9 rounded-xl flex items-center justify-center shrink-0 font-black text-xs border transition-colors whitespace-nowrap",
-                                                isSelected
-                                                    ? "bg-accent text-black border-accent-hover shadow-md shadow-accent/20"
-                                                    : "bg-black/40 text-stone-300 border-white/10 group-hover:border-white/20 group-hover:text-white"
-                                            )}
-                                        >
-                                            № {h.number}
-                                        </div>
-
-                                        {/* Title, hymnal tag & snippet */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                                <p
-                                                    className={cn(
-                                                        "text-xs font-bold truncate transition-colors",
-                                                        isSelected ? "text-white" : "text-stone-300 group-hover:text-white"
-                                                    )}
-                                                >
-                                                    {h.title}
-                                                </p>
-                                            </div>
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                {selectedHymnalId === 'ALL' && h.hymnalName && (
-                                                    <Badge variant="neutral" size="sm" className="truncate max-w-[120px]">
-                                                        {h.hymnalName}
-                                                    </Badge>
-                                                )}
-                                                {h.matchSnippet ? (
-                                                    <p className="text-[10px] text-accent/90 italic truncate">
-                                                        {h.matchSnippet}
-                                                    </p>
-                                                ) : (
-                                                    <p className="text-[9px] font-bold text-stone-500 uppercase tracking-widest">
-                                                        {t('slides_count', { count: h.verseCount, defaultValue: `${h.verseCount} слайдов` })}
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                ) : (
-                    <div className="text-center py-16 flex flex-col items-center justify-center gap-3 text-stone-500">
-                        <Music className="w-8 h-8 opacity-20" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">
-                            {t('no_results', 'Ничего не найдено')}
-                        </span>
-                    </div>
-                )}
-            </div>
-        </div>
+            }
+        />
     );
 };
 
-export default HymnPickerSidebar;
+/**
+ * Unified hymnal selector card pinned to PickerModalShell's sidebarFooter.
+ */
+export const HymnPickerFooter: React.FC<HymnPickerFooterProps> = ({
+    hymnals,
+    selectedHymnalId,
+    onSelectHymnalId,
+    onPickerOpenChange,
+}) => {
+    const { t } = useTranslation();
+    const [isPickerOpen, setIsPickerOpen] = useState(false);
+    const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
+
+    const isAllSelected = !selectedHymnalId || selectedHymnalId === 'ALL';
+    const activeHymnal = useMemo(
+        () => (isAllSelected ? null : hymnals.find((h) => h.id === selectedHymnalId) ?? null),
+        [isAllSelected, hymnals, selectedHymnalId]
+    );
+    const totalHymnsCount = useMemo(
+        () => hymnals.reduce((sum, h) => sum + (h.itemCount || 0), 0),
+        [hymnals]
+    );
+
+    const setOpen = (next: boolean) => {
+        setIsPickerOpen(next);
+        onPickerOpenChange?.(next);
+    };
+
+    const handleTogglePicker = () => {
+        if (!isPickerOpen && triggerRef.current) {
+            setTriggerRect(triggerRef.current.getBoundingClientRect());
+        }
+        setOpen(!isPickerOpen);
+    };
+
+    return (
+        <>
+            <NavigationSelectorCard
+                ref={triggerRef}
+                onClick={handleTogglePicker}
+                title={
+                    isAllSelected
+                        ? t('all_hymnals', 'Все сборники')
+                        : (activeHymnal?.name || t('hymns.select_hymnal', 'Выбрать сборник'))
+                }
+                subtitle={
+                    isAllSelected
+                        ? formatHymnCount(totalHymnsCount)
+                        : activeHymnal
+                            ? formatHymnCount(activeHymnal.itemCount, activeHymnal.language || 'ru')
+                            : t('hymns.title', 'Гимны')
+                }
+                coverImageUrl={isAllSelected ? undefined : activeHymnal?.coverImageUrl}
+                badge={<CustomHymnalIcon className="w-4 h-4" />}
+                badgeVariant="accent"
+                isOpen={isPickerOpen}
+                ariaLabel={t('select_hymnal', 'Выберите сборник')}
+            />
+
+            {isPickerOpen && triggerRect && (
+                <HymnalPickerModal
+                    hymnals={hymnals}
+                    currentHymnalId={selectedHymnalId}
+                    triggerRect={triggerRect}
+                    onSelect={onSelectHymnalId}
+                    onClose={() => setOpen(false)}
+                    showAllOption
+                />
+            )}
+        </>
+    );
+};

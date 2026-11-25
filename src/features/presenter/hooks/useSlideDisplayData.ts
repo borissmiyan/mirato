@@ -8,7 +8,9 @@ import { useMetadata } from './useMetadata';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
 import { useShallow } from 'zustand/react/shallow';
 import { appModeAtom, previewFontSizeAtom, showReferenceAtom, activeOverrideAtom } from '@/core/store/uiAtoms';
-import { AppMode, Verse, ISlide, ICanvasSlide, PresenterSettings, SlideDisplayProps, IBlock, ITemplate, IPresentationFile } from '@/core/types';
+import { AppMode, Verse, ISlide, ICanvasSlide, INestedSlide, PresenterSettings, SlideDisplayProps, IBlock, ITemplate, IPresentationFile } from '@/core/types';
+import { BUILT_IN_HYMN_THEMES } from '@/features/hymns/services/hymnThemeConstants';
+import { materializeHymnPresentation, resolveHymnThemeFromList } from '@/features/hymns/services/hymnThemeMaterializer';
 
 export interface UseSlideDisplayDataReturn {
   appMode: AppMode;
@@ -27,11 +29,13 @@ export interface UseSlideDisplayDataReturn {
   showRef: boolean;
   activeOverride: string | null;
   presentationStore: {
+    activeServiceId: string | null;
     selectedPresentationId: string | null;
     activePresentationId: string | null;
     selectedPresentation: IPresentationFile | null;
     activePresentation: IPresentationFile | null;
     previewSlideId: string | null;
+    navigationParentSlideId: string | null;
     lastTransitionTrigger: number;
     navigationDirection: 'forward' | 'backward';
   };
@@ -61,11 +65,14 @@ export function useSlideDisplayData(options: SlideDisplayProps): UseSlideDisplay
   const { settings: globalSettings } = usePresenterStore(useShallow(s => ({ settings: s.settings })));
   
   const presentationStore = usePresentationStore(useShallow(s => ({
+    activeServiceId: s.activeServiceId,
     selectedPresentationId: s.selectedPresentationId,
     activePresentationId: s.activePresentationId,
     selectedPresentation: s.selectedPresentation,
     activePresentation: s.activePresentation,
+    nestedPresentationsCache: s.nestedPresentationsCache,
     previewSlideId: s.previewSlideId,
+    navigationParentSlideId: s.navigationParentSlideId,
     lastTransitionTrigger: s.lastTransitionTrigger,
     navigationDirection: s.navigationDirection
   })));
@@ -115,7 +122,41 @@ export function useSlideDisplayData(options: SlideDisplayProps): UseSlideDisplay
     presentation?.slides?.find(s => s.id === presentationStore.previewSlideId),
     [presentation, presentationStore.previewSlideId]
   );
-  const selectedSlide = isProjector ? propSlide : selectedSlideFromStore;
+
+  // If the user clicked a master-presentation / nested container tile on the timeline,
+  // resolve its first child slide (materialized with its hymnThemeId if a library hymn)
+  // so the editor preview matches the tile thumbnail instead of showing the container's raw title variable.
+  const containerMasterPresId = !isProjector && selectedSlideFromStore
+    ? (selectedSlideFromStore.type === 'normal' && selectedSlideFromStore.blockId === 'master-presentation'
+      ? (selectedSlideFromStore as ICanvasSlide).masterPresentationId
+      : (selectedSlideFromStore.type === 'nested' ? (selectedSlideFromStore as INestedSlide).presentationId : undefined))
+    : undefined;
+  const containerSlideId = containerMasterPresId ? selectedSlideFromStore?.id : undefined;
+  const containerHymnThemeId = containerMasterPresId && selectedSlideFromStore?.type === 'normal'
+    ? (selectedSlideFromStore as ICanvasSlide).content?.variables?.hymnThemeId
+    : undefined;
+  const cachedContainerPres = containerSlideId
+    ? (presentationStore.nestedPresentationsCache[containerSlideId] || (containerMasterPresId ? presentationStore.nestedPresentationsCache[containerMasterPresId] : undefined))
+    : undefined;
+
+  const queriedContainerPres = useLiveQuery(
+    async () => {
+      if (!containerMasterPresId || cachedContainerPres) return null;
+      const rawPres = await db.presentationFiles.get(containerMasterPresId);
+      if (!rawPres) return null;
+      if (rawPres.hymnalId || rawPres.metadata?.isHymnLibraryItem) {
+        const dbThemes = typeof db.hymnThemes?.toArray === 'function' ? await db.hymnThemes.toArray() : [];
+        const themes = dbThemes.length > 0 ? dbThemes : BUILT_IN_HYMN_THEMES;
+        const themeId = typeof containerHymnThemeId === 'string' ? containerHymnThemeId : (rawPres.metadata?.themeId as string | undefined);
+        return materializeHymnPresentation(rawPres, resolveHymnThemeFromList(themeId, themes));
+      }
+      return rawPres;
+    },
+    [containerMasterPresId, cachedContainerPres, containerHymnThemeId]
+  );
+
+  const resolvedContainerFirstSlide = (cachedContainerPres || queriedContainerPres)?.slides?.[0];
+  const selectedSlide = isProjector ? propSlide : (resolvedContainerFirstSlide || selectedSlideFromStore);
 
   // 3. Bible Block Data (for slides containing Bible content)
   const bibleVerses = useLiveQuery(async () => {
@@ -135,8 +176,25 @@ export function useSlideDisplayData(options: SlideDisplayProps): UseSlideDisplay
     } catch (e) { return null; }
   }, [selectedSlide]);
 
-  const bibleSecondVerse = useLiveQuery(async () => {
+  // Resolve second translation synchronously from slide variables when present to avoid a 1-frame/1s single-verse flash
+  const syncBibleSecondVerse = useMemo<Verse | null>(() => {
     if (selectedSlide?.blockId !== 'bible') return null;
+    const vars = (selectedSlide as ICanvasSlide).content?.variables;
+    const secTransId = vars?.secondTranslationId as string | undefined;
+    const secText = vars?.secondVerseText as string | undefined;
+    if (!secTransId || !secText) return null;
+    return {
+      id: 0,
+      bookId: (vars.bookId as string) || 'GEN',
+      chapter: Number(vars.chapter) || 1,
+      verseNumber: Number(vars.verseStart) || 1,
+      text: secText,
+      translationId: secTransId,
+    };
+  }, [selectedSlide]);
+
+  const dbBibleSecondVerse = useLiveQuery(async () => {
+    if (syncBibleSecondVerse || selectedSlide?.blockId !== 'bible') return null;
     const canvasSlide = selectedSlide as ICanvasSlide;
     const vars = canvasSlide.content.variables;
     const secTransId = vars.secondTranslationId as string | undefined;
@@ -147,7 +205,9 @@ export function useSlideDisplayData(options: SlideDisplayProps): UseSlideDisplay
       .equals([secTransId, vars.bookId as string, Number(vars.chapter)])
       .and(v => v.verseNumber === Number(vars.verseStart))
       .first() ?? null;
-  }, [selectedSlide]);
+  }, [selectedSlide, syncBibleSecondVerse]);
+
+  const bibleSecondVerse = syncBibleSecondVerse || dbBibleSecondVerse || null;
 
   // 4. Global Metadata
   const { blocksMap, templatesMap } = useMetadata();

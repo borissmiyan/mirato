@@ -50,7 +50,8 @@ export const MediaItemCard: React.FC<MediaItemCardProps> = React.memo(({
   mediaTimes
 }) => {
   const { t } = useTranslation();
-  const displayUrl = useMediaUrl(item);
+  // Audio cards render only a static icon; never load 1-2MB audio blobs into ObjectURLs just to show a card
+  const displayUrl = useMediaUrl(item.type === 'audio' ? null : item);
 
   const formatTime = (seconds: number) => {
     if (!seconds || !isFinite(seconds)) return '0:00';
@@ -128,7 +129,7 @@ export const MediaItemCard: React.FC<MediaItemCardProps> = React.memo(({
             )}
             {/* Quick Look hover pill - video plays strictly in Quick Look */}
             <div className="absolute inset-0 flex items-center justify-center transition-opacity opacity-0 group-hover:opacity-100 z-10 pointer-events-none">
-              <div className="px-2 py-1 rounded-xl bg-stone-950/80 backdrop-blur-md flex items-center gap-1.5 text-[10px] text-white font-medium border border-white/10 shadow-lg">
+              <div className="px-2 py-1 rounded-xl bg-stone-950 flex items-center gap-1.5 text-[10px] text-white font-medium border border-white/10 shadow-lg">
                 <Eye className="w-3 h-3 text-accent" />
                 <span>{t('media_pool.quick_look', 'Quick Look')}</span>
               </div>

@@ -34,7 +34,7 @@ export const FontPicker: React.FC = () => {
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-both">
             {/* Font Family Selection Bento Block */}
-            <div className="bg-white/3 backdrop-blur-xl border border-white/5 rounded-3xl p-6 space-y-4 shadow-xl">
+            <div className="bg-[#1c1917] border border-white/5 rounded-3xl p-6 space-y-4 shadow-xl">
                 <FontLibrary
                     value={font.family}
                     onSelect={handleFontSelect}

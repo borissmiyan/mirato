@@ -32,7 +32,7 @@ export const SearchOverlay: React.FC<SearchOverlayProps> = React.memo(({
 
   return (
     <div className="absolute inset-0 z-20 bg-stone-900 overflow-y-auto no-scrollbar animate-in fade-in duration-200">
-      <div className="p-3 border-b border-white/5 sticky top-0 bg-stone-900/95 backdrop-blur-sm flex items-center justify-between">
+      <div className="p-3 border-b border-white/5 sticky top-0 bg-stone-900 flex items-center justify-between">
         <span className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">
           {isSearching ? t('search.searching', 'Searching...') : t('search.found_verses', 'Found Verses')}
         </span>

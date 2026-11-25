@@ -106,9 +106,9 @@ export const liveSyncService = {
     },
 
     /**
-     * Sends an audio control command (play/pause/seek) to the projector
+     * Sends an audio control command (play/pause/seek/speed) to the projector
      */
-    sendAudioCommand(scopeId: string, command: 'play' | 'pause' | 'toggle' | 'seek', value?: number) {
+    sendAudioCommand(scopeId: string, command: 'play' | 'pause' | 'toggle' | 'seek' | 'speed', value?: number) {
         ipcService.send('projector-command', 'audio-command', { scopeId, command, value });
     },
 

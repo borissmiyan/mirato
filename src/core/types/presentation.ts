@@ -91,6 +91,12 @@ export interface IHymnSlide extends IBaseSlide {
   hymnPresentationId: string;
   sourceSlideId: string;
   themeId: string;
+  /** Whether backing track audio from the source hymn should play (default true). */
+  includeAudio?: boolean;
+  /** Optional playback start strategy override chosen when inserting the hymn. */
+  audioStrategy?: 'auto' | 'manual' | 'delay';
+  /** Audio track variant chosen when inserting or switched on the timeline ('minus' | 'plus'). */
+  audioVariant?: 'minus' | 'plus';
   duration?: number;
   transition?: ISlideTransition;
 }

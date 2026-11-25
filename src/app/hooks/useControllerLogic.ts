@@ -24,8 +24,10 @@ import { ModalType } from '@/core/store/modalStore';
 import { PRELOADED_LOGOS } from '@/core/data/logoData';
 import { useLogoUrl } from '@/core/hooks/useLogoUrl';
 import { LiveSyncService } from '@/core/services/liveSyncService';
+import { IpcService } from '@/core/services/ipcService';
 import { BibleNavigationService } from '@/features/bible-browser/services/BibleNavigationService';
 import { PresentationService } from '@/core/services/presentationService';
+import { exportPresentationAs, PresentationExportFormat } from '@/features/presenter/services/export/presentationExportService';
 import { useAppInitialization } from './useAppInitialization';
 import { useAudioSync } from './useAudioSync';
 import { useGlobalShortcuts } from './useGlobalShortcuts';
@@ -206,6 +208,18 @@ export function useControllerLogic() {
   useEffect(() => {
     setIsPlaying(false);
   }, [liveSlideId, appMode, activeVerse?.id]);
+
+  // Native Electron File -> Export -> MRTP / PDF / PPTX / ODP menu actions
+  useEffect(() => {
+    if (!IpcService.isElectron()) return;
+    return IpcService.on('menu:export-presentation', (format: unknown) => {
+      const fmt = String(format) as PresentationExportFormat;
+      if (fmt === 'mrtp' || fmt === 'pptx' || fmt === 'pdf' || fmt === 'odp') {
+        const activeId = usePresentationStore.getState().activePresentationId;
+        void exportPresentationAs(activeId, fmt);
+      }
+    });
+  }, []);
 
   const isBibleSlide = useMemo(() => {
     if (!activePresentation || !previewSlideId) return false;

@@ -1,6 +1,7 @@
 import { db } from '@/core/db';
 import { PresentationSliceCreator } from '../types';
-import { IPresentationSummary, INestedSlide } from '@/core/types';
+import { IPresentationSummary, INestedSlide, ICanvasSlide } from '@/core/types';
+import { materializeHymnPresentation, resolveHymnThemeFromList } from '@/features/hymns/services/hymnThemeMaterializer';
 import { performNavigateNext, performNavigatePrev } from './navigationTraversal';
 import { migratePresentationAudioScopes } from './navigationMigration';
 import { handleToggleSlideSelection } from './navigationSelection';
@@ -121,12 +122,20 @@ export const createNavigationSlice: PresentationSliceCreator = (set, get) => ({
              });
         }
 
-        const { activePresentationId, activePresentation, selectedPresentationId, selectedPresentation, presentationStack } = get();
+        const { activePresentationId, activePresentation, selectedPresentationId, selectedPresentation, presentationStack, nestedPresentationsCache } = get();
+        const effectiveParentSlideId = navigationParentSlideId !== undefined ? navigationParentSlideId : get().navigationParentSlideId;
+        const perSlideCachedPres = (effectiveParentSlideId && targetPresId !== activePresentationId)
+            ? nestedPresentationsCache[effectiveParentSlideId]
+            : null;
         let currentPres = (targetPresId === activePresentationId && activePresentation)
             ? activePresentation
-            : (targetPresId === selectedPresentationId && selectedPresentation)
-                ? selectedPresentation
-                : null;
+            : (perSlideCachedPres && perSlideCachedPres.id === targetPresId)
+                ? perSlideCachedPres
+                : (targetPresId === selectedPresentationId && selectedPresentation)
+                    ? selectedPresentation
+                    : (targetPresId && nestedPresentationsCache[targetPresId])
+                        ? nestedPresentationsCache[targetPresId]
+                        : null;
 
         if (!currentPres && targetPresId) {
             currentPres = (await db.presentationFiles.get(targetPresId)) || null;
@@ -138,15 +147,28 @@ export const createNavigationSlice: PresentationSliceCreator = (set, get) => ({
             if (slide?.type === 'nested' || nestedSlide?.masterPresentationId) {
                 const childId = nestedSlide?.presentationId || nestedSlide?.masterPresentationId;
                 if (childId) {
-                    const nestedPres = await db.presentationFiles.get(childId);
-                    if (nestedPres && nestedPres.slides.length > 0) {
+                    const rawNestedPres = await db.presentationFiles.get(childId);
+                    if (rawNestedPres && rawNestedPres.slides.length > 0) {
+                        let nestedPres = rawNestedPres;
+                        if (rawNestedPres.hymnalId || rawNestedPres.metadata?.isHymnLibraryItem) {
+                            const themeId = slide.type === 'normal'
+                                ? String((slide as ICanvasSlide).content?.variables?.hymnThemeId || 'default')
+                                : 'default';
+                            const themes = typeof db.hymnThemes?.toArray === 'function' ? await db.hymnThemes.toArray() : [];
+                            nestedPres = materializeHymnPresentation(rawNestedPres, resolveHymnThemeFromList(themeId, themes));
+                        }
                         const { navigationDirection } = get();
-                        set({
-                            presentationStack: [...presentationStack, { 
-                                presentationId: currentPres.id,
-                                parentNestedSlideId: id
-                            }]
-                        });
+                        const nextStack = currentPres!.id === activePresentationId
+                            ? [{ presentationId: currentPres!.id, parentNestedSlideId: id }]
+                            : [...presentationStack, { presentationId: currentPres!.id, parentNestedSlideId: id }];
+                        set((state) => ({
+                            presentationStack: nextStack,
+                            nestedPresentationsCache: {
+                                ...state.nestedPresentationsCache,
+                                [id]: nestedPres,
+                                [nestedPres.id]: nestedPres,
+                            },
+                        }));
                         const entryIdx = navigationDirection === 'backward' ? nestedPres.slides.length - 1 : 0;
                         const entrySlideId = nestedPres.slides[entryIdx].id;
 
@@ -163,16 +185,28 @@ export const createNavigationSlice: PresentationSliceCreator = (set, get) => ({
             }
         }
 
+        // Keep presentationStack strictly synchronized with direct timeline clicks:
+        // - Root slide selection clears any stale stack entries.
+        // - Direct click into a nested slide replaces stack with that exact parent slide.
+        const stackSyncUpdate = targetPresId === activePresentationId
+            ? { presentationStack: [], navigationParentSlideId: null }
+            : (navigationParentSlideId && activePresentationId
+                ? {
+                    presentationStack: [{
+                        presentationId: navigationParentPresentationId || activePresentationId,
+                        parentNestedSlideId: navigationParentSlideId,
+                    }],
+                }
+                : {});
+
         set({
             previewSlideId: id,
             selectedSlideIds: id ? [id] : [],
             selectedPresentationId: targetPresId,
+            ...(currentPres && currentPres !== selectedPresentation ? { selectedPresentation: currentPres } : {}),
+            ...stackSyncUpdate,
             navigationDirection: 'forward'
         });
-
-        if (targetPresId === activePresentationId) {
-            set({ navigationParentSlideId: null });
-        }
 
         if (targetPresId && targetPresId !== selectedPresentationId) {
             const pres = currentPres || await db.presentationFiles.get(targetPresId);
@@ -182,18 +216,28 @@ export const createNavigationSlice: PresentationSliceCreator = (set, get) => ({
                     selectedSlideIds: id ? [id] : [],
                     selectedPresentationId: targetPresId,
                     selectedPresentation: pres,
+                    ...stackSyncUpdate,
                     navigationDirection: 'forward'
                 });
             }
         }
     },
 
-    setLiveSlide: (id, presentationId, rootPresentationId, navigationParentSlideId, navigationParentPresentationId) => set((state) => ({ 
-        liveSlideId: id,
-        liveRootPresentationId: rootPresentationId !== undefined ? rootPresentationId : state.liveRootPresentationId,
-        liveNavigationParentSlideId: navigationParentSlideId !== undefined ? navigationParentSlideId : state.liveNavigationParentSlideId,
-        liveNavigationParentPresentationId: navigationParentPresentationId !== undefined ? navigationParentPresentationId : state.liveNavigationParentPresentationId
-    })),
+    setLiveSlide: (id, presentationId, rootPresentationId, navigationParentSlideId, navigationParentPresentationId) => set((state) => (
+        id === null
+            ? {
+                liveSlideId: null,
+                liveRootPresentationId: null,
+                liveNavigationParentSlideId: null,
+                liveNavigationParentPresentationId: null,
+            }
+            : {
+                liveSlideId: id,
+                liveRootPresentationId: rootPresentationId !== undefined ? rootPresentationId : state.liveRootPresentationId,
+                liveNavigationParentSlideId: navigationParentSlideId !== undefined ? navigationParentSlideId : state.liveNavigationParentSlideId,
+                liveNavigationParentPresentationId: navigationParentPresentationId !== undefined ? navigationParentPresentationId : state.liveNavigationParentPresentationId,
+            }
+    )),
 
     syncPreviewToLive: () => {
         const { liveSlideId, activePresentationId, activePresentation } = get();

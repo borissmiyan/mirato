@@ -12,6 +12,8 @@ import TrackContainer, { TrackContainerHandle } from './TrackContainer';
 import { getHorizontalTransform } from './utils/horizontalCollisionDetection';
 import { cn } from '@/core/utils/cn';
 
+const EMPTY_PRESENTATIONS_MAP = new Map<string, IPresentationFile>();
+
 interface TimelineSlideTrackProps {
     localSlides: ISlide[];
     visualTimeline: TimelineItem[];
@@ -110,9 +112,12 @@ export const TimelineSlideTrack: React.FC<TimelineSlideTrackProps> = React.memo(
         }
     }, [clearSelection, toggleSlideSelection]);
 
+    const selectedSlideIdsRef = React.useRef(selectedSlideIds);
+    selectedSlideIdsRef.current = selectedSlideIds;
+
     const handleContextMenu = React.useCallback((e: React.MouseEvent, id: string) => {
         e.preventDefault();
-        if (selectedSlideIds && !selectedSlideIds.includes(id)) {
+        if (selectedSlideIdsRef.current && !selectedSlideIdsRef.current.includes(id)) {
             toggleSlideSelection(id, false, false);
         }
         setContextMenu({
@@ -121,7 +126,7 @@ export const TimelineSlideTrack: React.FC<TimelineSlideTrackProps> = React.memo(
             slideId: id,
             presentationId: activePresentationId
         });
-    }, [setContextMenu, activePresentationId, selectedSlideIds, toggleSlideSelection]);
+    }, [setContextMenu, activePresentationId, toggleSlideSelection]);
 
     const handleAddPresentation = React.useCallback((pid: string, idx?: number) => {
         addPresentationToTimeline(pid, idx);
@@ -132,6 +137,7 @@ export const TimelineSlideTrack: React.FC<TimelineSlideTrackProps> = React.memo(
 
     const slidesContainerRef = React.useRef<HTMLDivElement>(null);
     const prevPositionsRef = React.useRef<Map<string, number>>(new Map());
+    const prevExpandedCountRef = React.useRef<number>(localSlides.filter(s => s.isExpanded).length);
     const activeAnimationsRef = React.useRef<Map<string, Animation>>(new Map());
     const mountedSlideIdsRef = React.useRef<Set<string>>(new Set());
     const currentPresIdRef = React.useRef<string>(activePresentationId);
@@ -140,11 +146,13 @@ export const TimelineSlideTrack: React.FC<TimelineSlideTrackProps> = React.memo(
     if (currentPresIdRef.current !== activePresentationId) {
         currentPresIdRef.current = activePresentationId;
         mountedSlideIdsRef.current = new Set(localSlides.map(s => s.id));
+        prevExpandedCountRef.current = localSlides.filter(s => s.isExpanded).length;
         prevPositionsRef.current.clear();
         activeAnimationsRef.current.forEach(anim => anim.cancel());
         activeAnimationsRef.current.clear();
     } else if (mountedSlideIdsRef.current.size === 0 && localSlides.length > 0) {
         mountedSlideIdsRef.current = new Set(localSlides.map(s => s.id));
+        prevExpandedCountRef.current = localSlides.filter(s => s.isExpanded).length;
     }
 
     // 120Hz ProMotion FLIP animation for slides shifting during drag reordering or add/remove
@@ -160,11 +168,16 @@ export const TimelineSlideTrack: React.FC<TimelineSlideTrackProps> = React.memo(
             }
         }
 
+        const currentExpandedCount = localSlides.filter(s => s.isExpanded).length;
+        const justExpandedNested = currentExpandedCount > prevExpandedCountRef.current;
+        prevExpandedCountRef.current = currentExpandedCount;
+
         const prefersReducedMotion = typeof window !== 'undefined' && 
             window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
 
-        // If initial load or reduced motion, record positions without animation
-        if (prevPositionsRef.current.size === 0 || prefersReducedMotion) {
+        // Skip FLIP fly-over when expanding a nested presentation/hymn so following expanded blocks
+        // never fly across the newly unfolded nested slides; keep smooth FLIP for collapse, drag, add/remove.
+        if (prevPositionsRef.current.size === 0 || prefersReducedMotion || justExpandedNested) {
             prevPositionsRef.current = currentPositions;
             return;
         }
@@ -232,14 +245,14 @@ export const TimelineSlideTrack: React.FC<TimelineSlideTrackProps> = React.memo(
     }, [localSlides]);
 
     return (
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 flex flex-col overflow-hidden relative min-w-0">
             <TrackContainer ref={trackRef} onUserScroll={onUserScroll}>
-                <div className="flex flex-col min-h-full min-w-full">
+                <div className="flex flex-col h-full min-w-full">
                     {/* Lane 1: Slides */}
                     <div 
                         className={cn(
                             "flex items-center px-4 min-w-full relative",
-                            audioTrack ? "flex-1 py-4" : "h-[104px] pt-4 pb-4"
+                            audioTrack ? "flex-1 min-h-0 py-2" : "h-[104px] pt-4 pb-4"
                         )}
                         onClick={handleTrackClick}
                     >
@@ -259,30 +272,35 @@ export const TimelineSlideTrack: React.FC<TimelineSlideTrackProps> = React.memo(
                             >
                                 {localSlides.map((slide, index) => {
                                     const isNew = !mountedSlideIdsRef.current.has(slide.id);
+                                    const isThisSelected = selectedSlideIds.includes(slide.id);
+                                    const isThisPreview = previewSlideId === slide.id;
+                                    const isThisLive = liveSlideId === slide.id;
+                                    const isThisNavParent = navigationParentSlideId === slide.id;
+                                    const needsExpandedState = Boolean(slide.isExpanded || isThisNavParent);
                                     return (
                                         <SortableSlideBlock
                                             key={slide.id}
                                             slide={slide}
                                             index={index}
                                             activePresentationId={activePresentationId}
-                                            previewSlideId={previewSlideId}
-                                            selectedPresentationId={selectedPresentationId}
-                                            liveSlideId={liveSlideId}
+                                            previewSlideId={needsExpandedState ? previewSlideId : (isThisPreview ? slide.id : null)}
+                                            selectedPresentationId={needsExpandedState || isThisPreview ? selectedPresentationId : null}
+                                            liveSlideId={needsExpandedState ? liveSlideId : (isThisLive ? slide.id : null)}
                                             blocksMap={blocksMap}
                                             templatesMap={templatesMap}
-                                            presentationsMap={presentationsMap}
-                                            navigationParentSlideId={navigationParentSlideId}
+                                            presentationsMap={needsExpandedState ? presentationsMap : EMPTY_PRESENTATIONS_MAP}
+                                            navigationParentSlideId={isThisNavParent ? slide.id : null}
                                             lang={lang}
                                             onSelect={handleSelect}
                                             onLive={setLiveSlide}
                                             onContextMenu={handleContextMenu}
                                             onToggleExpansion={toggleSlideExpansion}
-                                            isSelected={selectedSlideIds.includes(slide.id)}
+                                            isSelected={isThisSelected}
                                             isMultiSelect={selectedSlideIds.length > 1}
                                             isSubItemSelected={isSubItemSelected}
-                                            isMultiDragHidden={!!dragActiveId && selectedSlideIds.length > 1 && selectedSlideIds.includes(slide.id) && slide.id !== dragActiveId}
+                                            isMultiDragHidden={!!dragActiveId && selectedSlideIds.length > 1 && isThisSelected && slide.id !== dragActiveId}
                                             isNew={isNew}
-                                            dragActiveId={dragActiveId}
+                                            dragActiveId={dragActiveId === slide.id ? dragActiveId : null}
                                             setContextMenu={setContextMenu}
                                             disabled={disabled}
                                         />
@@ -297,7 +315,7 @@ export const TimelineSlideTrack: React.FC<TimelineSlideTrackProps> = React.memo(
 
                     {/* Lane 2: Audio */}
                     {audioTrack && (
-                        <div className="shrink-0 h-[88px] border-t border-white/5 bg-stone-950/20 relative min-w-full px-8 py-2">
+                        <div className="shrink-0 h-[88px] border-t border-white/5 bg-stone-950/20 relative min-w-full px-4 py-2">
                             {audioTrack}
                         </div>
                     )}

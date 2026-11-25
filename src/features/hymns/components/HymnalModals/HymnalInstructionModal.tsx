@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAtom } from 'jotai';
 import { hymnalInstructionModalAtom } from '@/core/store/uiAtoms';
-import { BookOpen, X, Download, FileJson, Music, Loader2 } from 'lucide-react';
+import { BookOpen, X, Download, FileJson, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
-import { Button, IconButton } from '@/shared/ui';
+import { Button, CustomHymnStackIcon, IconButton } from '@/shared/ui';
 
 export const HymnalInstructionModal: React.FC = () => {
     const { t } = useTranslation();
@@ -79,19 +79,19 @@ export const HymnalInstructionModal: React.FC = () => {
                             <span className="text-stone-600 font-sans ml-2">— описание и оглавление</span>
                         </div>
                         <div className="flex items-center gap-2 pl-4">
-                            <Music className="w-3.5 h-3.5 text-accent" />
-                            <span>001-example/index.ektp</span>
+                            <CustomHymnStackIcon className="w-3.5 h-3.5 text-accent" />
+                            <span>1. Пример гимна.mrtp</span>
                             <span className="text-stone-600 font-sans ml-2">— первый гимн</span>
                         </div>
                         <div className="flex items-center gap-2 pl-4">
-                            <Music className="w-3.5 h-3.5 text-accent" />
-                            <span>002-another/index.ektp</span>
+                            <CustomHymnStackIcon className="w-3.5 h-3.5 text-accent" />
+                            <span>2. Второй гимн.mrtp</span>
                             <span className="text-stone-600 font-sans ml-2">— второй гимн</span>
                         </div>
                     </div>
                     
                     <div className="text-sm text-stone-400 font-medium leading-relaxed">
-                        Мы рекомендуем скачать шаблон: он содержит правильный <code>hymnal.json</code> и пример гимна (упакованный <code>.ektp</code>).
+                        Мы рекомендуем скачать шаблон: он содержит рабочий <code>hymnal.json</code> и пример гимна (упакованный <code>.mrtp</code>; старые <code>.ektp</code> тоже поддерживаются).
                     </div>
                 </div>
 

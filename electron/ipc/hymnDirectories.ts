@@ -71,7 +71,7 @@ export function seedBundledTemplates(): void {
             return;
         }
 
-        const bundledFiles = fs.readdirSync(BUNDLED_TEMPLATES_DIR).filter(f => f.endsWith('.ektmp'));
+        const bundledFiles = fs.readdirSync(BUNDLED_TEMPLATES_DIR).filter(f => f.endsWith('.mrtmp') || f.endsWith('.ektmp'));
         if (bundledFiles.length === 0) return;
 
         for (const file of bundledFiles) {
@@ -106,7 +106,36 @@ export async function copyRecursive(src: string, dest: string): Promise<void> {
 }
 
 /**
+ * Checks whether a bundled hymnal directory in userData is already up to date
+ * with the app bundle's hymnal.json (same manifestVersion and hymn count).
+ */
+async function isBundledHymnalUpToDate(srcDir: string, destDir: string): Promise<boolean> {
+    try {
+        const srcManifestPath = path.join(srcDir, 'hymnal.json');
+        const destManifestPath = path.join(destDir, 'hymnal.json');
+        if (!fs.existsSync(srcManifestPath) || !fs.existsSync(destManifestPath)) {
+            return false;
+        }
+        const [srcRaw, destRaw] = await Promise.all([
+            fs.promises.readFile(srcManifestPath, 'utf-8'),
+            fs.promises.readFile(destManifestPath, 'utf-8'),
+        ]);
+        const srcJson = JSON.parse(srcRaw) as { manifestVersion?: number; hymns?: unknown[] };
+        const destJson = JSON.parse(destRaw) as { manifestVersion?: number; hymns?: unknown[] };
+        const srcVer = srcJson.manifestVersion ?? 0;
+        const destVer = destJson.manifestVersion ?? 0;
+        const srcLen = Array.isArray(srcJson.hymns) ? srcJson.hymns.length : 0;
+        const destLen = Array.isArray(destJson.hymns) ? destJson.hymns.length : 0;
+        return srcVer > 0 && srcVer === destVer && srcLen === destLen;
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Seeds bundled hymnals from application bundle into runtime directory.
+ * Skips hymnals whose manifestVersion and hymn count already match to avoid
+ * scanning/copying thousands of .mrtp files on every launch.
  */
 export async function seedBundledHymnals(): Promise<void> {
     try {
@@ -126,9 +155,22 @@ export async function seedBundledHymnals(): Promise<void> {
                     const hymnalStat = await fs.promises.stat(src);
                     if (hymnalStat.isDirectory()) {
                         const dest = path.join(BUNDLED_RUNTIME_HYMNALS_DIR, lang, hymnal);
+                        if (await isBundledHymnalUpToDate(src, dest)) {
+                            continue;
+                        }
                         await copyRecursive(src, dest);
+                        // Prune stale .ektp/.mrtp files from previous bundled versions
+                        try {
+                            const srcFiles = new Set(await fs.promises.readdir(src));
+                            const destFiles = await fs.promises.readdir(dest);
+                            for (const df of destFiles) {
+                                if ((df.endsWith('.ektp') || df.endsWith('.mrtp')) && !srcFiles.has(df)) {
+                                    await fs.promises.unlink(path.join(dest, df)).catch(() => {});
+                                }
+                            }
+                        } catch { /* ignore prune errors */ }
                         console.log(`Seeded bundled hymnal: ${hymnal} (${lang})`);
-                    } else if (src.endsWith('.ektp')) {
+                    } else if (src.endsWith('.mrtp') || src.endsWith('.ektp')) {
                         const dest = path.join(BUNDLED_RUNTIME_HYMNALS_DIR, lang, hymnal);
                         await fs.promises.mkdir(path.dirname(dest), { recursive: true });
                         if (!fs.existsSync(dest)) {

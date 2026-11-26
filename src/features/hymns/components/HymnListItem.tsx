@@ -89,16 +89,16 @@ export const HymnListItem: React.FC<HymnListItemProps> = React.memo(({
                     : 'bg-[#1f1c1a] border-stone-800/90 text-stone-400 hover:bg-[#262320] hover:border-stone-700 hover:text-stone-200'
             )}
         >
-            <CustomHymnStackIcon className={cn('w-4 h-4 shrink-0', isActive ? 'text-accent' : 'opacity-40')} />
             <span
                 className={cn(
-                    "shrink-0 min-w-[34px] h-6 px-1.5 rounded-lg flex items-center justify-center text-[11px] font-mono tabular-nums border",
+                    "shrink-0 min-w-[52px] h-6 px-2 rounded-lg inline-flex items-center justify-center gap-1.5 text-[11px] font-mono tabular-nums border transition-colors",
                     isActive
                         ? 'bg-accent text-stone-950 border-accent font-bold'
-                        : 'bg-stone-950 text-stone-400 border-stone-800'
+                        : 'bg-stone-950 text-stone-300 border-stone-800 group-hover:border-stone-700'
                 )}
             >
-                {hymn.number}
+                <CustomHymnStackIcon className={cn('w-3.5 h-3.5 shrink-0', isActive ? 'text-stone-950' : 'text-accent/70')} />
+                {hymn.number && <span>{hymn.number}</span>}
             </span>
             <div className="flex-1 min-w-0 flex flex-col">
                 <span className={cn("truncate", isActive ? 'font-bold' : '')}>

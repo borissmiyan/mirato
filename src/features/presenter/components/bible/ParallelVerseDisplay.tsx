@@ -186,7 +186,7 @@ export const ParallelVerseDisplay: React.FC<ParallelVerseDisplayProps> = ({
 
                 <div
                     ref={containerRef}
-                    className="flex-1 min-h-0 w-full flex flex-col items-center justify-center overflow-hidden"
+                    className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden"
                 >
                     <div
                         ref={fittedContentRef}
@@ -210,7 +210,7 @@ export const ParallelVerseDisplay: React.FC<ParallelVerseDisplayProps> = ({
                                     {verse1.translationId}
                                 </div>
                             )}
-                            <div className="leading-tight text-center wrap-break-word">
+                            <div className="w-full leading-tight text-center wrap-break-word">
                                 <ReactMarkdown components={{ p: ({ children }) => <span>{processChildren(children, true)}</span> }}>
                                     {verse1.text}
                                 </ReactMarkdown>
@@ -224,7 +224,7 @@ export const ParallelVerseDisplay: React.FC<ParallelVerseDisplayProps> = ({
                                     {verse2.translationId}
                                 </div>
                             )}
-                            <div className="leading-tight text-center wrap-break-word">
+                            <div className="w-full leading-tight text-center wrap-break-word">
                                 <ReactMarkdown components={{ p: ({ children }) => <span>{processChildren(children, true)}</span> }}>
                                     {verse2.text}
                                 </ReactMarkdown>

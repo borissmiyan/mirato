@@ -56,7 +56,8 @@ export function useTextFit({
             const mid = (lo + hi) / 2;
             content.style.fontSize = `${mid}px`;
 
-            const fits = content.scrollHeight <= availableHeight && content.scrollWidth <= availableWidth;
+            const maxAllowedWidth = Math.max(availableWidth, content.clientWidth) + 1;
+            const fits = content.scrollHeight <= availableHeight && content.scrollWidth <= maxAllowedWidth;
 
             if (fits) {
                 lo = mid; // Текст влез, пробуем сделать больше

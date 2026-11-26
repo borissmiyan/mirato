@@ -1,7 +1,7 @@
 import { IStyleLayer } from '@/core/types';
 import { getMediaBlob } from '../mediaPackingUtils';
 import { ipcService } from '@/core/services/ipcService';
-import type { FlattenedExportSlide } from './presentationExportUtils';
+import type { FlattenedExportSlide } from './presentationExportTypes';
 
 export async function blobToDataUrl(blob: Blob): Promise<string> {
     return new Promise((resolve, reject) => {

@@ -44,7 +44,8 @@ export const hymnCustomManagement = {
      * Checks how many services and slides use the given hymnal.
      */
     async checkOrphanedSlides(hymnalId: string): Promise<OrphanedSlidesResult> {
-        const allPresentations = await db.presentationFiles.toArray();
+        const { getUserPresentations } = await import('@/core/db/presentationQueries');
+        const allPresentations = await getUserPresentations();
         const affectedServices: IPresentationFile[] = [];
         let slideCount = 0;
 

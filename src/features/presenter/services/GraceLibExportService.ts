@@ -147,7 +147,7 @@ export const GraceLibExportService = {
     async exportCollection(type: 'presentations' | 'templates') {
         try {
             const items = type === 'presentations'
-                ? await db.presentationFiles.filter(p => !p.serviceId).toArray()
+                ? (await (await import('@/core/db/presentationQueries')).getUserPresentations()).filter(p => !p.serviceId)
                 : await db.templates.toArray();
 
             if (items.length === 0) {

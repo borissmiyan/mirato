@@ -15,11 +15,19 @@ export interface IndexedHymnEntry {
     lowerTexts: string[];
 }
 
+interface PersistedHymnIndexSnapshot {
+    count: number;
+    entries: IndexedHymnEntry[];
+}
+
+const HYMN_INDEX_SNAPSHOT_KEY = 'hymn_index_snapshot_v1';
+
 type Listener = () => void;
 
 let cachedEntries: IndexedHymnEntry[] | null = null;
 let inFlightPromise: Promise<IndexedHymnEntry[]> | null = null;
 let cacheVersion = 0;
+let isCacheStale = false;
 const listeners = new Set<Listener>();
 
 const notifyListeners = () => {
@@ -29,37 +37,78 @@ const notifyListeners = () => {
 };
 
 /**
- * Invalidates the in-memory hymn index so the next read rebuilds from Dexie.
- * Call after hymnal sync, import, or removal.
+ * Invalidates the in-memory hymn index using stale-while-revalidate:
+ * keeps existing `cachedEntries` visible to the UI (preventing a 3-5s blank list
+ * in HymnPickerModal / HymnsBrowser) while triggering a seamless background rebuild
+ * and refreshing the persisted IndexedDB snapshot.
  */
 export function invalidateHymnIndexCache(): void {
     cacheVersion += 1;
-    cachedEntries = null;
     inFlightPromise = null;
-    notifyListeners();
+    isCacheStale = true;
+    if (listeners.size > 0) {
+        void ensureHymnIndexLoaded(true);
+    }
 }
 
 /**
- * Streams all hymn records from IndexedDB one-by-one via cursor (low peak RAM for 2-4 GB PCs),
- * extracting only lightweight metadata & searchable lyric strings (~2-3 MB total for 5,293 hymns
- * instead of ~80 MB of full slide objects).
+ * Loads the lightweight hymn search index (~2-3 MB total for 5,293 hymns).
+ * Fast path (~20 ms): reads the persisted single-record snapshot from `db.settings`
+ * when its count matches the indexed hymn count in `db.presentationFiles`.
+ * Slow path (first install / after hymnal update): streams via IndexedDB cursor and
+ * persists the snapshot for instant subsequent launches.
  */
-export function ensureHymnIndexLoaded(): Promise<IndexedHymnEntry[]> {
-    if (cachedEntries) {
+export function ensureHymnIndexLoaded(forceRefresh = false): Promise<IndexedHymnEntry[]> {
+    if (cachedEntries && !isCacheStale && !forceRefresh) {
         return Promise.resolve(cachedEntries);
     }
-    if (inFlightPromise) {
+    if (inFlightPromise && !forceRefresh) {
         return inFlightPromise;
     }
 
     const startVersion = cacheVersion;
-    inFlightPromise = (async () => {
+    const promise = (async () => {
+        const whereClause = typeof db.presentationFiles.where === 'function'
+            ? db.presentationFiles.where('hymnalId')
+            : null;
+        const query = whereClause && typeof whereClause.notEqual === 'function'
+            ? whereClause.notEqual('')
+            : null;
+
+        // Fast path: hydrate from single persisted snapshot record if hymn count matches
+        if (
+            !forceRefresh &&
+            query &&
+            typeof query.count === 'function' &&
+            typeof db.settings?.get === 'function'
+        ) {
+            try {
+                const [currentCount, setting] = await Promise.all([
+                    query.count(),
+                    db.settings.get(HYMN_INDEX_SNAPSHOT_KEY),
+                ]);
+                const snapshot = setting?.value as PersistedHymnIndexSnapshot | undefined;
+                if (
+                    snapshot &&
+                    Array.isArray(snapshot.entries) &&
+                    snapshot.count === currentCount &&
+                    snapshot.entries.length === currentCount
+                ) {
+                    if (cacheVersion === startVersion) {
+                        cachedEntries = snapshot.entries;
+                        isCacheStale = false;
+                        inFlightPromise = null;
+                        notifyListeners();
+                    }
+                    return snapshot.entries;
+                }
+            } catch {
+                // Fall through to full cursor rebuild if snapshot read fails
+            }
+        }
+
         const entries: IndexedHymnEntry[] = [];
         try {
-            const query = typeof db.presentationFiles.where === 'function'
-                ? db.presentationFiles.where('hymnalId').notEqual('')
-                : null;
-
             const processPres = (p: {
                 id: string;
                 name: string;
@@ -112,13 +161,20 @@ export function ensureHymnIndexLoaded(): Promise<IndexedHymnEntry[]> {
 
         if (cacheVersion === startVersion) {
             cachedEntries = entries;
+            isCacheStale = false;
             inFlightPromise = null;
             notifyListeners();
+
+            // Persist lightweight snapshot for instant (~20 ms) hydration on next launch
+            if (entries.length > 0 && typeof db.settings?.put === 'function') {
+                const snapshot: PersistedHymnIndexSnapshot = { count: entries.length, entries };
+                db.settings.put({ key: HYMN_INDEX_SNAPSHOT_KEY, value: snapshot }).catch(() => { });
+            }
         }
         return entries;
     })();
-
-    return inFlightPromise;
+    inFlightPromise = promise;
+    return promise;
 }
 
 /**
@@ -131,7 +187,7 @@ export function useHymnIndex(enabled = true): { entries: IndexedHymnEntry[]; isL
     useEffect(() => {
         const listener = () => setTick((t) => t + 1);
         listeners.add(listener);
-        if (enabled && !cachedEntries) {
+        if (enabled && (!cachedEntries || isCacheStale)) {
             void ensureHymnIndexLoaded();
         }
         return () => {

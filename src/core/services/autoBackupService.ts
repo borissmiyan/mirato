@@ -37,10 +37,25 @@ export class AutoBackupService {
         if (!IpcService.isElectron()) return false;
 
         try {
-            // Exclude bundled/library hymns from disaster-recovery snapshots:
-            // they live on disk in Hymnals/ and can be 5,000+ items (~80+ MB JSON),
-            // which would spike RAM and freeze low-memory PCs on startup.
+            // Exclude bundled/library hymns from disaster-recovery snapshots WITHOUT deserializing
+            // 5,000+ hymn records (~100 MB) via Dexie .filter(). Subtract indexed hymn primaryKeys
+            // from all primaryKeys and bulkGet ONLY the user presentations.
             const readUserPresentations = async () => {
+                if (
+                    typeof db.presentationFiles.where === 'function' &&
+                    typeof db.presentationFiles.toCollection === 'function' &&
+                    typeof db.presentationFiles.bulkGet === 'function'
+                ) {
+                    const [allKeys, hymnKeys] = await Promise.all([
+                        db.presentationFiles.toCollection().primaryKeys(),
+                        db.presentationFiles.where('hymnalId').notEqual('').primaryKeys(),
+                    ]);
+                    const hymnKeySet = new Set(hymnKeys);
+                    const userKeys = allKeys.filter((k) => !hymnKeySet.has(k));
+                    if (userKeys.length === 0) return [];
+                    const rows = await db.presentationFiles.bulkGet(userKeys);
+                    return rows.filter((p): p is NonNullable<typeof p> => Boolean(p && !p.metadata?.isHymnLibraryItem));
+                }
                 if (typeof db.presentationFiles.filter === 'function') {
                     return db.presentationFiles.filter(p => !p.metadata?.isHymnLibraryItem).toArray();
                 }

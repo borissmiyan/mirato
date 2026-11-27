@@ -1,4 +1,5 @@
 import { db } from '@/core/db';
+import { getUserPresentations } from '@/core/db/presentationQueries';
 import { IHymnSlide, ICanvasSlide, ICanvasItem, SlideType, ISlide, IPresentationFile } from '@/core/types';
 import { IHymnTheme, SOURCE_THEME_ID, IHymnal, IHymnalManifest, IHymnalManifestEntry } from '@/core/types/hymn';
 import { DEFAULT_HYMN_THEME } from './hymnThemeConstants';
@@ -101,8 +102,8 @@ export const hymnLibraryService = {
             'rw',
             [db.presentationFiles, db.audioScopes, db.hymnStableIdMap],
             async () => {
-                // --- Step 2: Migrate IHymnSlide references in all service presentations ---
-                const allPresentations = await db.presentationFiles.toArray();
+                // --- Step 2: Migrate IHymnSlide references in all user presentations (never scan 5,293 hymns) ---
+                const allPresentations = await getUserPresentations();
                 for (const pres of allPresentations) {
                     if (pres.metadata?.isHymnLibraryItem) continue;
 
@@ -182,7 +183,7 @@ export const hymnLibraryService = {
      * If not, deletes it. Should be called inside or outside a transaction.
      */
     async cleanupUnreferencedPresentation(presentationId: string): Promise<void> {
-        const allPresentations = await db.presentationFiles.toArray();
+        const allPresentations = await getUserPresentations();
         const slideStillReferenced = allPresentations.some((p) =>
             !p.metadata?.isHymnLibraryItem &&
             (p.slides || []).some(
@@ -299,7 +300,19 @@ export const hymnLibraryService = {
                 syncedManifestVersion: existingHymnal?.syncedManifestVersion,
                 syncedMtimeHash: existingHymnal?.syncedMtimeHash,
             };
-            await db.hymnals.put(hymnal);
+            // Only write to db.hymnals when metadata actually changed — avoids triggering 7x
+            // cascading useLiveQuery re-renders and 5,293-item localeCompare sorts on every launch.
+            const metadataChanged =
+                !existingHymnal ||
+                existingHymnal.name !== hymnal.name ||
+                existingHymnal.language !== hymnal.language ||
+                existingHymnal.itemCount !== hymnal.itemCount ||
+                existingHymnal.isBuiltIn !== hymnal.isBuiltIn ||
+                existingHymnal.coverImageUrl !== hymnal.coverImageUrl ||
+                existingHymnal.defaultThemeId !== hymnal.defaultThemeId;
+            if (metadataChanged) {
+                await db.hymnals.put(hymnal);
+            }
 
             // Compute mtime hash for this hymnal (for sborniki without manifestVersion)
             const newMtimeHash = dir.ektpFileMtimes
@@ -399,21 +412,15 @@ export const hymnLibraryService = {
                 invalidateHymnIndexCache();
             }
 
-            // Prune any duplicate/orphaned presentationFiles for this hymnal not referenced by hymnStableIdMap
+            // Prune any duplicate/orphaned presentationFiles for this hymnal using primaryKeys (low RAM)
             const validMaps = await db.hymnStableIdMap.where('hymnalId').equals(hymnal.id).toArray();
             const validPresIds = new Set(validMaps.map(m => m.presentationId));
-            const allHymnalPres = await db.presentationFiles.where('hymnalId').equals(hymnal.id).toArray();
-            for (const p of allHymnalPres) {
-                if (!validPresIds.has(p.id)) {
-                    await db.audioScopes.where('presentationId').equals(p.id).delete().catch(() => {});
-                    await db.presentationFiles.delete(p.id).catch(() => {});
+            const allHymnalPresIds = await db.presentationFiles.where('hymnalId').equals(hymnal.id).primaryKeys();
+            for (const presId of allHymnalPresIds) {
+                if (!validPresIds.has(presId)) {
+                    await db.audioScopes.where('presentationId').equals(presId).delete().catch(() => {});
+                    await db.presentationFiles.delete(presId).catch(() => {});
                 }
-            }
-
-            // Silently clean up any leftover needsManualReview scopes from older versions
-            const staleReviewScopes = await db.audioScopes.filter(s => s.needsManualReview === true).toArray();
-            for (const s of staleReviewScopes) {
-                await db.audioScopes.delete(s.id).catch(() => {});
             }
 
             // Update the commit-flag fields AFTER all hymns in this hymnal are processed.
@@ -423,6 +430,12 @@ export const hymnLibraryService = {
                 syncedManifestVersion: manifest.manifestVersion ?? 0,
                 syncedMtimeHash: newMtimeHash,
             });
+        }
+
+        // Clean up any leftover needsManualReview scopes ONCE after all hymnals (instead of 7x inside loop)
+        const staleReviewScopes = await db.audioScopes.filter(s => s.needsManualReview === true).toArray();
+        for (const s of staleReviewScopes) {
+            await db.audioScopes.delete(s.id).catch(() => {});
         }
         
         return { orphanScopeIds: newlyOrphanedScopeIds };

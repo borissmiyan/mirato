@@ -82,9 +82,11 @@ export function useAudioSync(isProjector: boolean = false) {
         }
     }, [isProjector, liveSlideId, audioData, activePresentationId, rootPresentationId, navigationParentSlideId]);
 
-    // 3. Audio Heartbeat — broadcast status to toolbar/remote
+    // 3. Audio Heartbeat — broadcast status to toolbar/remote ONLY while audio is active
+    // (or once on transition to idle, avoiding 2x/sec IPC/BroadcastChannel spam while silent).
     useEffect(() => {
         if (isProjector) return;
+        let lastWasIdle = true;
 
         const interval = setInterval(() => {
             const activeId = audioService.targetScopeId;
@@ -92,6 +94,7 @@ export function useAudioSync(isProjector: boolean = false) {
                 const progress = audioService.getTrackProgress(activeId);
                 const track = audioService.activeTracks.get(activeId);
                 if (progress && track) {
+                    lastWasIdle = false;
                     LiveSyncService.sendAudioStatus(
                         activeId,
                         progress.currentTime,
@@ -103,7 +106,8 @@ export function useAudioSync(isProjector: boolean = false) {
                 }
             } else {
                 const firstTrackId = Array.from(audioService.activeTracks.keys())[0];
-                if (!firstTrackId) {
+                if (!firstTrackId && !lastWasIdle) {
+                    lastWasIdle = true;
                     LiveSyncService.sendAudioStatus('', 0, false, 0, '');
                 }
             }

@@ -1,4 +1,5 @@
 import { db } from '@/core/db';
+import { getUserPresentations } from '@/core/db/presentationQueries';
 
 /**
  * Resolves a unique name for a presentation by appending (1), (2), etc.
@@ -6,7 +7,7 @@ import { db } from '@/core/db';
  */
 export async function getUniquePresentationName(name: string): Promise<string> {
     const safeName = name || 'Untitled Presentation';
-    const presentations = await db.presentationFiles.toArray();
+    const presentations = await getUserPresentations();
     const existingNames = new Set(presentations.map(p => (p.name || '').toLowerCase()));
 
     if (!existingNames.has(safeName.toLowerCase())) {

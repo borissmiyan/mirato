@@ -211,12 +211,14 @@ export class ScriptureDatabase extends Dexie {
 
     async sanitize() {
         try {
-            // Optimization: Only run sanitize if we haven't done it this session or periodically
-            // This is less critical than reindexing, so we keep it simple but faster.
+            // Truly one-time sanitization guard — prevents deserializing 5,000+ bundled hymns
+            // (~100 MB) from IndexedDB on every single app launch.
+            const alreadySanitized = await this.settings.get('db_sanitized_v7');
+            if (alreadySanitized?.value === true) return;
 
-            // 1. Sanitize Media Pool - using indexed search instead of full table filter if possible
-            // Since we can't easily index "startsWith('blob:')" as a range, we still filter 
-            // but we limit it to suspicious items if we had a more specific index. 
+            // 1. Sanitize Media Pool
+            // Only remove broken blob URLs if the item DOES NOT have actual binary data saved in IndexedDB.
+            // If it has data or is audio/video, just clear the stale path so it loads from the Blob/IPC.
             // For now, let's keep it but make it non-blocking.
             const brokenItems = await this.mediaPool
                 .filter(item => 
@@ -243,17 +245,21 @@ export class ScriptureDatabase extends Dexie {
                 }
             }
 
-            // 2. Sanitize Presentation Thumbnails (One-time check)
-            const presentations = await this.presentationFiles.toArray();
-            const updates = presentations
-                .filter(pres => pres.thumbnailUrl?.startsWith('blob:') || pres.thumbnailUrl?.includes('webkit-fake-url'))
-                .map(pres => ({ id: pres.id, thumbnailUrl: undefined }));
-            
-            if (updates.length > 0) {
-                for (const update of updates) {
-                    await this.presentationFiles.update(update.id, { thumbnailUrl: undefined });
+            // 2. Sanitize Presentation Thumbnails (streaming cursor to avoid 100 MB RAM spike)
+            const brokenPresIds: string[] = [];
+            await this.presentationFiles.each(pres => {
+                if (pres.thumbnailUrl?.startsWith('blob:') || pres.thumbnailUrl?.includes('webkit-fake-url')) {
+                    brokenPresIds.push(pres.id);
+                }
+            });
+
+            if (brokenPresIds.length > 0) {
+                for (const id of brokenPresIds) {
+                    await this.presentationFiles.update(id, { thumbnailUrl: undefined });
                 }
             }
+
+            await this.settings.put({ key: 'db_sanitized_v7', value: true });
         } catch (err) {
             console.error('[DB] Sanitization failed:', err);
         }

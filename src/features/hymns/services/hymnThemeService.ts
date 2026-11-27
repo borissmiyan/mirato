@@ -8,6 +8,29 @@ import { DEFAULT_HYMN_THEME_ID, DEFAULT_HYMN_THEME, BUILT_IN_HYMN_THEMES } from 
 
 export { DEFAULT_HYMN_THEME_ID, DEFAULT_HYMN_THEME, BUILT_IN_HYMN_THEMES, SOURCE_THEME_ID };
 
+/**
+ * Loads ONLY user (non-hymnal-library) presentations using indexed primaryKeys subtraction.
+ * Avoids deserializing 5,000+ bundled hymn JSON blobs (~100 MB) on theme operations.
+ */
+async function loadUserPresentations(): Promise<IPresentationFile[]> {
+    if (
+        typeof db.presentationFiles.where === 'function' &&
+        typeof db.presentationFiles.toCollection === 'function' &&
+        typeof db.presentationFiles.bulkGet === 'function'
+    ) {
+        const [allKeys, hymnKeys] = await Promise.all([
+            db.presentationFiles.toCollection().primaryKeys(),
+            db.presentationFiles.where('hymnalId').notEqual('').primaryKeys(),
+        ]);
+        const hymnKeySet = new Set(hymnKeys);
+        const userKeys = allKeys.filter((k) => !hymnKeySet.has(k));
+        if (userKeys.length === 0) return [];
+        const rows = await db.presentationFiles.bulkGet(userKeys);
+        return rows.filter((p): p is IPresentationFile => Boolean(p));
+    }
+    return db.presentationFiles.toArray();
+}
+
 export const hymnThemeService = {
     async initializeDefaultTheme() {
         const defaultTheme = await db.hymnThemes.get(DEFAULT_HYMN_THEME_ID);
@@ -96,7 +119,7 @@ export const hymnThemeService = {
         let hymnalsCount = 0;
 
         try {
-            const presentations = await db.presentationFiles.toArray();
+            const presentations = await loadUserPresentations();
             for (const p of presentations) {
                 for (const slide of p.slides || []) {
                     if (slide.type === 'hymn' && (slide as IHymnSlide).themeId === themeId) {
@@ -146,7 +169,7 @@ export const hymnThemeService = {
      */
     async updateThemeReferences(oldThemeId: string, newThemeId: string): Promise<void> {
         await db.transaction('rw', db.presentationFiles, async () => {
-            const presentations = await db.presentationFiles.toArray();
+            const presentations = await loadUserPresentations();
             const toUpdate = [];
 
             for (const p of presentations) {

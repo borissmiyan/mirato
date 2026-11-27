@@ -136,10 +136,29 @@ const PresentationLibrary: React.FC<IPresentationLibraryProps> = ({ className })
 
     const currentBinId = presentationBinNavPath.length > 0 ? presentationBinNavPath[presentationBinNavPath.length - 1] : null;
 
-    // Load only library presentations (excluding hymns and service presentations to save RAM)
+    // Load only library presentations (excluding hymns, service presentations, and binned items)
+    // via indexed primaryKeys subtraction so Dexie NEVER deserializes 5,000+ bundled hymns (~100 MB)
+    // on every slide edit or presentation update.
     const filteredPresentations = useLiveQuery(async () => {
         if (currentBinId) {
             return db.presentationFiles.where('binId').equals(currentBinId).toArray();
+        }
+        if (
+            typeof db.presentationFiles.where === 'function' &&
+            typeof db.presentationFiles.toCollection === 'function' &&
+            typeof db.presentationFiles.bulkGet === 'function'
+        ) {
+            const [allKeys, hymnKeys, serviceKeys, binKeys] = await Promise.all([
+                db.presentationFiles.toCollection().primaryKeys(),
+                db.presentationFiles.where('hymnalId').notEqual('').primaryKeys(),
+                db.presentationFiles.where('serviceId').notEqual('').primaryKeys(),
+                db.presentationFiles.where('binId').notEqual('').primaryKeys(),
+            ]);
+            const excluded = new Set([...hymnKeys, ...serviceKeys, ...binKeys]);
+            const rootLibKeys = allKeys.filter((k) => !excluded.has(k));
+            if (rootLibKeys.length === 0) return [];
+            const rows = await db.presentationFiles.bulkGet(rootLibKeys);
+            return rows.filter((p): p is IPresentationFile => Boolean(p && !p.serviceId && !p.hymnalId && !p.binId));
         }
         return db.presentationFiles
             .filter((p: IPresentationFile) => !p.serviceId && !p.hymnalId && !p.binId)

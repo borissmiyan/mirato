@@ -66,7 +66,8 @@ export function useTemplatePickerProperties({
     };
 
     if (oldId !== newId) {
-      const presentations = await db.presentationFiles.toArray();
+      const { getUserPresentations } = await import('@/core/db/presentationQueries');
+      const presentations = await getUserPresentations();
       for (const pres of presentations) {
         let changed = false;
         const updatedSlides = pres.slides.map(s => {

@@ -36,12 +36,25 @@ export const HymnPickerModal: React.FC = () => {
 
     const addHymnToActivePresentation = usePresentationStore(s => s.addHymnToActivePresentation);
 
-    // Data from Dexie — only query when modal is open to save RAM; exclude disabled hymnals
-    const rawHymnals = useLiveQuery(
+    // Data from Dexie — only query when modal is open to save RAM; exclude disabled hymnals.
+    // Keep last resolved hymnals ref so transient `undefined` ticks during background DB writes
+    // never empty `hymnalsMap` or blank out the picker list.
+    const queriedHymnals = useLiveQuery(
         () => (isOpen ? db.hymnals.toArray().then(list => list.filter(h => !h.isDisabled)) : []),
         [isOpen]
     );
-    const rawThemes = useLiveQuery(() => (isOpen ? db.hymnThemes.toArray() : []), [isOpen]);
+    const lastHymnalsRef = React.useRef<typeof queriedHymnals>(undefined);
+    if (queriedHymnals !== undefined) {
+        lastHymnalsRef.current = queriedHymnals;
+    }
+    const rawHymnals = queriedHymnals ?? lastHymnalsRef.current;
+
+    const queriedThemes = useLiveQuery(() => (isOpen ? db.hymnThemes.toArray() : []), [isOpen]);
+    const lastThemesRef = React.useRef<typeof queriedThemes>(undefined);
+    if (queriedThemes !== undefined) {
+        lastThemesRef.current = queriedThemes;
+    }
+    const rawThemes = queriedThemes ?? lastThemesRef.current;
 
     // State: 'ALL' by default to allow searching across all hymnals immediately
     const [selectedHymnalId, setSelectedHymnalId] = useState<string>('ALL');

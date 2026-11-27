@@ -73,14 +73,13 @@ export function useMediaPoolData(
       return items.map(({ data, ...item }) => item as IMediaItem);
     },
     [filter]
-  ) || [];
-
-  const rawVisible = activeBinId
-    ? mediaItems.filter(i => i.binId === activeBinId)
-    : mediaItems.filter(i => !i.binId);
+  );
 
   const visibleItems = useMemo(() => {
-    let items = rawVisible;
+    const base = mediaItems || [];
+    let items = activeBinId
+      ? base.filter(i => i.binId === activeBinId)
+      : base.filter(i => !i.binId);
 
     if (tagFilter !== 'all') {
       items = items.filter(i => i.colorTag === tagFilter);
@@ -107,7 +106,7 @@ export function useMediaPoolData(
           return (b.createdAt || 0) - (a.createdAt || 0);
       }
     });
-  }, [rawVisible, searchQuery, sortBy, tagFilter]);
+  }, [mediaItems, activeBinId, searchQuery, sortBy, tagFilter]);
 
   // File integrity check: Verify that local files still exist on disk (debounced and guarded)
   useEffect(() => {
@@ -206,11 +205,13 @@ export function useMediaPoolData(
     };
   }, [visibleItems]);
 
+  const stableMediaItems = useMemo(() => mediaItems || [], [mediaItems]);
+
   return {
     bins,
     allBins,
     binPath,
-    mediaItems,
+    mediaItems: stableMediaItems,
     visibleItems,
     activeBin,
     mediaTimes,

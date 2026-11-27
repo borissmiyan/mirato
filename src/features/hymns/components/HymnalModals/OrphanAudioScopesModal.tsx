@@ -16,8 +16,17 @@ export const OrphanAudioScopesModal: React.FC = () => {
     const closeModal = useModalStore(s => s.closeModal);
     const [isRemoving, setIsRemoving] = useState<string | null>(null);
 
-    const orphanScopes = useLiveQuery(() => db.audioScopes.filter(s => s.needsManualReview === true).toArray(), []) || [];
-    const presentations = useLiveQuery(() => db.presentationFiles.toArray(), []) || [];
+    const orphanScopes = useLiveQuery(
+        () => (isOpen ? db.audioScopes.filter(s => s.needsManualReview === true).toArray() : []),
+        [isOpen]
+    ) || [];
+    const presentations = useLiveQuery(async () => {
+        if (!isOpen || orphanScopes.length === 0) return [];
+        const ids = Array.from(new Set(orphanScopes.map(s => s.presentationId).filter(Boolean)));
+        if (ids.length === 0) return [];
+        const rows = await db.presentationFiles.bulkGet(ids);
+        return rows.filter((p): p is NonNullable<typeof p> => Boolean(p));
+    }, [isOpen, orphanScopes]) || [];
 
     if (!isOpen) return null;
 

@@ -46,7 +46,7 @@ export interface SlideTileProps {
  * SlideTile component for the presentation timeline.
  * Renders a thumbnail preview of a slide with status indicators and interaction handles.
  */
-export const SlideTile: React.FC<SlideTileProps> = ({
+export const SlideTile: React.FC<SlideTileProps> = React.memo(({
     slide,
     index,
     activePresentationId,
@@ -417,4 +417,5 @@ export const SlideTile: React.FC<SlideTileProps> = ({
             })()}
         </div>
     );
-};
+});
+SlideTile.displayName = 'SlideTile';

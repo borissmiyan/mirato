@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import { useTranslation } from 'react-i18next';
+import { useShallow } from 'zustand/react/shallow';
 import {
   Search,
   Command,
@@ -66,7 +67,17 @@ export const CanvasQuickActionsModal: React.FC = () => {
     updateCanvasItems,
     updateCanvasItemsOrder,
     takeSnapshot,
-  } = usePresentationStore();
+  } = usePresentationStore(
+    useShallow((s) => ({
+      previewSlideId: s.previewSlideId,
+      selectedPresentation: s.selectedPresentation,
+      activePresentation: s.activePresentation,
+      addCanvasItem: s.addCanvasItem,
+      updateCanvasItems: s.updateCanvasItems,
+      updateCanvasItemsOrder: s.updateCanvasItemsOrder,
+      takeSnapshot: s.takeSnapshot,
+    }))
+  );
 
   const pres = selectedPresentation || activePresentation;
   const slide = pres?.slides?.find((s) => s.id === previewSlideId) as ICanvasSlide | undefined;

@@ -52,6 +52,14 @@ const formatHymnalCount = (count: number): string => {
     return `${count} ${word}`;
 };
 
+const normalizeHymnalTitle = (name?: string): string =>
+    (name || '')
+        .toLowerCase()
+        .replace(/\([^)]*\)/g, '')
+        .replace(/ё/g, 'е')
+        .replace(/[^a-zа-я0-9]+/gi, ' ')
+        .trim();
+
 const AUDIO_PACKS_BY_HYMNAL_ID = (() => {
     const map = new Map<string, HymnalAudioPackEntry[]>();
     for (const pack of BUILTIN_HYMNAL_AUDIO_CATALOG) {
@@ -61,6 +69,30 @@ const AUDIO_PACKS_BY_HYMNAL_ID = (() => {
     }
     return map;
 })();
+
+const AUDIO_PACKS_BY_NORMALIZED_NAME = (() => {
+    const map = new Map<string, HymnalAudioPackEntry[]>();
+    for (const pack of BUILTIN_HYMNAL_AUDIO_CATALOG) {
+        const norm = normalizeHymnalTitle(pack.name);
+        if (!norm) continue;
+        const list = map.get(norm);
+        if (list) list.push(pack);
+        else map.set(norm, [pack]);
+    }
+    return map;
+})();
+
+/**
+ * Resolves catalog audio packs for a hymnal by exact ID first, falling back to
+ * normalized title match so legacy/re-imported hymnals still display Minus/Plus download buttons.
+ */
+const resolveAudioPacksForHymnal = (hymnal: IHymnal): HymnalAudioPackEntry[] => {
+    const byId = AUDIO_PACKS_BY_HYMNAL_ID.get(hymnal.id);
+    if (byId && byId.length > 0) return byId;
+    const norm = normalizeHymnalTitle(hymnal.name);
+    if (!norm) return [];
+    return AUDIO_PACKS_BY_NORMALIZED_NAME.get(norm) || [];
+};
 
 /**
  * Unified Settings -> Data section for managing hymnals and their backing track audio packs,
@@ -267,7 +299,7 @@ export const HymnalsVisibilitySection: React.FC = () => {
                         {languageGroups.map((group) => {
                             const isExpanded = isSearching || !collapsedLangs[group.lang];
                             const allEnabled = group.hymnals.every(h => !h.isDisabled);
-                            const groupPacks = group.hymnals.flatMap(h => AUDIO_PACKS_BY_HYMNAL_ID.get(h.id) || []);
+                            const groupPacks = group.hymnals.flatMap(h => resolveAudioPacksForHymnal(h));
                             const downloadableGroupMinus = groupPacks.filter(p => {
                                 if ((p.variant ?? 'minus') !== 'minus' || !hasPackDownloadSource(p)) return false;
                                 const key = getAudioPackStorageKey(p.hymnalId, 'minus');
@@ -380,7 +412,7 @@ export const HymnalsVisibilitySection: React.FC = () => {
                                     {isExpanded && (
                                         <div className="px-3 pb-3 pt-1 flex flex-col gap-2 border-t border-white/[0.05]">
                                             {group.hymnals.map((hymnal) => {
-                                                const packs = AUDIO_PACKS_BY_HYMNAL_ID.get(hymnal.id) || [];
+                                                const packs = resolveAudioPacksForHymnal(hymnal);
                                                 return (
                                                     <HymnalSettingsRow
                                                         key={hymnal.id}

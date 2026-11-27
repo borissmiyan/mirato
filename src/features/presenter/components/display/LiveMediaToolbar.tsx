@@ -58,14 +58,21 @@ export const LiveMediaToolbar: React.FC<LiveMediaToolbarProps> = ({
     scopeId: string; currentTime: number; duration: number; isPlaying: boolean; fileId: string; speed: number;
   } | null>(null);
 
-  // Optimization: Prefer passed props if available, otherwise fallback to DB query
+  // Optimization: Prefer passed props or active store presentations; never scan 5,000+ hymns in IndexedDB
   const liveSlideData = useLiveQuery(async () => {
     if (propLiveSlide && propPresentationId) return { slide: propLiveSlide, presentationId: propPresentationId };
     if (!liveSlideId) return null;
-    const presentations = await db.presentationFiles.toArray();
-    for (const p of presentations) {
-      const slide = p.slides.find(s => s.id === liveSlideId);
-      if (slide) return { slide, presentationId: p.id };
+    const storeState = usePresentationStore.getState();
+    const candidateIds = [
+      storeState.liveRootPresentationId,
+      storeState.activePresentationId,
+      storeState.selectedPresentationId,
+    ].filter((id): id is string => Boolean(id));
+
+    for (const presId of new Set(candidateIds)) {
+      const pres = await db.presentationFiles.get(presId);
+      const slide = pres?.slides?.find(s => s.id === liveSlideId);
+      if (slide && pres) return { slide, presentationId: pres.id };
     }
     return null;
   }, [liveSlideId, propLiveSlide?.id, propPresentationId]);

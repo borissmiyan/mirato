@@ -66,9 +66,13 @@ export const DeckCastTab: React.FC<DeckCastTabProps> = React.memo(({
 }) => {
     const { t } = useTranslation();
 
-    // Query all locally available presentations
+    // Query only user (non-hymnal-library, non-master) presentations so DeckCast never loads 5,293 hymns
     const livePresentations = useLiveQuery(
-        () => db.presentationFiles.filter(p => !p.isMaster).reverse().toArray(),
+        async () => {
+            const { getUserPresentations } = await import('@/core/db/presentationQueries');
+            const userPres = await getUserPresentations();
+            return userPres.filter(p => !p.isMaster).reverse();
+        },
         []
     );
     const presentations = useMemo(() => livePresentations || [], [livePresentations]);

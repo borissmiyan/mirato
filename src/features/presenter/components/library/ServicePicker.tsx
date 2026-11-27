@@ -1,9 +1,9 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
 import { X, Plus, Check, Edit3, Trash2, Upload, Download } from 'lucide-react';
-import { CustomServiceIcon, PickerOptionCard, VirtualList } from '@/shared/ui';
+import { CustomServiceIcon, PickerOptionCard } from '@/shared/ui';
 import { useTranslation } from 'react-i18next';
 import { useModalStore, ModalType } from '@/core/store/modalStore';
 import { cn } from '@/core/utils/cn';
@@ -236,9 +236,6 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
         }
     };
 
-    const getServiceKey = useCallback((s: IServiceFile) => s.id, []);
-    const estimateServiceSize = useCallback(() => 50, []);
-
     return createPortal(
         <div className="fixed inset-0 z-9999 pointer-events-none">
             <button
@@ -319,77 +316,76 @@ const ServicePicker: React.FC<ServicePickerProps> = ({
                     </div>
                 )}
 
-                {/* Services List */}
-                <VirtualList
-                    items={filteredServices}
-                    getItemKey={getServiceKey}
-                    estimateItemHeight={estimateServiceSize}
-                    gap={2}
-                    overscan={8}
-                    className="p-1.5"
-                    renderItem={(service) => {
-                        const isCurrent = currentServiceId === service.id;
-                        const serviceTitle = isRu ? (service.nameRu || service.name) : service.name;
-                        return renamingId === service.id ? (
-                            <div
-                                className={cn(
-                                    "w-full flex items-center gap-1.5 p-2 rounded-xl border",
-                                    isCurrent ? "bg-accent/10 border-accent/20" : "bg-white/5 border-white/10"
-                                )}
-                                onClick={(e) => e.stopPropagation()}
-                            >
-                                <Input
-                                    size="xs"
-                                    autoFocus
-                                    value={renameValue}
-                                    onChange={(e) => setRenameValue(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') handleRenameService(service.id);
-                                        if (e.key === 'Escape') setRenamingId(null);
-                                    }}
-                                    className="flex-1"
-                                />
-                                <Button size="xs" square variant="ghost" onClick={handleSaveCurrentRename} title={t('save', 'Save')}>
-                                    <Check className="w-3.5 h-3.5 text-accent" />
-                                </Button>
-                            </div>
-                        ) : (
-                            <PickerOptionCard
-                                title={serviceTitle}
-                                subtitle={t('presentations_count', { count: service.presentationIds.length, defaultValue: '{{count}} presentations' })}
-                                leading={<CustomServiceIcon className="w-4 h-4" />}
-                                isActive={isCurrent}
-                                onClick={() => { onSelect(service.id); onClose(); }}
-                                onContextMenu={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    setContextMenu({ x: e.clientX, y: e.clientY, service });
-                                }}
-                                hoverActions={
-                                    <>
-                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleExportService(service.id); }} title={t('export_service', 'Export (.ekt)')}>
-                                            <Upload className="w-3.5 h-3.5 text-stone-400 hover:text-accent" />
-                                        </Button>
-                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); setRenamingId(service.id); setRenameValue(service.name); }} title={t('rename', 'Rename')}>
-                                            <Edit3 className="w-3.5 h-3.5 text-stone-400" />
-                                        </Button>
-                                        <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id); }} title={t('delete', 'Delete')}>
-                                            <Trash2 className="w-3.5 h-3.5 text-stone-400 hover:text-red-400" />
-                                        </Button>
-                                    </>
-                                }
-                            />
-                        );
-                    }}
-                    emptyState={
+                {/* Services List — native scroll container avoids ResizeObserver/virtualizer height oscillation */}
+                <div className="flex-1 overflow-y-auto no-scrollbar p-1.5 flex flex-col gap-0.5 min-h-[120px]">
+                    {liveServices === undefined ? null : filteredServices.length === 0 ? (
                         <div className="py-8 flex flex-col items-center justify-center gap-2.5">
                             <CustomServiceIcon className="w-8 h-8 text-stone-500/60" />
                             <p className="text-xs font-medium text-stone-500 tracking-tight">
                                 {search ? t('no_results', 'No results') : t('no_services', 'No services yet')}
                             </p>
                         </div>
-                    }
-                />
+                    ) : (
+                        filteredServices.map((service) => {
+                            const isCurrent = currentServiceId === service.id;
+                            const serviceTitle = isRu ? (service.nameRu || service.name) : service.name;
+                            return (
+                                <div key={service.id}>
+                                    {renamingId === service.id ? (
+                                        <div
+                                            className={cn(
+                                                "w-full flex items-center gap-1.5 p-2 rounded-xl border",
+                                                isCurrent ? "bg-accent/10 border-accent/20" : "bg-white/5 border-white/10"
+                                            )}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <Input
+                                                size="xs"
+                                                autoFocus
+                                                value={renameValue}
+                                                onChange={(e) => setRenameValue(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleRenameService(service.id);
+                                                    if (e.key === 'Escape') setRenamingId(null);
+                                                }}
+                                                className="flex-1"
+                                            />
+                                            <Button size="xs" square variant="ghost" onClick={handleSaveCurrentRename} title={t('save', 'Save')}>
+                                                <Check className="w-3.5 h-3.5 text-accent" />
+                                            </Button>
+                                        </div>
+                                    ) : (
+                                        <PickerOptionCard
+                                            title={serviceTitle}
+                                            subtitle={t('presentations_count', { count: service.presentationIds.length, defaultValue: '{{count}} presentations' })}
+                                            leading={<CustomServiceIcon className="w-4 h-4" />}
+                                            isActive={isCurrent}
+                                            onClick={() => { onSelect(service.id); onClose(); }}
+                                            onContextMenu={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setContextMenu({ x: e.clientX, y: e.clientY, service });
+                                            }}
+                                            hoverActions={
+                                                <>
+                                                    <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleExportService(service.id); }} title={t('export_service', 'Export (.ekt)')}>
+                                                        <Upload className="w-3.5 h-3.5 text-stone-400 hover:text-accent" />
+                                                    </Button>
+                                                    <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); setRenamingId(service.id); setRenameValue(service.name); }} title={t('rename', 'Rename')}>
+                                                        <Edit3 className="w-3.5 h-3.5 text-stone-400" />
+                                                    </Button>
+                                                    <Button size="xs" square variant="ghost" onClick={(e) => { e.stopPropagation(); handleDeleteService(service.id); }} title={t('delete', 'Delete')}>
+                                                        <Trash2 className="w-3.5 h-3.5 text-stone-400 hover:text-red-400" />
+                                                    </Button>
+                                                </>
+                                            }
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
 
                 {/* Footer: Import */}
                 <div className="p-2 border-t border-white/5 bg-stone-950/40 shrink-0">

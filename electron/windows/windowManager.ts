@@ -153,18 +153,27 @@ export function createProjectorWindow(displaySettings?: ElectronDisplaySettings 
     // 2. If projector window already exists (warm/hidden or visible): show instantly (< 16ms)
     if (projectorWindow && !projectorWindow.isDestroyed()) {
         if (hiddenPrewarm) return;
-        projectorWindow.setBounds({
-            x: targetDisplay.bounds.x,
-            y: targetDisplay.bounds.y,
-            width: targetDisplay.bounds.width,
-            height: targetDisplay.bounds.height
-        });
         if (process.platform === 'darwin') {
-            projectorWindow.setSimpleFullScreen(true);
+            // On macOS, screen-saver window level sits ABOVE NSMainMenuWindowLevel and Dock,
+            // covering 100% of the projector display edge-to-edge with ZERO menu bar strip.
+            projectorWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+            projectorWindow.setAlwaysOnTop(true, 'screen-saver');
+            projectorWindow.setBounds({
+                x: targetDisplay.bounds.x,
+                y: targetDisplay.bounds.y,
+                width: targetDisplay.bounds.width,
+                height: targetDisplay.bounds.height
+            });
         } else {
+            projectorWindow.setBounds({
+                x: targetDisplay.bounds.x,
+                y: targetDisplay.bounds.y,
+                width: targetDisplay.bounds.width,
+                height: targetDisplay.bounds.height
+            });
             projectorWindow.setFullScreen(true);
+            projectorWindow.setAlwaysOnTop(isMultiScreen);
         }
-        projectorWindow.setAlwaysOnTop(isMultiScreen);
         projectorWindow.show();
         projectorWindow.focus();
         if (isProjectorLoaded && mainWindow && !mainWindow.isDestroyed()) {
@@ -181,10 +190,12 @@ export function createProjectorWindow(displaySettings?: ElectronDisplaySettings 
         height: targetDisplay.bounds.height,
         show: !hiddenPrewarm,
         fullscreen: !hiddenPrewarm && process.platform !== 'darwin',
-        simpleFullscreen: !hiddenPrewarm && process.platform === 'darwin',
+        simpleFullscreen: false,
         autoHideMenuBar: true,
         frame: false,
-        alwaysOnTop: !hiddenPrewarm && isMultiScreen,
+        hasShadow: false,
+        enableLargerThanScreen: true,
+        alwaysOnTop: !hiddenPrewarm && (process.platform === 'darwin' || isMultiScreen),
         backgroundColor: '#000000',
         title: 'Mirato — Live Output',
         webPreferences: {
@@ -195,6 +206,17 @@ export function createProjectorWindow(displaySettings?: ElectronDisplaySettings 
             autoplayPolicy: 'no-user-gesture-required'
         },
     });
+
+    if (!hiddenPrewarm && process.platform === 'darwin') {
+        projectorWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+        projectorWindow.setAlwaysOnTop(true, 'screen-saver');
+        projectorWindow.setBounds({
+            x: targetDisplay.bounds.x,
+            y: targetDisplay.bounds.y,
+            width: targetDisplay.bounds.width,
+            height: targetDisplay.bounds.height
+        });
+    }
 
     console.log('Main Process: Projector Window Created on display', targetDisplay.id, targetDisplay.bounds, { isMultiScreen, hiddenPrewarm });
 

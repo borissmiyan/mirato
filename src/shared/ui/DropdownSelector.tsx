@@ -72,6 +72,20 @@ export const DropdownSelector: React.FC<DropdownSelectorProps> = ({
         setSearchQuery('');
     };
 
+    const listScrollRef = React.useRef<HTMLDivElement>(null);
+
+    // Auto-scroll to the currently selected option whenever the dropdown menu opens
+    React.useEffect(() => {
+        if (!menuPos) return;
+        const raf = window.requestAnimationFrame(() => {
+            const activeEl = listScrollRef.current?.querySelector<HTMLElement>('[data-dropdown-active="true"]');
+            if (activeEl && typeof activeEl.scrollIntoView === 'function') {
+                activeEl.scrollIntoView({ block: 'center', behavior: 'instant' });
+            }
+        });
+        return () => window.cancelAnimationFrame(raf);
+    }, [menuPos]);
+
     const handleToggle = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -145,23 +159,27 @@ export const DropdownSelector: React.FC<DropdownSelectorProps> = ({
                             </div>
                         )}
 
-                        <ScrollArea wrapperClassName="max-h-[300px]" className="py-1">
+                        <ScrollArea ref={listScrollRef} wrapperClassName="max-h-[300px]" className="py-1">
                             {filteredOptions.length === 0 ? (
                                 <div className="px-4 py-4 text-xs font-bold text-stone-500 uppercase tracking-wider text-center">
                                     {t('no_results', 'Ничего не найдено')}
                                 </div>
                             ) : (
                                 filteredOptions.map((option) => (
-                                    <ContextMenuItem
+                                    <div
                                         key={option.value}
-                                        label={option.label}
-                                        icon={option.icon}
-                                        active={value === option.value}
-                                        onClick={() => {
-                                            onChange(option.value);
-                                            handleClose();
-                                        }}
-                                    />
+                                        data-dropdown-active={value === option.value ? 'true' : undefined}
+                                    >
+                                        <ContextMenuItem
+                                            label={option.label}
+                                            icon={option.icon}
+                                            active={value === option.value}
+                                            onClick={() => {
+                                                onChange(option.value);
+                                                handleClose();
+                                            }}
+                                        />
+                                    </div>
                                 ))
                             )}
                         </ScrollArea>

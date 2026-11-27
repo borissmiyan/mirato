@@ -1,15 +1,19 @@
 import React from 'react';
-import { Plus, BookOpen, Timer, Link2, Unlink2, Film, Radio } from 'lucide-react';
-import { CustomHymnStackIcon } from '@/shared/ui';
+import { Plus, BookOpen, Timer, Link2, Unlink2, Film, Radio, Palette } from 'lucide-react';
+import { CustomHymnStackIcon, DropdownSelector, DropdownOption } from '@/shared/ui';
 import { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { AppMode } from '@/core/types';
+import { SOURCE_THEME_ID } from '@/core/types/hymn';
 import { ModalType } from '@/core/store/modalStore';
 import { useAtom } from 'jotai';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/core/db';
 import { activeHymnalIdAtom } from '@/core/store/uiAtoms';
+import { activeHymnThemeIdAtom } from '@/features/hymns/store/hymnThemeAtom';
 import { previewLockedAtom } from '@/core/store/liveSyncAtoms';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
+import { DEFAULT_HYMN_THEME, getHymnThemeSwatchBackground } from '@/features/hymns/services/hymnThemeConstants';
 import { Button, Tooltip } from '@/shared/ui';
 import { cn } from '@/core/utils/cn';
 import { CustomTimelineIcon, CustomSlideIcon, CustomSlideStackIcon } from './TimelineIcons';
@@ -34,7 +38,10 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
     handleAddVideo,
     openModal
 }) => {
+    const { i18n } = useTranslation();
+    const isRu = i18n.language?.startsWith('ru');
     const [activeHymnalId] = useAtom(activeHymnalIdAtom);
+    const [activeHymnThemeId, setActiveHymnThemeId] = useAtom(activeHymnThemeIdAtom);
     const [previewLocked, setPreviewLocked] = useAtom(previewLockedAtom);
     const syncPreviewToLive = usePresentationStore(s => s.syncPreviewToLive);
     const liveSlideId = usePresentationStore(s => s.liveSlideId);
@@ -46,6 +53,50 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
         return idx !== -1 ? idx + 1 : null;
     }, [liveSlideId, activeSlides]);
     const activeHymnal = useLiveQuery(() => activeHymnalId ? db.hymnals.get(activeHymnalId) : undefined, [activeHymnalId]);
+    const rawHymnThemes = useLiveQuery(() => (appMode === 'hymns' ? db.hymnThemes.toArray() : []), [appMode]);
+
+    const hymnThemeOptions: DropdownOption[] = React.useMemo(() => {
+        if (appMode !== 'hymns') return [];
+        const dbDefault = (rawHymnThemes || []).find(th => !!th.isDefault) || DEFAULT_HYMN_THEME;
+        const renderSwatch = (bg: string, color: string, fontFamily?: string) => (
+            <span
+                className="w-5 h-5 rounded-md border border-white/15 flex items-center justify-center text-[10px] font-bold shrink-0 leading-none"
+                style={{ background: bg, color, fontFamily }}
+            >
+                А
+            </span>
+        );
+        const list: DropdownOption[] = [
+            {
+                value: 'default',
+                label: (isRu && dbDefault.nameRu ? dbDefault.nameRu : dbDefault.name) || t('default_theme', 'По умолчанию'),
+                icon: renderSwatch(
+                    getHymnThemeSwatchBackground(dbDefault),
+                    dbDefault.textStyle?.color || '#FFFFFF',
+                    dbDefault.textStyle?.fontFamily
+                ),
+            },
+            {
+                value: SOURCE_THEME_ID,
+                label: t('source_theme', 'Оригинал'),
+                icon: <Palette className="w-4 h-4 text-purple-400" />,
+            },
+        ];
+        (rawHymnThemes || []).forEach(th => {
+            if (th.isDefault) return;
+            list.push({
+                value: th.id,
+                label: isRu && th.nameRu ? th.nameRu : th.name,
+                keywords: `${th.name} ${th.nameRu || ''} ${th.textStyle?.fontFamily || ''}`,
+                icon: renderSwatch(
+                    getHymnThemeSwatchBackground(th),
+                    th.textStyle?.color || '#FFFFFF',
+                    th.textStyle?.fontFamily
+                ),
+            });
+        });
+        return list;
+    }, [appMode, rawHymnThemes, isRu, t]);
 
     const isCustomHymnalEditable = appMode === 'hymns' && activeHymnal && !activeHymnal.isBuiltIn;
     const canShowToolbar = Boolean(activePresentationId) && (appMode !== 'hymns' || isCustomHymnalEditable);
@@ -117,99 +168,115 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
                 </div>
             </div>
 
-            {/* Quick Add Toolbar */}
-            {canShowToolbar && (
-                <div className="flex items-center gap-1 bg-black/30 p-1 rounded-xl border border-white/5">
-                    <Tooltip content={t('add_blank_slide', 'Add Blank Slide')} position="top">
-                        <Button
+            {/* Right side: Direct 1-click Hymn Theme Selector (Hymns mode) + Quick Add Toolbar */}
+            <div className="flex items-center gap-2">
+                {appMode === 'hymns' && (
+                    <div className="w-52">
+                        <DropdownSelector
                             size="xs"
-                            square
-                            variant="primary"
-                            onClick={(e) => handleAddSlide('default', e)}
-                            className="shadow-xs"
-                        >
-                            <Plus className="w-4 h-4" />
-                        </Button>
-                    </Tooltip>
+                            searchable
+                            searchPlaceholder={t('search_themes', 'Поиск темы...')}
+                            value={activeHymnThemeId || 'default'}
+                            options={hymnThemeOptions}
+                            onChange={setActiveHymnThemeId}
+                            placeholder={t('hymn_theme', 'Выбрать тему')}
+                        />
+                    </div>
+                )}
 
-                    {appMode !== 'hymns' && (
-                        <>
-                            <div className="w-px h-4 bg-white/10 mx-1" />
-                            <Tooltip content={t('add_nested_presentation', 'Add Nested Presentation')} position="top">
-                                <Button
-                                    size="xs"
-                                    square
-                                    variant="ghost"
-                                    onClick={() => openModal(ModalType.PRESENTATION_PICKER)}
-                                    className="text-stone-400 hover:text-accent hover:bg-accent/10 relative group"
-                                >
-                                    <CustomSlideStackIcon className="w-4 h-4" />
-                                    <div className="absolute -top-0.5 -right-0.5">
-                                        <Plus className="w-2.5 h-2.5 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </div>
-                                </Button>
-                            </Tooltip>
-                            <Tooltip content={t('add_hymn_slide', 'Add Hymn')} position="top">
-                                <Button
-                                    size="xs"
-                                    square
-                                    variant="ghost"
-                                    onClick={() => openModal(ModalType.HYMN_PICKER)}
-                                    className="text-stone-400 hover:text-accent hover:bg-accent/10 relative group"
-                                >
-                                    <CustomHymnStackIcon className="w-4 h-4" />
-                                    <div className="absolute -top-0.5 -right-0.5">
-                                        <Plus className="w-2.5 h-2.5 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </div>
-                                </Button>
-                            </Tooltip>
-                            <Tooltip content={t('add_bible_verse', 'Add Bible Verse')} position="top">
-                                <Button
-                                    size="xs"
-                                    square
-                                    variant="ghost"
-                                    onClick={(e) => handleAddSlide('bible', e)}
-                                    className="text-stone-400 hover:text-accent hover:bg-accent/10 relative group"
-                                >
-                                    <BookOpen className="w-4 h-4" />
-                                    <div className="absolute -top-0.5 -right-0.5">
-                                        <Plus className="w-2.5 h-2.5 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </div>
-                                </Button>
-                            </Tooltip>
-                            <Tooltip content={t('add_timer_slide', 'Add Timer Slide')} position="top">
-                                <Button
-                                    size="xs"
-                                    square
-                                    variant="ghost"
-                                    onClick={(e) => handleAddTimer(e)}
-                                    className="text-stone-400 hover:text-orange-400 hover:bg-orange-400/10 relative group"
-                                >
-                                    <Timer className="w-4 h-4" />
-                                    <div className="absolute -top-0.5 -right-0.5">
-                                        <Plus className="w-2.5 h-2.5 text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                    </div>
-                                </Button>
-                            </Tooltip>
-                        </>
-                    )}
+                {canShowToolbar && (
+                    <div className="flex items-center gap-1 bg-black/30 p-1 rounded-xl border border-white/5">
+                        <Tooltip content={t('add_blank_slide', 'Add Blank Slide')} position="top">
+                            <Button
+                                size="xs"
+                                square
+                                variant="primary"
+                                onClick={(e) => handleAddSlide('default', e)}
+                                className="shadow-xs"
+                            >
+                                <Plus className="w-4 h-4" />
+                            </Button>
+                        </Tooltip>
 
-                    <Tooltip content={t('add_video_slide', 'Add Video Slide')} position="top">
-                        <Button
-                            size="xs"
-                            square
-                            variant="ghost"
-                            onClick={(e) => handleAddVideo(e)}
-                            className="text-stone-400 hover:text-accent hover:bg-accent/10 relative group"
-                        >
-                            <Film className="w-4 h-4" />
-                            <div className="absolute -top-0.5 -right-0.5">
-                                <Plus className="w-2.5 h-2.5 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </div>
-                        </Button>
-                    </Tooltip>
-                </div>
-            )}
+                        {appMode !== 'hymns' && (
+                            <>
+                                <div className="w-px h-4 bg-white/10 mx-1" />
+                                <Tooltip content={t('add_nested_presentation', 'Add Nested Presentation')} position="top">
+                                    <Button
+                                        size="xs"
+                                        square
+                                        variant="ghost"
+                                        onClick={() => openModal(ModalType.PRESENTATION_PICKER)}
+                                        className="text-stone-400 hover:text-accent hover:bg-accent/10 relative group"
+                                    >
+                                        <CustomSlideStackIcon className="w-4 h-4" />
+                                        <div className="absolute -top-0.5 -right-0.5">
+                                            <Plus className="w-2.5 h-2.5 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                    </Button>
+                                </Tooltip>
+                                <Tooltip content={t('add_hymn_slide', 'Add Hymn')} position="top">
+                                    <Button
+                                        size="xs"
+                                        square
+                                        variant="ghost"
+                                        onClick={() => openModal(ModalType.HYMN_PICKER)}
+                                        className="text-stone-400 hover:text-accent hover:bg-accent/10 relative group"
+                                    >
+                                        <CustomHymnStackIcon className="w-4 h-4" />
+                                        <div className="absolute -top-0.5 -right-0.5">
+                                            <Plus className="w-2.5 h-2.5 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                    </Button>
+                                </Tooltip>
+                                <Tooltip content={t('add_bible_verse', 'Add Bible Verse')} position="top">
+                                    <Button
+                                        size="xs"
+                                        square
+                                        variant="ghost"
+                                        onClick={(e) => handleAddSlide('bible', e)}
+                                        className="text-stone-400 hover:text-accent hover:bg-accent/10 relative group"
+                                    >
+                                        <BookOpen className="w-4 h-4" />
+                                        <div className="absolute -top-0.5 -right-0.5">
+                                            <Plus className="w-2.5 h-2.5 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                    </Button>
+                                </Tooltip>
+                                <Tooltip content={t('add_timer_slide', 'Add Timer Slide')} position="top">
+                                    <Button
+                                        size="xs"
+                                        square
+                                        variant="ghost"
+                                        onClick={(e) => handleAddTimer(e)}
+                                        className="text-stone-400 hover:text-orange-400 hover:bg-orange-400/10 relative group"
+                                    >
+                                        <Timer className="w-4 h-4" />
+                                        <div className="absolute -top-0.5 -right-0.5">
+                                            <Plus className="w-2.5 h-2.5 text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </div>
+                                    </Button>
+                                </Tooltip>
+                            </>
+                        )}
+
+                        <Tooltip content={t('add_video_slide', 'Add Video Slide')} position="top">
+                            <Button
+                                size="xs"
+                                square
+                                variant="ghost"
+                                onClick={(e) => handleAddVideo(e)}
+                                className="text-stone-400 hover:text-accent hover:bg-accent/10 relative group"
+                            >
+                                <Film className="w-4 h-4" />
+                                <div className="absolute -top-0.5 -right-0.5">
+                                    <Plus className="w-2.5 h-2.5 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                            </Button>
+                        </Tooltip>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };

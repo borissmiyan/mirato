@@ -74,17 +74,37 @@ export const createNavigationSlice: PresentationSliceCreator = (set, get) => ({
         const pres = await db.presentationFiles.get(id);
         if (pres) {
             const now = new Date();
-            await db.presentationFiles.update(id, { lastOpened: now });
+            const isHymnItem = Boolean(pres.hymnalId || pres.metadata?.isHymnLibraryItem);
+            if (!isHymnItem) {
+                await db.presentationFiles.update(id, { lastOpened: now });
+            }
             await migratePresentationAudioScopes(id, pres);
 
-            const firstSlideId = pres.slides.length > 0 ? pres.slides[0].id : null;
+            // If opening a library hymn directly in Hymns mode, materialize it with the active hymn theme
+            let resolvedPres = { ...pres, lastOpened: now };
+            if (isHymnItem) {
+                let storedThemeId = 'default';
+                try {
+                    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('mirato-active-hymn-theme') : null;
+                    if (raw) storedThemeId = JSON.parse(raw);
+                } catch { /* ignore */ }
+                if (storedThemeId && storedThemeId !== 'source') {
+                    const dbThemes = typeof db.hymnThemes?.toArray === 'function' ? await db.hymnThemes.toArray() : [];
+                    const { BUILT_IN_HYMN_THEMES } = await import('@/features/hymns/services/hymnThemeConstants');
+                    const themes = dbThemes.length > 0 ? dbThemes : BUILT_IN_HYMN_THEMES;
+                    const theme = resolveHymnThemeFromList(storedThemeId, themes);
+                    resolvedPres = { ...materializeHymnPresentation(pres, theme), lastOpened: now };
+                }
+            }
+
+            const firstSlideId = resolvedPres.slides.length > 0 ? resolvedPres.slides[0].id : null;
             let serviceUpdate = {};
-            if (pres.serviceId) {
-                if (pres.serviceId !== activeServiceId) {
-                    const service = await db.serviceFiles.get(pres.serviceId);
+            if (resolvedPres.serviceId) {
+                if (resolvedPres.serviceId !== activeServiceId) {
+                    const service = await db.serviceFiles.get(resolvedPres.serviceId);
                     if (service) {
                         serviceUpdate = {
-                            activeServiceId: pres.serviceId,
+                            activeServiceId: resolvedPres.serviceId,
                             activeService: { ...service, lastOpened: now }
                         };
                     }
@@ -98,8 +118,8 @@ export const createNavigationSlice: PresentationSliceCreator = (set, get) => ({
                 activePresentationId: id,
                 rootPresentationId: id,
                 selectedPresentationId: id,
-                activePresentation: { ...pres, lastOpened: now },
-                selectedPresentation: { ...pres, lastOpened: now },
+                activePresentation: resolvedPres,
+                selectedPresentation: resolvedPres,
                 previewSlideId: firstSlideId,
                 selectedSlideIds: firstSlideId ? [firstSlideId] : [],
                 liveSlideId: null,

@@ -7,11 +7,15 @@ import { IHymnal } from '@/core/types/hymn';
 import { ISlide } from '@/core/types/presentation';
 import { useAtom } from 'jotai';
 import { hymnModalReturnStateAtom, activeHymnalIdAtom } from '@/core/store/uiAtoms';
+import { activeHymnThemeIdAtom } from '../store/hymnThemeAtom';
 import { HymnalInfoModal } from './HymnalInfoModal';
 import { hymnLibraryService } from '../services/hymnLibraryService';
 import { getOrderedHymnSlides } from '../services/hymnMigrationUtils';
 import { useHymnIndex } from '../services/hymnIndexCache';
+import { BUILT_IN_HYMN_THEMES } from '../services/hymnThemeConstants';
+import { materializeHymnPresentation, resolveHymnThemeFromList } from '../services/hymnThemeMaterializer';
 import { usePresentationStore } from '@/features/presenter/store/presentationStore';
+import { LiveSyncService } from '@/core/services/liveSyncService';
 import { HymnListItem, HymnRowData } from './HymnListItem';
 
 // ─── HymnsBrowser Main ─────────────────────────────────────────────────────────
@@ -29,7 +33,7 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
     const [activeHymnalId, setActiveHymnalId] = useAtom(activeHymnalIdAtom);
     const [activeHymnId, setActiveHymnId] = useState<string | null>(null);
     const [selectedVerseId, setSelectedVerseId] = useState<string | null>(null);
-    const [selectedThemeId, setSelectedThemeId] = useState<string>('');
+    const [selectedThemeId, setSelectedThemeId] = useAtom(activeHymnThemeIdAtom);
 
     const searchQuery = externalQuery ?? '';
 
@@ -120,6 +124,31 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
         }
     }, [activeHymnId, setActivePresentation]);
 
+    // Immediately re-materialize the active hymn in preview, timeline, and live projector whenever the theme changes
+    useEffect(() => {
+        if (!currentHymnPres || !selectedThemeId) return;
+        const allThemes = themes.length > 0 ? themes : BUILT_IN_HYMN_THEMES;
+        const materializedPres = selectedThemeId === 'source'
+            ? currentHymnPres
+            : materializeHymnPresentation(currentHymnPres, resolveHymnThemeFromList(selectedThemeId, allThemes));
+
+        const store = usePresentationStore.getState();
+        if (store.activePresentationId === currentHymnPres.id) {
+            usePresentationStore.setState({
+                activePresentation: materializedPres,
+                selectedPresentation: store.selectedPresentationId === currentHymnPres.id
+                    ? materializedPres
+                    : store.selectedPresentation,
+            });
+            if (store.liveSlideId) {
+                const liveSlide = materializedPres.slides.find(s => s.id === store.liveSlideId);
+                if (liveSlide) {
+                    LiveSyncService.showSlide(liveSlide, materializedPres.id, materializedPres.id);
+                }
+            }
+        }
+    }, [currentHymnPres, selectedThemeId, themes]);
+
     const filteredHymns = useMemo(() => {
         const trimmed = searchQuery.trim();
         if (!trimmed) return indexedHymns.map(entry => entry.row);
@@ -153,7 +182,7 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
             const defaultTheme = themes.find((t) => t.isDefault) ?? themes[0];
             setSelectedThemeId(defaultTheme.id);
         }
-    }, [themes, selectedThemeId]);
+    }, [themes, selectedThemeId, setSelectedThemeId]);
 
     // Auto-select a valid enabled hymnal if activeHymnalId is empty, disabled, or removed (preserve 'ALL')
     useEffect(() => {
@@ -225,7 +254,7 @@ export const HymnsBrowser: React.FC<HymnsBrowserProps> = ({ onAddHymn, searchQue
             onSelect={handleSelectHymn}
             lang={lang}
         />
-    ), [activeHymnId, liveHymnPresId, searchQuery, themes, selectedThemeId, handleSelectHymn, lang]);
+    ), [activeHymnId, liveHymnPresId, searchQuery, themes, selectedThemeId, setSelectedThemeId, handleSelectHymn, lang]);
 
     const handleInsert = useCallback(() => {
         if (!activeHymnId || !selectedThemeId || !onAddHymn) return;
